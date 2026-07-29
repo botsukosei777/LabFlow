@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+labflow-release/
+labflow-release.zip
+
+# Data (contains user database, notebooks, and backups)
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/*.sqlite
+data/notebooks/
+data/labflow-backup-*
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Logs
+*.log
+npm-debug.log*
+
+# Portable release artifacts
+node.exe
+server.cjs
+update.bat
+start.bat

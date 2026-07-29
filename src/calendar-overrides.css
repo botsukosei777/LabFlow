@@ -1,0 +1,71 @@
+/* react-big-calendar Dark Mode overrides */
+.dark-theme .rbc-calendar {
+  color: var(--text-primary);
+}
+
+.dark-theme .rbc-month-view,
+.dark-theme .rbc-time-view,
+.dark-theme .rbc-header {
+  border-color: var(--border-default);
+}
+
+.dark-theme .rbc-day-bg + .rbc-day-bg,
+.dark-theme .rbc-month-row + .rbc-month-row,
+.dark-theme .rbc-time-content,
+.dark-theme .rbc-time-header.rbc-overflowing {
+  border-color: var(--border-default);
+}
+
+.dark-theme .rbc-day-bg.rbc-today {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.dark-theme .rbc-off-range-bg {
+  background-color: rgba(0, 0, 0, 0.2);
+}
+
+.dark-theme .rbc-time-header-content {
+  border-color: var(--border-default);
+}
+
+.dark-theme .rbc-time-slot {
+  border-color: var(--border-default);
+}
+
+.dark-theme .rbc-timeslot-group {
+  border-color: var(--border-default);
+}
+
+.dark-theme .rbc-allday-cell {
+  border-color: var(--border-default);
+}
+
+.rbc-event {
+  padding: 2px 5px;
+}
+
+/* Toolbar Buttons Dark Mode Overrides */
+.dark-theme .rbc-toolbar button {
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+  background-color: var(--color-surface);
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.dark-theme .rbc-toolbar button:hover {
+  background-color: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+
+.dark-theme .rbc-toolbar button:active,
+.dark-theme .rbc-toolbar button.rbc-active {
+  background-color: var(--color-primary-dark, #4f46e5);
+  color: #fff;
+  border-color: var(--color-primary-dark, #4f46e5);
+}
+
+.dark-theme .rbc-toolbar button:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--border-default);
+}
