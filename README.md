@@ -131,8 +131,8 @@ labflow/
 
 ```bash
 # リポジトリをクローン
-git clone https://github.com/botsukosei777/labflow.git
-cd labflow
+git clone https://github.com/botsukosei777/LabFlow.git
+cd LabFlow
 
 # 依存関係のインストール
 npm install

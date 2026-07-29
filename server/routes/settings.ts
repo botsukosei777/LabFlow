@@ -92,17 +92,40 @@ router.delete('/holidays/date/:date', (req, res) => {
 // Update Check API
 router.get('/update/check', async (req, res) => {
   try {
-    // 実際には設定からリポジトリ名を引くか、固定のURLにする。
-    // 今回は例として固定のGitHubリポジトリ（ここではプレースホルダー）
-    const REPO = 'username/labflow'; // TODO: Update to real repo if available
+    const REPO = 'botsukosei777/LabFlow';
+    const CURRENT_VERSION = '1.0.0'; // TODO: read from package.json or a version file
+
+    const response = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
+      headers: { 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'LabFlow-Updater' }
+    });
+
+    if (!response.ok) {
+      // No releases yet or API error
+      return res.json({
+        update_available: false,
+        current_version: CURRENT_VERSION,
+        latest_version: CURRENT_VERSION,
+        release_notes: '',
+        download_url: ''
+      });
+    }
+
+    const release = await response.json() as any;
+    const latestVersion = (release.tag_name || '').replace(/^v/, '');
     
-    // As a mock for demonstration without a real public repo, we'll return no update
-    // In reality, you'd do: fetch(`https://api.github.com/repos/${REPO}/releases/latest`)
+    // Find the ZIP asset
+    const asset = release.assets?.find((a: any) => a.name.endsWith('.zip'));
+    const downloadUrl = asset?.browser_download_url || '';
+
+    // Simple version comparison (works for semver like 1.0.0 < 1.1.0)
+    const isNewer = latestVersion.localeCompare(CURRENT_VERSION, undefined, { numeric: true, sensitivity: 'base' }) > 0;
+
     res.json({
-      update_available: false,
-      latest_version: '1.0.0',
-      release_notes: '',
-      download_url: ''
+      update_available: isNewer,
+      current_version: CURRENT_VERSION,
+      latest_version: latestVersion || CURRENT_VERSION,
+      release_notes: release.body || '',
+      download_url: downloadUrl
     });
   } catch (err: any) {
     res.status(500).json({ message: err.message });
@@ -120,37 +143,65 @@ router.post('/update/apply', (req, res) => {
 
   // 1. Create update.bat
   const batPath = path.join(process.cwd(), 'update.bat');
-  const batContent = `
-@echo off
+  const batContent = `@echo off
+chcp 65001 > nul
 echo =======================================
-echo LabFlow Updater
+echo   LabFlow Updater
 echo =======================================
-echo サーバーの終了を待機しています...
+echo.
+echo   サーバーの終了を待機しています...
 timeout /t 3 /nobreak > nul
 
 echo.
-echo 新しいバージョンをダウンロードしています...
-powershell -Command "Invoke-WebRequest -Uri '${download_url}' -OutFile 'update.zip'"
+echo   データをバックアップしています...
+if exist "data" (
+  xcopy /E /I /Y "data" "data_backup" > nul 2>&1
+)
 
 echo.
-echo 展開しています...
-powershell -Command "Expand-Archive -Path 'update.zip' -DestinationPath '.' -Force"
+echo   新しいバージョンをダウンロードしています...
+powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '${download_url}' -OutFile 'update.zip'"
+if errorlevel 1 (
+  echo   ダウンロードに失敗しました。
+  pause
+  exit /b 1
+)
 
 echo.
-echo クリーンアップしています...
-del update.zip
+echo   展開しています...
+powershell -Command "Expand-Archive -Path 'update.zip' -DestinationPath 'update_temp' -Force"
+
+REM Copy contents from extracted folder (handles both flat and nested structures)
+if exist "update_temp\\release" (
+  xcopy /E /Y "update_temp\\release\\*" "." > nul 2>&1
+) else (
+  xcopy /E /Y "update_temp\\*" "." > nul 2>&1
+)
 
 echo.
-echo LabFlowを再起動します...
+echo   データを復元しています...
+if exist "data_backup" (
+  xcopy /E /I /Y "data_backup" "data" > nul 2>&1
+  rmdir /S /Q "data_backup" > nul 2>&1
+)
+
+echo.
+echo   クリーンアップしています...
+del update.zip > nul 2>&1
+rmdir /S /Q "update_temp" > nul 2>&1
+
+echo.
+echo   LabFlowを再起動します...
 start start.bat
 
-echo アップデート完了。このウィンドウは自動的に閉じます。
+echo.
+echo   アップデート完了！
 timeout /t 3 > nul
 del "%~f0"
 `;
 
   try {
-    fs.writeFileSync(batPath, batContent.trim(), 'utf-8');
+    fs.writeFileSync(batPath, batContent, 'utf-8');
     
     // 2. Respond to client first
     res.json({ message: 'Update started. The server will restart shortly.' });

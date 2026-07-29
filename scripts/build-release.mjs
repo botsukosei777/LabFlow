@@ -85,15 +85,10 @@ async function main() {
   const nodeCronSrc = path.join(PROJECT_ROOT, 'node_modules', 'node-cron');
   copyDirSync(nodeCronSrc, path.join(nodeModulesDir, 'node-cron'));
 
-  // 7. Copy existing data/ directory if it exists (for preserving user data)
-  const dataSrc = path.join(PROJECT_ROOT, 'data');
+  // 7. Create empty data/ directory (user data should NOT be included in release)
   const dataDst = path.join(RELEASE_DIR, 'data');
-  if (fs.existsSync(dataSrc)) {
-    log('Copying existing data (database + notebooks)...');
-    copyDirSync(dataSrc, dataDst);
-  } else {
-    fs.mkdirSync(dataDst, { recursive: true });
-  }
+  fs.mkdirSync(dataDst, { recursive: true });
+  fs.writeFileSync(path.join(dataDst, '.gitkeep'), '', 'utf-8');
 
   // 8. Create start.bat
   log('Creating launcher (start.bat)...');
@@ -173,6 +168,31 @@ async function main() {
   // Print size info
   const totalSize = getDirSize(RELEASE_DIR);
   console.log(`  合計サイズ: ${(totalSize / 1024 / 1024).toFixed(1)} MB\n`);
+
+  // 11. Create ZIP
+  log('Creating labflow-release.zip...');
+  const zipPath = path.join(PROJECT_ROOT, 'labflow-release.zip');
+  // Remove old zip if exists
+  if (fs.existsSync(zipPath)) {
+    fs.unlinkSync(zipPath);
+  }
+  try {
+    execSync(
+      `powershell -Command "Compress-Archive -Path '${RELEASE_DIR}\\*' -DestinationPath '${zipPath}' -Force"`,
+      { cwd: PROJECT_ROOT, stdio: 'inherit' }
+    );
+    const zipSize = fs.statSync(zipPath).size;
+    console.log(`    ✓ labflow-release.zip (${(zipSize / 1024 / 1024).toFixed(1)} MB)`);
+  } catch (err) {
+    console.log(`    ⚠ ZIP作成に失敗しました: ${err.message}`);
+    console.log(`    手動で release/ フォルダをZIP圧縮してください。`);
+  }
+
+  console.log('\n  ┌───────────────────────────────────────┐');
+  console.log('  │  🎉 配布パッケージの準備完了！          │');
+  console.log('  └───────────────────────────────────────┘');
+  console.log(`\n  ZIP: ${zipPath}`);
+  console.log('  このZIPをGitHub Releasesにアップロードしてください。\n');
 }
 
 // Utility: recursive directory copy
