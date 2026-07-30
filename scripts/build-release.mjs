@@ -97,117 +97,126 @@ async function main() {
   log('Writing VERSION file...');
   fs.writeFileSync(path.join(RELEASE_DIR, 'VERSION'), APP_VERSION, 'utf-8');
 
-  // 8. Create start.bat (with auto-update check)
+  // 8. Create check_update.ps1 (PowerShell script for update check)
+  log('Creating update checker (check_update.ps1)...');
+  const ps1Content = `# LabFlow Update Checker
+param([string]$CurrentVersion)
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+try {
+    $r = Invoke-RestMethod -Uri "https://api.github.com/repos/botsukosei777/LabFlow/releases/latest" -Headers @{"User-Agent"="LabFlow-Updater"} -TimeoutSec 10
+    $tag = $r.tag_name -replace "v",""
+    $asset = $r.assets | Where-Object { $_.name -like "*.zip" } | Select-Object -First 1
+    if ($tag -and ([version]$tag -gt [version]$CurrentVersion) -and $asset) {
+        Write-Output "UPDATE_AVAILABLE"
+        Write-Output $tag
+        Write-Output $asset.browser_download_url
+    } else {
+        Write-Output "UP_TO_DATE"
+    }
+} catch {
+    Write-Output "CHECK_FAILED"
+}
+`;
+  fs.writeFileSync(path.join(RELEASE_DIR, 'check_update.ps1'), ps1Content, 'utf-8');
+
+  // 8.5. Create start.bat (with auto-update check)
   log('Creating launcher (start.bat)...');
-  const batContent = [
-    '@echo off',
-    'chcp 65001 >nul',
-    'cd /d "%~dp0"',
-    '',
-    'title LabFlow - Research Schedule Manager',
-    '',
-    'echo.',
-    `echo   ========================================`,
-    `echo   LabFlow v${APP_VERSION}`,
-    `echo   ========================================`,
-    'echo.',
-    '',
-    'REM --- Auto-update check ---',
-    'echo   Checking for updates...',
-    'set "UPDATE_AVAILABLE=0"',
-    'set "LATEST_VERSION="',
-    'set "DOWNLOAD_URL="',
-    '',
-    'REM Fetch latest release info from GitHub',
-    'powershell -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $r = Invoke-RestMethod -Uri \'https://api.github.com/repos/botsukosei777/LabFlow/releases/latest\' -Headers @{\'User-Agent\'=\'LabFlow-Updater\'}; $tag = $r.tag_name -replace \'v\',\'\'; $asset = $r.assets | Where-Object { $_.name -like \'*.zip\' } | Select-Object -First 1; Write-Output \"$tag|$($asset.browser_download_url)\" } catch { Write-Output \'ERROR\' }" > update_check_result.tmp 2>nul',
-    '',
-    'set /p UPDATE_RESULT=<update_check_result.tmp',
-    'del update_check_result.tmp >nul 2>nul',
-    '',
-    'if "%UPDATE_RESULT%"=="ERROR" (',
-    '  echo   Could not check for updates. Starting normally...',
-    '  goto :start_server',
-    ')',
-    'if "%UPDATE_RESULT%"=="" (',
-    '  echo   Could not check for updates. Starting normally...',
-    '  goto :start_server',
-    ')',
-    '',
-    'REM Parse result: LATEST_VERSION|DOWNLOAD_URL',
-    'for /f "tokens=1,2 delims=|" %%a in ("%UPDATE_RESULT%") do (',
-    '  set "LATEST_VERSION=%%a"',
-    '  set "DOWNLOAD_URL=%%b"',
-    ')',
-    '',
-    `REM Compare versions`,
-    `powershell -Command "if ('%LATEST_VERSION%'.CompareTo('${APP_VERSION}') -gt 0) { exit 1 } else { exit 0 }"`,
-    'if %errorlevel% equ 1 (',
-    '  echo.',
-    '  echo   *** New version available: v%LATEST_VERSION% ***',
-    '  echo.',
-    '  set /p DOUPDATE="  Update now? (y/n): "',
-    '  if /i "%DOUPDATE%"=="y" goto :do_update',
-    '  echo   Skipping update. Starting current version...',
-    '  goto :start_server',
-    ') else (',
-    '  echo   Up to date.',
-    '  goto :start_server',
-    ')',
-    '',
-    ':do_update',
-    'echo.',
-    'echo   Downloading update...',
-    'powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri \'%DOWNLOAD_URL%\' -OutFile \'update.zip\'"',
-    'if errorlevel 1 (',
-    '  echo   Download failed. Starting current version...',
-    '  del update.zip >nul 2>nul',
-    '  goto :start_server',
-    ')',
-    '',
-    'echo   Backing up data...',
-    'if exist "data" xcopy /E /I /Y "data" "data_backup" >nul 2>&1',
-    '',
-    'echo   Extracting...',
-    'if exist "update_temp" rmdir /S /Q "update_temp" >nul 2>&1',
-    'powershell -Command "Expand-Archive -Path \'update.zip\' -DestinationPath \'update_temp\' -Force"',
-    '',
-    'REM Detect extracted structure',
-    'set "UPDATE_SRC=update_temp"',
-    'if not exist "update_temp\start.bat" (',
-    '  if not exist "update_temp\server.cjs" (',
-    '    for /d %%D in (update_temp\*) do (',
-    '      if exist "%%D\start.bat" set "UPDATE_SRC=%%D"',
-    '      if exist "%%D\server.cjs" set "UPDATE_SRC=%%D"',
-    '    )',
-    '  )',
-    ')',
-    '',
-    'echo   Applying update...',
-    'xcopy /E /Y "%UPDATE_SRC%\*" "." >nul 2>&1',
-    '',
-    'echo   Restoring data...',
-    'if exist "data_backup" (',
-    '  xcopy /E /I /Y "data_backup" "data" >nul 2>&1',
-    '  rmdir /S /Q "data_backup" >nul 2>&1',
-    ')',
-    '',
-    'echo   Cleaning up...',
-    'del update.zip >nul 2>&1',
-    'rmdir /S /Q "update_temp" >nul 2>&1',
-    '',
-    'echo   Update complete! Starting new version...',
-    'echo.',
-    '',
-    ':start_server',
-    'echo.',
-    'echo   Starting server...',
-    'echo   Close this window to stop LabFlow.',
-    'echo   ----------------------------------------',
-    'echo.',
-    'set LABFLOW_AUTO_OPEN=1',
-    'node.exe server.cjs',
-    '',
-  ].join('\r\n');
+  const batContent = `@echo off
+setlocal enabledelayedexpansion
+chcp 65001 >nul
+cd /d "%~dp0"
+
+title LabFlow - Research Schedule Manager
+
+echo.
+echo   ========================================
+echo   LabFlow v${APP_VERSION}
+echo   ========================================
+echo.
+
+REM --- Auto-update check ---
+echo   Checking for updates...
+
+powershell -ExecutionPolicy Bypass -File check_update.ps1 -CurrentVersion "${APP_VERSION}" > update_result.tmp 2>nul
+
+set "STATUS="
+set "NEW_VER="
+set "DL_URL="
+set LINENUM=0
+for /f "usebackq delims=" %%L in ("update_result.tmp") do (
+  set /a LINENUM+=1
+  if !LINENUM! equ 1 set "STATUS=%%L"
+  if !LINENUM! equ 2 set "NEW_VER=%%L"
+  if !LINENUM! equ 3 set "DL_URL=%%L"
+)
+del update_result.tmp >nul 2>nul
+
+if "!STATUS!"=="UPDATE_AVAILABLE" (
+  echo.
+  echo   *** New version available: v!NEW_VER! ***
+  echo.
+  set /p DOUPDATE="  Update now? [y/n]: "
+  if /i "!DOUPDATE!"=="y" (
+    echo.
+    echo   Downloading v!NEW_VER!...
+    powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '!DL_URL!' -OutFile 'update.zip'"
+    if errorlevel 1 (
+      echo   Download failed. Starting current version...
+      del update.zip >nul 2>nul
+      goto :start_server
+    )
+
+    echo   Backing up data...
+    if exist "data" xcopy /E /I /Y "data" "data_backup" >nul 2>&1
+
+    echo   Extracting...
+    if exist "update_temp" rmdir /S /Q "update_temp" >nul 2>&1
+    powershell -Command "Expand-Archive -Path 'update.zip' -DestinationPath 'update_temp' -Force"
+
+    set "UPDATE_SRC=update_temp"
+    if not exist "update_temp\start.bat" (
+      if not exist "update_temp\server.cjs" (
+        for /d %%D in (update_temp\*) do (
+          if exist "%%D\start.bat" set "UPDATE_SRC=%%D"
+          if exist "%%D\server.cjs" set "UPDATE_SRC=%%D"
+        )
+      )
+    )
+
+    echo   Applying update...
+    xcopy /E /Y "!UPDATE_SRC!\*" "." >nul 2>&1
+
+    echo   Restoring data...
+    if exist "data_backup" (
+      xcopy /E /I /Y "data_backup" "data" >nul 2>&1
+      rmdir /S /Q "data_backup" >nul 2>&1
+    )
+
+    echo   Cleaning up...
+    del update.zip >nul 2>&1
+    rmdir /S /Q "update_temp" >nul 2>&1
+
+    echo.
+    echo   Update complete!
+    echo.
+  ) else (
+    echo   Skipping update.
+  )
+) else if "!STATUS!"=="UP_TO_DATE" (
+  echo   Up to date.
+) else (
+  echo   Could not check for updates. Starting normally...
+)
+
+:start_server
+echo.
+echo   Starting server...
+echo   Close this window to stop LabFlow.
+echo   ----------------------------------------
+echo.
+set LABFLOW_AUTO_OPEN=1
+node.exe server.cjs
+`;
   fs.writeFileSync(path.join(RELEASE_DIR, 'start.bat'), batContent, 'utf-8');
 
   // 9. Create README

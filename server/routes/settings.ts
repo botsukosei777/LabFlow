@@ -205,12 +205,12 @@ powershell -Command "Expand-Archive -Path 'update.zip' -DestinationPath 'update_
 REM Detect extracted structure: flat or nested in a single subfolder
 REM Check if the extracted folder contains start.bat directly or inside a subfolder
 set "UPDATE_SRC=update_temp"
-if not exist "update_temp\\start.bat" (
-  if not exist "update_temp\\server.cjs" (
+if not exist "update_temp\start.bat" (
+  if not exist "update_temp\server.cjs" (
     REM Probably extracted into a subfolder, find it
-    for /d %%D in (update_temp\\*) do (
-      if exist "%%D\\start.bat" set "UPDATE_SRC=%%D"
-      if exist "%%D\\server.cjs" set "UPDATE_SRC=%%D"
+    for /d %%D in (update_temp\*) do (
+      if exist "%%D\start.bat" set "UPDATE_SRC=%%D"
+      if exist "%%D\server.cjs" set "UPDATE_SRC=%%D"
     )
   )
 )
@@ -218,9 +218,9 @@ if not exist "update_temp\\start.bat" (
 echo.
 echo   ファイルを更新しています...
 REM Copy new files over existing ones (preserving data/)
-xcopy /E /Y "%UPDATE_SRC%\\*" "." /EXCLUDE:update_exclude.txt > nul 2>&1
+xcopy /E /Y "%UPDATE_SRC%\*" "." /EXCLUDE:update_exclude.txt > nul 2>&1
 if errorlevel 1 (
-  xcopy /E /Y "%UPDATE_SRC%\\*" "." > nul 2>&1
+  xcopy /E /Y "%UPDATE_SRC%\*" "." > nul 2>&1
 )
 
 echo.
