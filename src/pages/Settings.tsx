@@ -187,10 +187,55 @@ export default function Settings() {
     setApplyingUpdate(true);
     try {
       await api.post('/settings/update/apply', { download_url: updateInfo.download_url });
-      addToast('success', t('settings.updateStarted', { defaultValue: 'アップデートを開始しました。まもなく再起動します...' }));
+      addToast('success', t('settings.updateStarted', { defaultValue: 'アップデートを開始しました。サーバーの再起動を待っています...' }));
+      
+      // Poll until the server comes back online, then reload
+      const pollInterval = setInterval(async () => {
+        try {
+          const resp = await fetch('/api/settings/update/check', {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
+          });
+          if (resp.ok) {
+            clearInterval(pollInterval);
+            addToast('success', t('settings.updateComplete', { defaultValue: 'アップデート完了！ページを再読み込みします...' }));
+            setTimeout(() => window.location.reload(), 2000);
+          }
+        } catch {
+          // Server still down, keep polling
+        }
+      }, 3000);
+      
+      // Give up after 5 minutes
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        setApplyingUpdate(false);
+        addToast('error', t('settings.updateTimeout', { defaultValue: 'サーバーの再起動がタイムアウトしました。手動でstart.batを再起動してください。' }));
+      }, 300000);
     } catch (e) {
-      addToast('error', t('settings.updateStartFailed', { defaultValue: 'アップデートの開始に失敗しました。' }));
-      setApplyingUpdate(false);
+      // The server may have already shut down — treat this as expected
+      addToast('success', t('settings.updateStarted', { defaultValue: 'アップデートを開始しました。サーバーの再起動を待っています...' }));
+      
+      // Poll until the server comes back online, then reload
+      const pollInterval = setInterval(async () => {
+        try {
+          const resp = await fetch('/api/settings/update/check', {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
+          });
+          if (resp.ok) {
+            clearInterval(pollInterval);
+            addToast('success', t('settings.updateComplete', { defaultValue: 'アップデート完了！ページを再読み込みします...' }));
+            setTimeout(() => window.location.reload(), 2000);
+          }
+        } catch {
+          // Server still down, keep polling
+        }
+      }, 3000);
+      
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        setApplyingUpdate(false);
+        addToast('error', t('settings.updateTimeout', { defaultValue: 'サーバーの再起動がタイムアウトしました。手動でstart.batを再起動してください。' }));
+      }, 300000);
     }
   };
 

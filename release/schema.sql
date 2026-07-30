@@ -197,6 +197,7 @@ CREATE TABLE IF NOT EXISTS milestone_items (
     data_type TEXT NOT NULL DEFAULT 'qualitative',
     target_count INTEGER DEFAULT 1,
     current_count INTEGER DEFAULT 0,
+    unit TEXT DEFAULT '',
     is_completed INTEGER NOT NULL DEFAULT 0,
     order_index INTEGER NOT NULL DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now', 'localtime')),
@@ -211,10 +212,34 @@ CREATE TABLE IF NOT EXISTS milestone_sub_items (
     data_type TEXT NOT NULL DEFAULT 'qualitative',
     target_count INTEGER DEFAULT 1,
     current_count INTEGER DEFAULT 0,
+    unit TEXT DEFAULT '',
     is_completed INTEGER NOT NULL DEFAULT 0,
     order_index INTEGER NOT NULL DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now', 'localtime')),
     FOREIGN KEY (milestone_item_id) REFERENCES milestone_items(id) ON DELETE CASCADE
+);
+
+-- ミニミニメモ
+CREATE TABLE IF NOT EXISTS mini_memos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    message TEXT NOT NULL,
+    is_completed INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- リンク集 (Quick Links)
+CREATE TABLE IF NOT EXISTS quick_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    url TEXT NOT NULL,
+    open_in_app INTEGER NOT NULL DEFAULT 0,
+    order_index INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 -- 試薬・物品在庫
