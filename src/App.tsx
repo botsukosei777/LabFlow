@@ -4,6 +4,8 @@ import Layout from './components/layout/Layout';
 import { AuthProvider } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import type { Toast, ToastType } from './types';
+import { api } from './api/client';
+import GlobalAlerts from './components/GlobalAlerts';
 
 // Lazy load pages
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -86,6 +88,8 @@ export default function App() {
                 </Route>
               </Routes>
             </Suspense>
+
+            <GlobalAlerts />
 
             {/* Toast Container */}
             {toasts.length > 0 && (

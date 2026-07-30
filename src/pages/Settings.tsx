@@ -118,6 +118,44 @@ export default function Settings() {
     }
   };
 
+  const [restoringBackup, setRestoringBackup] = useState(false);
+  
+  const restoreBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    if (!window.confirm('現在のデータはすべて上書きされ、元に戻せなくなります。本当にバックアップを復元しますか？')) {
+      e.target.value = '';
+      return;
+    }
+    
+    setRestoringBackup(true);
+    const formData = new FormData();
+    formData.append('backupFile', file);
+    
+    try {
+      const token = localStorage.getItem('labflow-auth-token');
+      const response = await fetch('/api/restore', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+      
+      if (!response.ok) {
+        throw new Error('Restore failed');
+      }
+      
+      addToast('success', t('settings.restoreSuccess', { defaultValue: 'バックアップを復元しました。' }));
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    } catch (err: any) {
+      addToast('error', t('settings.restoreFailed', { defaultValue: 'バックアップの復元に失敗しました。' }));
+      setRestoringBackup(false);
+      e.target.value = '';
+    }
+  };
+
   const [updateInfo, setUpdateInfo] = useState<{
     update_available: boolean;
     latest_version: string;
@@ -132,12 +170,12 @@ export default function Settings() {
       const data = await api.get<any>('/settings/update/check');
       setUpdateInfo(data);
       if (data.update_available) {
-        addToast('success', '新しいバージョンが見つかりました！');
+        addToast('success', t('settings.updateFound', { defaultValue: '新しいバージョンが見つかりました！' }));
       } else {
-        addToast('success', 'お使いのバージョンは最新です。');
+        addToast('success', t('settings.updateUpToDate', { defaultValue: 'お使いのバージョンは最新です。' }));
       }
     } catch (e) {
-      addToast('error', 'アップデートの確認に失敗しました。');
+      addToast('error', t('settings.updateCheckFailed', { defaultValue: 'アップデートの確認に失敗しました。' }));
     } finally {
       setCheckingUpdate(false);
     }
@@ -145,13 +183,13 @@ export default function Settings() {
 
   const applyUpdate = async () => {
     if (!updateInfo || !updateInfo.download_url) return;
-    if (!window.confirm('アップデートを開始すると、サーバーが再起動します。よろしいですか？')) return;
+    if (!window.confirm(t('settings.updateConfirm', { defaultValue: 'アップデートを開始すると、サーバーが再起動します。よろしいですか？' }))) return;
     setApplyingUpdate(true);
     try {
       await api.post('/settings/update/apply', { download_url: updateInfo.download_url });
-      addToast('success', 'アップデートを開始しました。まもなく再起動します...');
+      addToast('success', t('settings.updateStarted', { defaultValue: 'アップデートを開始しました。まもなく再起動します...' }));
     } catch (e) {
-      addToast('error', 'アップデートの開始に失敗しました。');
+      addToast('error', t('settings.updateStartFailed', { defaultValue: 'アップデートの開始に失敗しました。' }));
       setApplyingUpdate(false);
     }
   };
@@ -251,6 +289,21 @@ export default function Settings() {
             <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-sm)', marginLeft: '34px', marginTop: '-8px' }}>
               {t('settings.autoPostponeDesc', { defaultValue: '進捗管理モードで、終了予定時刻を過ぎてからステップを完了（チェック）した場合、自動的に以降の同日ステップの時間を後ろにずらします。' })}
             </p>
+
+            <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
+              <input 
+                type="checkbox" 
+                id="notify_preparations_global"
+                checked={settings['notify_preparations_global'] === 'true'} 
+                onChange={e => updateSetting('notify_preparations_global', e.target.checked ? 'true' : 'false')} 
+                style={{ width: '18px', height: '18px' }}
+              />
+              <label htmlFor="notify_preparations_global" style={{ margin: 0, fontWeight: 500 }}>
+                {t('settings.notifyPrepGlobal', { defaultValue: '事前準備メッセージをアプリ内の全画面で通知する' })}
+              </label>
+            </div>
+            
+
             <div>
               <button className="btn btn-primary" onClick={saveSettings} disabled={saving}>{saving ? t('common.loading') : t('common.save')}</button>
             </div>
@@ -303,105 +356,62 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Email Settings */}
-        <div className="card">
-          <div className="card-header"><h3 className="card-title"><Mail size={18} style={{ marginRight: 8 }} />{t('settings.email')}</h3></div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)', marginTop: 'var(--space-md)' }}>
-            <div className="form-group">
-              <label className="form-label">{t('settings.smtpPreset')}</label>
-              <select className="form-select" value={settings['smtp_preset'] || 'gmail'} onChange={e => presetChanged(e.target.value)}>
-                <option value="gmail">{t('settings.gmail')}</option>
-                <option value="outlook">{t('settings.outlook')}</option>
-                <option value="university">{t('settings.university')}</option>
-                <option value="custom">{t('settings.customSmtp')}</option>
-              </select>
-              <span className="form-hint">
-                {settings['smtp_preset'] === 'gmail' && t('settings.gmailNote')}
-                {settings['smtp_preset'] === 'outlook' && t('settings.outlookNote')}
-                {settings['smtp_preset'] === 'university' && t('settings.universityNote')}
-              </span>
-            </div>
-            {(settings['smtp_preset'] === 'university' || settings['smtp_preset'] === 'custom') && (
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">{t('settings.smtpHost')}</label>
-                  <input className="form-input" value={settings['smtp_host'] || ''} onChange={e => updateSetting('smtp_host', e.target.value)} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">{t('settings.smtpPort')}</label>
-                  <input className="form-input" value={settings['smtp_port'] || '587'} onChange={e => updateSetting('smtp_port', e.target.value)} />
-                </div>
-              </div>
-            )}
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">{t('settings.smtpUser')}</label>
-                <input className="form-input" value={settings['smtp_user'] || ''} onChange={e => updateSetting('smtp_user', e.target.value)} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">{t('settings.smtpPass')}</label>
-                <input className="form-input" type="password" value={settings['smtp_pass'] || ''} onChange={e => updateSetting('smtp_pass', e.target.value)} />
-              </div>
-            </div>
-            <div className="form-group">
-              <label className="form-label">{t('settings.notificationEmail')}</label>
-              <input className="form-input" type="email" value={settings['notification_email'] || ''} onChange={e => updateSetting('notification_email', e.target.value)} />
-            </div>
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">{t('settings.dailyEmailTime')}</label>
-                <input className="form-input" type="time" value={settings['daily_email_time'] || '00:00'} onChange={e => updateSetting('daily_email_time', e.target.value)} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">{t('settings.reminderEmailTime')}</label>
-                <input className="form-input" type="time" value={settings['reminder_email_time'] || '19:00'} onChange={e => updateSetting('reminder_email_time', e.target.value)} />
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
-              <button className="btn btn-primary" onClick={saveSettings} disabled={saving}>{saving ? t('common.loading') : t('common.save')}</button>
-            </div>
-          </div>
-        </div>
 
         {/* Backup */}
         <div className="card">
           <div className="card-header"><h3 className="card-title"><Download size={18} style={{ marginRight: 8 }} />{t('settings.backup')}</h3></div>
           <div style={{ marginTop: 'var(--space-md)' }}>
             <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-md)' }}>{t('settings.backupDesc')}</p>
-            <button className="btn btn-secondary" onClick={downloadBackup} disabled={downloadingBackup}>
-              <Download size={14} /> {downloadingBackup ? 'ダウンロード中...' : t('settings.downloadBackup')}
-            </button>
+            <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+              <button className="btn btn-secondary" onClick={downloadBackup} disabled={downloadingBackup}>
+                <Download size={14} /> {downloadingBackup ? t('settings.downloadingBackup', { defaultValue: 'ダウンロード中...' }) : t('settings.downloadBackup')}
+              </button>
+              
+              <div>
+                <input 
+                  type="file" 
+                  id="backup-upload" 
+                  accept=".db,.sqlite" 
+                  style={{ display: 'none' }} 
+                  onChange={restoreBackup} 
+                  disabled={restoringBackup}
+                />
+                <label htmlFor="backup-upload" className={`btn btn-secondary ${restoringBackup ? 'disabled' : ''}`} style={{ cursor: restoringBackup ? 'not-allowed' : 'pointer' }}>
+                  <RefreshCw size={14} className={restoringBackup ? 'spin' : ''} /> {restoringBackup ? t('settings.restoringBackup', { defaultValue: '復元中...' }) : t('settings.restoreBackup', { defaultValue: 'バックアップを復元' })}
+                </label>
+              </div>
+            </div>
           </div>
         </div>
 
         {/* System Update */}
         <div className="card">
-          <div className="card-header"><h3 className="card-title"><RefreshCw size={18} style={{ marginRight: 8 }} />システムアップデート</h3></div>
+          <div className="card-header"><h3 className="card-title"><RefreshCw size={18} style={{ marginRight: 8 }} />{t('settings.systemUpdateTitle', { defaultValue: 'システムアップデート' })}</h3></div>
           <div style={{ marginTop: 'var(--space-md)' }}>
             <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-md)' }}>
-              GitHub上の最新リリースを確認し、アプリを更新します。
+              {t('settings.systemUpdateDesc', { defaultValue: 'GitHub上の最新リリースを確認し、アプリを更新します。' })}
             </p>
             
             <div style={{ display: 'flex', gap: 'var(--space-md)', alignItems: 'center', marginBottom: 'var(--space-md)' }}>
               <button className="btn btn-secondary" onClick={checkUpdate} disabled={checkingUpdate || applyingUpdate}>
-                <RefreshCw size={14} className={checkingUpdate ? 'spin' : ''} /> {checkingUpdate ? '確認中...' : '最新バージョンを確認'}
+                <RefreshCw size={14} className={checkingUpdate ? 'spin' : ''} /> {checkingUpdate ? t('settings.checkingUpdate', { defaultValue: '確認中...' }) : t('settings.checkUpdate', { defaultValue: '最新バージョンを確認' })}
               </button>
               
               {updateInfo && (
                 <span style={{ fontSize: 'var(--font-size-sm)', color: updateInfo.update_available ? 'var(--color-primary)' : 'var(--text-secondary)' }}>
-                  {updateInfo.update_available ? `最新バージョン (${updateInfo.latest_version}) が利用可能です！` : 'お使いのバージョンは最新です。'}
+                  {updateInfo.update_available ? t('settings.updateAvailableMessage', { version: updateInfo.latest_version, defaultValue: `最新バージョン (${updateInfo.latest_version}) が利用可能です！` }) : t('settings.upToDateMessage', { defaultValue: 'お使いのバージョンは最新です。' })}
                 </span>
               )}
             </div>
             
             {updateInfo?.update_available && (
               <div style={{ padding: 'var(--space-md)', backgroundColor: 'rgba(59, 130, 246, 0.1)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-                <h4 style={{ margin: '0 0 var(--space-sm) 0', fontSize: 'var(--font-size-sm)', color: 'var(--color-primary)' }}>アップデートの準備ができました</h4>
+                <h4 style={{ margin: '0 0 var(--space-sm) 0', fontSize: 'var(--font-size-sm)', color: 'var(--color-primary)' }}>{t('settings.updateReadyTitle', { defaultValue: 'アップデートの準備ができました' })}</h4>
                 <p style={{ margin: '0 0 var(--space-md) 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                  「今すぐアップデート」をクリックすると、最新のパッケージをダウンロードして自動的に再起動します。実行中の作業は保存してください。
+                  {t('settings.updateReadyDesc', { defaultValue: '「今すぐアップデート」をクリックすると、最新のパッケージをダウンロードして自動的に再起動します。実行中の作業は保存してください。' })}
                 </p>
                 <button className="btn btn-primary" onClick={applyUpdate} disabled={applyingUpdate}>
-                  {applyingUpdate ? 'アップデート中...' : '今すぐアップデート'}
+                  {applyingUpdate ? t('settings.updating', { defaultValue: 'アップデート中...' }) : t('settings.updateNow', { defaultValue: '今すぐアップデート' })}
                 </button>
               </div>
             )}

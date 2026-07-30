@@ -242,6 +242,27 @@ router.put('/preparations/:id/incomplete', (req, res) => {
   res.json({ message: 'Preparation marked incomplete' });
 });
 
+// GET /preparations/alerts
+// Returns uncompleted preparations that are past their timing threshold
+router.get('/preparations/alerts', (req, res) => {
+  // Get preparations for today's scheduled experiments
+  const alerts = db.prepare(`
+    SELECT p.id, sp.message, sp.timing_type, sp.timing_offset_minutes, sp.requires_check, p.is_completed, 
+           s.start_time, b.scheduled_date, b.scheduled_experiment_id, e.name as experiment_type_name
+    FROM scheduled_step_preparations p
+    JOIN step_preparations sp ON p.step_preparation_id = sp.id
+    JOIN scheduled_steps s ON p.scheduled_step_id = s.id
+    JOIN scheduled_blocks b ON s.scheduled_block_id = b.id
+    JOIN scheduled_experiments se ON b.scheduled_experiment_id = se.id
+    JOIN protocols pr ON se.protocol_id = pr.id
+    JOIN experiment_types e ON pr.experiment_type_id = e.id
+    WHERE se.user_id = ? AND p.is_completed = 0 AND b.scheduled_date = date('now', 'localtime')
+  `).all(req.userId) as any[];
+  
+  // Just return all pending alerts for today, so the Global Alerts widget acts as a daily checklist
+  res.json(alerts);
+});
+
 // POST /:id/postpone (Flexible block splitting & shifting)
 router.post('/:id/postpone', (req, res) => {
   const { step_id, target_date, target_time } = req.body;

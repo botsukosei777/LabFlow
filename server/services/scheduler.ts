@@ -150,6 +150,58 @@ function sendReminderEmail() {
   sendEmail('LabFlow リマインダー', html);
 }
 
+// In-memory set to prevent duplicate emails for the same preparation
+const sentPreparationEmails = new Set<number>();
+
+function sendPreparationEmails() {
+  const settings = getSettings();
+  if (settings.notify_preparations_email !== 'true') return;
+
+  const alerts = db.prepare(`
+    SELECT p.id, sp.message, sp.timing_type, sp.timing_offset_minutes, sp.requires_check, p.is_completed, 
+           s.start_time, b.scheduled_date, e.name as experiment_type_name
+    FROM scheduled_step_preparations p
+    JOIN step_preparations sp ON p.step_preparation_id = sp.id
+    JOIN scheduled_steps s ON p.scheduled_step_id = s.id
+    JOIN scheduled_blocks b ON s.scheduled_block_id = b.id
+    JOIN scheduled_experiments se ON b.scheduled_experiment_id = se.id
+    JOIN protocols pr ON se.protocol_id = pr.id
+    JOIN experiment_types e ON pr.experiment_type_id = e.id
+    WHERE p.is_completed = 0 AND b.scheduled_date = date('now', 'localtime')
+  `).all() as any[];
+  
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  
+  for (const a of alerts) {
+    if (!a.start_time || sentPreparationEmails.has(a.id)) continue;
+    
+    const [h, m] = a.start_time.split(':').map(Number);
+    const stepMinutes = h * 60 + m;
+    
+    if (a.timing_type === 'before_experiment') {
+      const triggerTime = stepMinutes - (a.timing_offset_minutes || 0);
+      // Trigger if we've passed the threshold
+      if (currentMinutes >= triggerTime && currentMinutes <= stepMinutes + 60) {
+        // Send Email
+        const html = `
+          <div style="font-family: sans-serif; padding: 20px;">
+            <h2>🧪 LabFlow 事前準備アラート</h2>
+            <p><strong>対象実験:</strong> ${a.experiment_type_name}</p>
+            <p><strong>ステップ開始:</strong> ${a.start_time}</p>
+            <div style="background: #FFF3CD; border-left: 4px solid #FFC107; padding: 12px; margin: 16px 0;">
+              ${a.message}
+            </div>
+            ${a.requires_check ? '<p>※準備が完了したらLabFlow上でチェックを入れてください。</p>' : ''}
+          </div>
+        `;
+        sendEmail(`【LabFlow事前準備】${a.experiment_type_name}`, html);
+        sentPreparationEmails.add(a.id);
+      }
+    }
+  }
+}
+
 export function startScheduler() {
   const settings = getSettings();
   const tz = settings.timezone || 'Asia/Tokyo';
@@ -159,6 +211,7 @@ export function startScheduler() {
   const [dH, dM] = dailyTime.split(':');
   cron.schedule(`${dM} ${dH} * * *`, () => {
     console.log('[Scheduler] Sending daily plan email...');
+    sentPreparationEmails.clear(); // Clear cache daily
     sendDailyPlanEmail();
   }, { timezone: tz });
   
@@ -169,7 +222,14 @@ export function startScheduler() {
     console.log('[Scheduler] Sending reminder email...');
     sendReminderEmail();
   }, { timezone: tz });
+
+  // Preparation alerts every minute
+  cron.schedule('* * * * *', () => {
+    sendPreparationEmails();
+  });
   
   console.log(`[Scheduler] Daily plan email scheduled at ${dailyTime} (${tz})`);
   console.log(`[Scheduler] Reminder email scheduled at ${reminderTime} (${tz})`);
+  console.log(`[Scheduler] Preparation alerts checking every minute`);
 }
+

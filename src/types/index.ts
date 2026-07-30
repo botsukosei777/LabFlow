@@ -244,6 +244,14 @@ export interface Holiday {
   created_at: string;
 }
 
+export interface MiniMemo {
+  id: number;
+  message: string;
+  is_completed: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 // API Response
 export interface ApiResponse<T> {
   data: T;

@@ -1,6 +1,6 @@
 import { useState, useEffect, useContext } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FlaskConical, RotateCcw, Target, Package, CheckCircle2, Calendar, AlertTriangle, ArrowRight } from 'lucide-react';
+import { FlaskConical, RotateCcw, Target, Package, CheckCircle2, Calendar, AlertTriangle, ArrowRight, MessageSquare, Plus, Link as LinkIcon, ExternalLink, Trash2, Pencil } from 'lucide-react';
 import { api } from '../api/client';
 import { ToastContext } from '../App';
 import { useNavigate } from 'react-router-dom';
@@ -13,10 +13,16 @@ export default function Dashboard() {
   const [todayRoutines, setTodayRoutines] = useState<any[]>([]);
   const [milestones, setMilestones] = useState<any[]>([]);
   const [alerts, setAlerts] = useState<any[]>([]);
+  const [miniMemos, setMiniMemos] = useState<any[]>([]);
+  const [memoText, setMemoText] = useState('');
   const [stats, setStats] = useState({ experiments: 0, routines: 0, milestones: 0, alerts: 0, routinesTotal: 0 });
   const [showPostponeModal, setShowPostponeModal] = useState<{ stepId: number, expId: number, scheduledDate: string } | null>(null);
   const [postponeDate, setPostponeDate] = useState('');
   const [postponeTime, setPostponeTime] = useState('');
+  const [quickLinks, setQuickLinks] = useState<any[]>([]);
+  const [showAddLinkModal, setShowAddLinkModal] = useState(false);
+  const [linkForm, setLinkForm] = useState<{ id?: number, title: string, url: string, open_in_app: boolean }>({ title: '', url: '', open_in_app: false });
+  const [iframeUrl, setIframeUrl] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -24,26 +30,31 @@ export default function Dashboard() {
 
   const loadData = async () => {
     try {
-      const [blocks, routines, ms, reagentAlerts] = await Promise.all([
+      const [blocks, routines, ms, reagentAlerts, memos, links] = await Promise.all([
         api.get<any[]>('/schedule/today'),
         api.get<any[]>('/routines/today'),
         api.get<any[]>('/milestones?status=active'),
         api.get<any[]>('/reagents/alerts'),
+        api.get<any[]>('/mini_memos'),
+        api.get<any[]>('/quick_links'),
       ]);
       setTodayBlocks(blocks);
       setTodayRoutines(routines);
       setMilestones(ms);
       setAlerts(reagentAlerts);
+      setMiniMemos(memos);
+      setQuickLinks(links);
       
-      const completedRoutines = routines.filter((r: any) => r.completed_today).length;
       setStats({
         experiments: blocks.length,
-        routines: completedRoutines,
+        routines: routines.filter((r: any) => r.is_completed).length,
         routinesTotal: routines.length,
         milestones: ms.length,
-        alerts: reagentAlerts.length,
+        alerts: reagentAlerts.length
       });
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const toggleRoutine = async (routine: any) => {
@@ -108,6 +119,67 @@ export default function Dashboard() {
       setShowPostponeModal(null);
       loadData();
     } catch (e) { addToast('error', t('common.errorOccurred')); }
+  };
+
+  const handleAddMemo = async () => {
+    if (!memoText.trim()) return;
+    try {
+      await api.post('/mini_memos', { message: memoText });
+      setMemoText('');
+      loadData();
+    } catch (e) {
+      addToast('error', t('common.errorOccurred'));
+    }
+  };
+
+  const handleCompleteMemo = async (id: number) => {
+    try {
+      await api.put(`/mini_memos/${id}/complete`, {});
+      loadData();
+    } catch (e) {
+      addToast('error', t('common.errorOccurred'));
+    }
+  };
+
+  const handleSaveLink = async () => {
+    if (!linkForm.title || !linkForm.url) return;
+    try {
+      if (linkForm.id) {
+        await api.put(`/quick_links/${linkForm.id}`, linkForm);
+      } else {
+        await api.post('/quick_links', linkForm);
+      }
+      setShowAddLinkModal(false);
+      setLinkForm({ title: '', url: '', open_in_app: false });
+      loadData();
+    } catch (e) {
+      addToast('error', t('common.errorOccurred'));
+    }
+  };
+  
+  const handleDeleteLink = async (id: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm(t('common.confirmDelete', { defaultValue: '本当に削除しますか？' }))) return;
+    try {
+      await api.delete(`/quick_links/${id}`);
+      loadData();
+    } catch (e) {
+      addToast('error', t('common.errorOccurred'));
+    }
+  };
+
+  const handleEditLink = (link: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setLinkForm({ id: link.id, title: link.title, url: link.url, open_in_app: link.open_in_app === 1 || link.open_in_app === true });
+    setShowAddLinkModal(true);
+  };
+
+  const handleLinkClick = (link: any) => {
+    if (link.open_in_app) {
+      setIframeUrl(link.url);
+    } else {
+      window.open(link.url, '_blank');
+    }
   };
 
   const getMilestoneProgress = (ms: any) => {
@@ -317,6 +389,70 @@ export default function Dashboard() {
             </div>
           )}
         </div>
+
+        {/* Mini Memos */}
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title"><MessageSquare size={16} style={{ marginRight: 8 }} />{t('dashboard.miniMemosTitle', { defaultValue: 'ミニミニメモ' })}</h3>
+          </div>
+          <div style={{ display: 'flex', gap: 'var(--space-xs)', marginBottom: 'var(--space-md)' }}>
+            <input 
+              type="text" 
+              className="form-input" 
+              placeholder={t('dashboard.miniMemosPlaceholder', { defaultValue: '頼まれごとなどを入力...' })} 
+              value={memoText} 
+              onChange={e => setMemoText(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleAddMemo(); }}
+            />
+            <button className="btn btn-primary" onClick={handleAddMemo} disabled={!memoText.trim()}>
+              <Plus size={16} />
+            </button>
+          </div>
+          {miniMemos.length === 0 ? (
+            <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--font-size-sm)' }}>{t('dashboard.noMiniMemos', { defaultValue: '未完了のメモはありません' })}</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
+              {miniMemos.map((memo: any) => (
+                <div key={memo.id} className="checklist-item" style={{ padding: '8px', border: '1px solid var(--color-info-dim)', borderLeft: '3px solid var(--color-info)' }}>
+                  <button className="checklist-check" onClick={() => handleCompleteMemo(memo.id)}>
+                    {memo.is_completed && <CheckCircle2 size={14} />}
+                  </button>
+                  <span className="checklist-text" style={{ fontSize: 'var(--font-size-sm)' }}>{memo.message}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        
+        {/* Quick Links */}
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title"><LinkIcon size={16} style={{ marginRight: 8 }} />{t('dashboard.quickLinksTitle', { defaultValue: 'リンク集' })}</h3>
+            <button className="btn btn-ghost btn-sm" onClick={() => { setLinkForm({ title: '', url: '', open_in_app: false }); setShowAddLinkModal(true); }}><Plus size={16} /></button>
+          </div>
+          {quickLinks.length === 0 ? (
+            <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--font-size-sm)' }}>{t('dashboard.noQuickLinks', { defaultValue: '登録されているリンクはありません。' })}</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-xs)' }}>
+              {quickLinks.map((link: any) => (
+                <div key={link.id} onClick={() => handleLinkClick(link)} className="checklist-item" style={{ padding: '8px 12px', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-secondary)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+                    <ExternalLink size={14} style={{ color: 'var(--text-tertiary)' }} />
+                    <span style={{ fontSize: 'var(--font-size-sm)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{link.title}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button className="btn-icon" onClick={(e) => handleEditLink(link, e)} style={{ padding: '4px', opacity: 0.5 }}>
+                      <Pencil size={14} style={{ color: 'var(--text-secondary)' }} />
+                    </button>
+                    <button className="btn-icon" onClick={(e) => handleDeleteLink(link.id, e)} style={{ padding: '4px', opacity: 0.5 }}>
+                      <Trash2 size={14} style={{ color: 'var(--color-danger)' }} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {showPostponeModal && (
@@ -339,6 +475,70 @@ export default function Dashboard() {
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setShowPostponeModal(null)}>{t('common.cancel')}</button>
               <button className="btn btn-primary" onClick={handlePostpone} disabled={!postponeDate}>{t('common.confirm', '確定')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAddLinkModal && (
+        <div className="modal-overlay" onClick={() => setShowAddLinkModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">{linkForm.id ? t('dashboard.editQuickLink', { defaultValue: 'リンクを編集' }) : t('dashboard.addQuickLink', { defaultValue: 'リンクを追加' })}</h3>
+              <button className="btn btn-ghost btn-icon" onClick={() => setShowAddLinkModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-md)' }}>
+                {t('dashboard.addQuickLinkDesc', { defaultValue: 'Google Spreadsheetsなどの外部サイトへのリンクを追加します。' })}
+              </p>
+              <div className="form-group">
+                <label className="form-label">{t('dashboard.linkTitle', { defaultValue: 'タイトル' })} *</label>
+                <input className="form-input" value={linkForm.title} onChange={e => setLinkForm({ ...linkForm, title: e.target.value })} placeholder={t('dashboard.linkTitlePlaceholder', { defaultValue: '例: 試薬在庫スプレッドシート' })} />
+              </div>
+              <div className="form-group" style={{ marginTop: 'var(--space-md)' }}>
+                <label className="form-label">{t('dashboard.linkUrl', { defaultValue: 'URL' })} *</label>
+                <input className="form-input" value={linkForm.url} onChange={e => setLinkForm({ ...linkForm, url: e.target.value })} placeholder={t('dashboard.linkUrlPlaceholder', { defaultValue: '例: https://docs.google.com/spreadsheets/...' })} />
+              </div>
+              <div className="form-group" style={{ marginTop: 'var(--space-md)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input 
+                  type="checkbox" 
+                  id="open-in-app" 
+                  checked={linkForm.open_in_app} 
+                  onChange={e => setLinkForm({ ...linkForm, open_in_app: e.target.checked })} 
+                  style={{ width: '18px', height: '18px' }}
+                />
+                <label htmlFor="open-in-app" style={{ margin: 0, fontWeight: 500, fontSize: 'var(--font-size-sm)' }}>
+                  {t('dashboard.openInApp', { defaultValue: 'LabFlow内で開く (モーダル表示)' })}
+                </label>
+              </div>
+              <p style={{ color: 'var(--text-tertiary)', fontSize: '12px', marginTop: '4px', marginLeft: '26px' }}>
+                {t('dashboard.openInAppDesc', { defaultValue: 'LabFlowの画面内に埋め込んで開きます。Google Docs等におすすめです。※一部のサイトは埋め込み表示を拒否する設定になっています。' })}
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setShowAddLinkModal(false)}>{t('common.cancel')}</button>
+              <button className="btn btn-primary" onClick={handleSaveLink} disabled={!linkForm.title || !linkForm.url}>{t('common.save')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {iframeUrl && (
+        <div className="modal-overlay" style={{ zIndex: 9999, padding: 'var(--space-lg)' }}>
+          <div className="modal" style={{ width: '100%', maxWidth: '1200px', height: '90vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="modal-header">
+              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <ExternalLink size={18} /> {quickLinks.find(l => l.url === iframeUrl)?.title || 'Link Preview'}
+              </h3>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button className="btn btn-secondary btn-sm" onClick={() => window.open(iframeUrl, '_blank')}>
+                  <ExternalLink size={14} style={{ marginRight: '4px' }} /> 別タブで開く
+                </button>
+                <button className="btn btn-ghost btn-icon" onClick={() => setIframeUrl(null)}>×</button>
+              </div>
+            </div>
+            <div className="modal-body" style={{ flex: 1, padding: 0 }}>
+              <iframe src={iframeUrl} style={{ width: '100%', height: '100%', border: 'none' }} title="External Link Preview" />
             </div>
           </div>
         </div>

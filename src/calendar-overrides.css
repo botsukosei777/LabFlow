@@ -44,6 +44,14 @@
   padding: 2px 5px;
 }
 
+/* Scrollable Month View */
+.rbc-month-view {
+  overflow-y: auto !important;
+}
+.rbc-month-row {
+  min-height: 140px !important;
+}
+
 /* Toolbar Buttons Dark Mode Overrides */
 .dark-theme .rbc-toolbar button {
   color: var(--text-primary);

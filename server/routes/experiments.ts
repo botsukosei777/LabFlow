@@ -109,6 +109,64 @@ router.delete('/steps/:stepId', (req, res) => {
   res.status(204).send();
 });
 
+router.post('/:experimentId/steps/import', (req, res) => {
+  const { source_step_id } = req.body;
+  
+  // Verify ownership of the target experiment
+  const targetExp = db.prepare('SELECT user_id FROM experiment_types WHERE id = ?').get(req.params.experimentId) as any;
+  if (!targetExp || targetExp.user_id !== req.userId) return res.status(403).json({ message: 'Forbidden' });
+  
+  // Verify ownership of the source step
+  const sourceStep = db.prepare(`
+    SELECT s.*, e.user_id 
+    FROM steps s 
+    JOIN experiment_types e ON s.experiment_type_id = e.id 
+    WHERE s.id = ?
+  `).get(source_step_id) as any;
+  
+  if (!sourceStep || sourceStep.user_id !== req.userId) return res.status(403).json({ message: 'Forbidden source step' });
+  
+  // Copy step
+  const insertStep = db.prepare(`
+    INSERT INTO steps (experiment_type_id, pattern_label, name, description, duration_minutes, is_overnight, order_index, sub_protocol_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  
+  // Put it at the end of the current experiment's steps
+  const maxOrder = db.prepare('SELECT MAX(order_index) as max_idx FROM steps WHERE experiment_type_id = ?').get(req.params.experimentId) as any;
+  const newOrderIndex = (maxOrder?.max_idx ?? -1) + 1;
+  
+  const result = insertStep.run(
+    req.params.experimentId,
+    sourceStep.pattern_label,
+    sourceStep.name + ' (コピー)',
+    sourceStep.description,
+    sourceStep.duration_minutes,
+    sourceStep.is_overnight,
+    newOrderIndex,
+    sourceStep.sub_protocol_id
+  );
+  
+  const newStepId = result.lastInsertRowid;
+  
+  // Copy preparations
+  const sourcePreps = db.prepare('SELECT * FROM step_preparations WHERE step_id = ?').all(source_step_id) as any[];
+  if (sourcePreps.length > 0) {
+    const insertPrep = db.prepare('INSERT INTO step_preparations (step_id, message, timing_type, timing_step_id, timing_offset_minutes, requires_check) VALUES (?, ?, ?, ?, ?, ?)');
+    for (const p of sourcePreps) {
+      // Note: timing_step_id points to a step in the old experiment type. 
+      // It might be broken in the new experiment, but we copy it as null to be safe if timing_type == 'after_step'.
+      const newTimingStepId = p.timing_type === 'after_step' ? null : p.timing_step_id;
+      insertPrep.run(newStepId, p.message, p.timing_type, newTimingStepId, p.timing_offset_minutes, p.requires_check);
+    }
+  }
+  
+  const newStep = db.prepare('SELECT * FROM steps WHERE id = ?').get(newStepId) as any;
+  newStep.preparations = db.prepare('SELECT * FROM step_preparations WHERE step_id = ?').all(newStepId);
+  
+  res.status(201).json(newStep);
+});
+
 router.put('/blocks/:blockId', (req, res) => {
   const block = db.prepare(`
     SELECT e.user_id FROM blocks b JOIN experiment_types e ON b.experiment_type_id = e.id WHERE b.id = ?

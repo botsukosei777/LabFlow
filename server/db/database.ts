@@ -38,41 +38,92 @@ if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
-const db = new Database(DB_PATH);
+let dbInstance = new Database(DB_PATH);
 
-// Configure pragmas
-db.pragma('journal_mode = WAL');
-db.pragma('synchronous = NORMAL');
-db.pragma('foreign_keys = ON');
+function initDb() {
+  // Configure pragmas
+  dbInstance.pragma('journal_mode = WAL');
+  dbInstance.pragma('synchronous = NORMAL');
+  dbInstance.pragma('foreign_keys = ON');
 
-// Initialize schema
-const schema = fs.readFileSync(SCHEMA_PATH, 'utf-8');
-db.exec(schema);
+  // Initialize schema
+  const schema = fs.readFileSync(SCHEMA_PATH, 'utf-8');
+  dbInstance.exec(schema);
 
-// Migration for new columns (ignores if columns already exist)
-try { db.exec("ALTER TABLE scheduled_experiments ADD COLUMN start_time TEXT DEFAULT '09:00'"); } catch (e) {}
-try { db.exec("ALTER TABLE scheduled_blocks ADD COLUMN start_time TEXT DEFAULT '09:00'"); } catch (e) {}
-try { db.exec("ALTER TABLE scheduled_blocks ADD COLUMN end_time TEXT DEFAULT '10:00'"); } catch (e) {}
-try { db.exec("ALTER TABLE scheduled_steps ADD COLUMN start_time TEXT DEFAULT '09:00'"); } catch (e) {}
-try { db.exec("ALTER TABLE scheduled_steps ADD COLUMN end_time TEXT DEFAULT '10:00'"); } catch (e) {}
-try { db.exec("ALTER TABLE scheduled_steps ADD COLUMN start_date TEXT"); } catch (e) {}
-try { db.exec("ALTER TABLE scheduled_steps ADD COLUMN end_date TEXT"); } catch (e) {}
-try { db.exec("ALTER TABLE steps ADD COLUMN is_overnight INTEGER NOT NULL DEFAULT 0"); } catch (e) {}
-try { db.exec("ALTER TABLE steps ADD COLUMN sub_protocol TEXT DEFAULT ''"); } catch (e) {}
-try { db.exec("ALTER TABLE scheduled_blocks ADD COLUMN end_date TEXT"); } catch (e) {}
-try { db.exec("ALTER TABLE notebooks ADD COLUMN file_path TEXT DEFAULT ''"); } catch (e) {}
-try { db.exec("ALTER TABLE steps ADD COLUMN sub_protocol_id INTEGER REFERENCES sub_protocols(id)"); } catch(e) {}
-try { db.exec("ALTER TABLE milestone_sub_items ADD COLUMN data_type TEXT NOT NULL DEFAULT 'qualitative'"); } catch(e) {}
-try { db.exec("ALTER TABLE milestone_sub_items ADD COLUMN target_count INTEGER DEFAULT 1"); } catch(e) {}
-try { db.exec("ALTER TABLE milestone_sub_items ADD COLUMN current_count INTEGER DEFAULT 0"); } catch(e) {}
+  // Migration for new columns (ignores if columns already exist)
+  try { dbInstance.exec("ALTER TABLE scheduled_experiments ADD COLUMN start_time TEXT DEFAULT '09:00'"); } catch (e) {}
+  try { dbInstance.exec("ALTER TABLE scheduled_blocks ADD COLUMN start_time TEXT DEFAULT '09:00'"); } catch (e) {}
+  try { dbInstance.exec("ALTER TABLE scheduled_blocks ADD COLUMN end_time TEXT DEFAULT '10:00'"); } catch (e) {}
+  try { dbInstance.exec("ALTER TABLE scheduled_steps ADD COLUMN start_time TEXT DEFAULT '09:00'"); } catch (e) {}
+  try { dbInstance.exec("ALTER TABLE scheduled_steps ADD COLUMN end_time TEXT DEFAULT '10:00'"); } catch (e) {}
+  try { dbInstance.exec("ALTER TABLE scheduled_steps ADD COLUMN start_date TEXT"); } catch (e) {}
+  try { dbInstance.exec("ALTER TABLE scheduled_steps ADD COLUMN end_date TEXT"); } catch (e) {}
+  try { dbInstance.exec("ALTER TABLE steps ADD COLUMN is_overnight INTEGER NOT NULL DEFAULT 0"); } catch (e) {}
+  try { dbInstance.exec("ALTER TABLE steps ADD COLUMN sub_protocol TEXT DEFAULT ''"); } catch (e) {}
+  try { dbInstance.exec("ALTER TABLE scheduled_blocks ADD COLUMN end_date TEXT"); } catch (e) {}
+  try { dbInstance.exec("ALTER TABLE notebooks ADD COLUMN file_path TEXT DEFAULT ''"); } catch (e) {}
+  try { dbInstance.exec("ALTER TABLE steps ADD COLUMN sub_protocol_id INTEGER REFERENCES sub_protocols(id)"); } catch(e) {}
+  try { dbInstance.exec("ALTER TABLE milestone_sub_items ADD COLUMN data_type TEXT NOT NULL DEFAULT 'qualitative'"); } catch(e) {}
+  try { dbInstance.exec("ALTER TABLE milestone_sub_items ADD COLUMN target_count INTEGER DEFAULT 1"); } catch(e) {}
+  try { dbInstance.exec("ALTER TABLE milestone_sub_items ADD COLUMN current_count INTEGER DEFAULT 0"); } catch(e) {}
+  try { dbInstance.exec("ALTER TABLE milestone_items ADD COLUMN unit TEXT DEFAULT ''"); } catch(e) {}
+  try { dbInstance.exec("ALTER TABLE milestone_sub_items ADD COLUMN unit TEXT DEFAULT ''"); } catch(e) {}
+  try { 
+    dbInstance.exec(`
+      CREATE TABLE IF NOT EXISTS mini_memos (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          message TEXT NOT NULL,
+          is_completed INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT DEFAULT (datetime('now', 'localtime')),
+          updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+  } catch(e) {}
+  try { 
+    dbInstance.exec(`
+      CREATE TABLE IF NOT EXISTS quick_links (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          title TEXT NOT NULL,
+          url TEXT NOT NULL,
+          open_in_app INTEGER NOT NULL DEFAULT 0,
+          order_index INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT DEFAULT (datetime('now', 'localtime')),
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+  } catch(e) {}
 
-// Sub-protocols migration: make it user-scoped instead of experiment-scoped
-const subProtocolTableInfo = db.prepare("PRAGMA table_info(sub_protocols)").all() as any[];
-if (subProtocolTableInfo.length > 0) {
-  const hasUserId = subProtocolTableInfo.some(col => col.name === 'user_id');
-  if (!hasUserId) {
-    db.exec(`
-      CREATE TABLE sub_protocols_new (
+  // Sub-protocols migration: make it user-scoped instead of experiment-scoped
+  const subProtocolTableInfo = dbInstance.prepare("PRAGMA table_info(sub_protocols)").all() as any[];
+  if (subProtocolTableInfo.length > 0) {
+    const hasUserId = subProtocolTableInfo.some(col => col.name === 'user_id');
+    if (!hasUserId) {
+      dbInstance.exec(`
+        CREATE TABLE sub_protocols_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            content TEXT DEFAULT '',
+            created_at TEXT DEFAULT (datetime('now', 'localtime')),
+            updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        INSERT INTO sub_protocols_new (id, user_id, name, content, created_at, updated_at)
+        SELECT s.id, e.user_id, s.name, s.content, s.created_at, s.updated_at
+        FROM sub_protocols s
+        JOIN experiment_types e ON s.experiment_type_id = e.id;
+        DROP TABLE sub_protocols;
+        ALTER TABLE sub_protocols_new RENAME TO sub_protocols;
+      `);
+      console.log('[DB] Migrated sub_protocols table to user-scoped');
+    }
+  } else {
+    // Just in case it wasn't created by schema.sql
+    dbInstance.exec(`
+      CREATE TABLE IF NOT EXISTS sub_protocols (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           user_id INTEGER NOT NULL,
           name TEXT NOT NULL,
@@ -80,76 +131,76 @@ if (subProtocolTableInfo.length > 0) {
           created_at TEXT DEFAULT (datetime('now', 'localtime')),
           updated_at TEXT DEFAULT (datetime('now', 'localtime')),
           FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-      );
-      INSERT INTO sub_protocols_new (id, user_id, name, content, created_at, updated_at)
-      SELECT s.id, e.user_id, s.name, s.content, s.created_at, s.updated_at
-      FROM sub_protocols s
-      JOIN experiment_types e ON s.experiment_type_id = e.id;
-      DROP TABLE sub_protocols;
-      ALTER TABLE sub_protocols_new RENAME TO sub_protocols;
+      )
     `);
-    console.log('[DB] Migrated sub_protocols table to user-scoped');
   }
-} else {
-  // Just in case it wasn't created by schema.sql
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS sub_protocols (
+
+  // Add notebooks table
+  dbInstance.exec(`
+    CREATE TABLE IF NOT EXISTS notebooks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
-        name TEXT NOT NULL,
+        title TEXT NOT NULL,
         content TEXT DEFAULT '',
+        date TEXT NOT NULL,
+        scheduled_experiment_id INTEGER,
         created_at TEXT DEFAULT (datetime('now', 'localtime')),
         updated_at TEXT DEFAULT (datetime('now', 'localtime')),
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (scheduled_experiment_id) REFERENCES scheduled_experiments(id) ON DELETE SET NULL
     )
   `);
+
+  // Add start_date and end_date to routine_tasks
+  const routineTableInfo = dbInstance.prepare("PRAGMA table_info(routine_tasks)").all() as any[];
+  const hasStartDate = routineTableInfo.some(col => col.name === 'start_date');
+  if (!hasStartDate) {
+    dbInstance.exec(`
+      ALTER TABLE routine_tasks ADD COLUMN start_date TEXT;
+      ALTER TABLE routine_tasks ADD COLUMN end_date TEXT;
+    `);
+    console.log('[DB] Added start_date and end_date to routine_tasks table');
+  }
+
+  // Ensure default admin user exists
+  const adminCheck = dbInstance.prepare('SELECT id FROM users WHERE username = ?').get('admin');
+  if (!adminCheck) {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = crypto.scryptSync('password', salt, 64).toString('hex');
+    dbInstance.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)').run('admin', `${salt}:${hash}`);
+    console.log('[DB] Created default admin user (admin/password)');
+  }
+
+  console.log('[DB] Database initialized at', DB_PATH);
 }
 
-// Add notebooks table
-db.exec(`
-  CREATE TABLE IF NOT EXISTS notebooks (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      title TEXT NOT NULL,
-      content TEXT DEFAULT '',
-      date TEXT NOT NULL,
-      scheduled_experiment_id INTEGER,
-      created_at TEXT DEFAULT (datetime('now', 'localtime')),
-      updated_at TEXT DEFAULT (datetime('now', 'localtime')),
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (scheduled_experiment_id) REFERENCES scheduled_experiments(id) ON DELETE SET NULL
-  )
-`);
+initDb();
 
-// Add start_date and end_date to routine_tasks
-const routineTableInfo = db.prepare("PRAGMA table_info(routine_tasks)").all() as any[];
-const hasStartDate = routineTableInfo.some(col => col.name === 'start_date');
-if (!hasStartDate) {
-  db.exec(`
-    ALTER TABLE routine_tasks ADD COLUMN start_date TEXT;
-    ALTER TABLE routine_tasks ADD COLUMN end_date TEXT;
-  `);
-  console.log('[DB] Added start_date and end_date to routine_tasks table');
-}
-
-// Ensure default admin user exists
-const adminCheck = db.prepare('SELECT id FROM users WHERE username = ?').get('admin');
-if (!adminCheck) {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync('password', salt, 64).toString('hex');
-  db.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)').run('admin', `${salt}:${hash}`);
-  console.log('[DB] Created default admin user (admin/password)');
-}
-
-console.log('[DB] Database initialized at', DB_PATH);
+const proxyHandler = {
+  get(target: any, prop: string | symbol) {
+    const val = (dbInstance as any)[prop];
+    return typeof val === 'function' ? val.bind(dbInstance) : val;
+  }
+};
+const db = new Proxy({}, proxyHandler) as Database.Database;
 
 // Backup function
 export async function backupDatabase(): Promise<string> {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const backupPath = path.resolve(dataDir, `labflow-backup-${timestamp}.db`);
-  await db.backup(backupPath);
+  await dbInstance.backup(backupPath);
   console.log('[DB] Backup created at', backupPath);
   return backupPath;
+}
+
+// Restore function
+export async function restoreDatabase(uploadedFilePath: string): Promise<void> {
+  console.log('[DB] Starting restore process from', uploadedFilePath);
+  dbInstance.close();
+  fs.copyFileSync(uploadedFilePath, DB_PATH);
+  dbInstance = new Database(DB_PATH);
+  initDb();
+  console.log('[DB] Restore completed successfully');
 }
 
 export default db;

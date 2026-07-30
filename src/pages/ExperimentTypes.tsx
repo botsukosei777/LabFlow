@@ -178,7 +178,7 @@ export default function ExperimentTypes() {
 
       {/* Create/Edit Modal */}
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+        <div className="modal-overlay">
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3 className="modal-title">
@@ -239,7 +239,7 @@ export default function ExperimentTypes() {
 
       {/* Delete Confirmation */}
       {deleteConfirm !== null && (
-        <div className="modal-overlay" onClick={() => setDeleteConfirm(null)}>
+        <div className="modal-overlay">
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
             <div className="modal-body" style={{ textAlign: 'center', padding: 'var(--space-xl)' }}>
               <Trash2 size={48} style={{ color: 'var(--color-danger)', marginBottom: 'var(--space-md)' }} />

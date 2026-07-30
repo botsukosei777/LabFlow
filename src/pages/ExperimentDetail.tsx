@@ -1,7 +1,7 @@
 import { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Plus, Trash2, Edit, Clock, GripVertical, Check, FileText } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Edit, Clock, GripVertical, Check, FileText, ArrowUp, ArrowDown } from 'lucide-react';
 import { api } from '../api/client';
 import { ToastContext } from '../App';
 import type { ExperimentType, Step, Block, Protocol, SubProtocol } from '../types';
@@ -31,6 +31,14 @@ export default function ExperimentDetail() {
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [editingBlock, setEditingBlock] = useState<any>(null);
   const [blockForm, setBlockForm] = useState({ name: '', description: '', pattern_label: 'default', step_ids: [] as number[] });
+
+  // Import Step form
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [allExperiments, setAllExperiments] = useState<any[]>([]);
+  const [importSelectedExpId, setImportSelectedExpId] = useState<number | null>(null);
+  const [importSteps, setImportSteps] = useState<any[]>([]);
+  const [importSelectedStepId, setImportSelectedStepId] = useState<number | null>(null);
+  const [importing, setImporting] = useState(false);
 
   // Protocol form
   const [showProtocolModal, setShowProtocolModal] = useState(false);
@@ -101,6 +109,45 @@ export default function ExperimentDetail() {
       fetchData();
     } catch (error) {
       addToast('error', t('common.errorOccurred'));
+    }
+  };
+
+  const openImportModal = async () => {
+    try {
+      const exps = await api.get<any[]>('/experiments');
+      setAllExperiments(exps.filter(e => e.id !== parseInt(id!))); // Exclude current
+      setShowImportModal(true);
+      setImportSelectedExpId(null);
+      setImportSelectedStepId(null);
+      setImportSteps([]);
+    } catch (e) {
+      addToast('error', 'Failed to load experiments');
+    }
+  };
+
+  const loadImportSteps = async (expId: number) => {
+    setImportSelectedExpId(expId);
+    setImportSelectedStepId(null);
+    try {
+      const st = await api.get<any[]>(`/experiments/${expId}/steps`);
+      setImportSteps(st);
+    } catch (e) {
+      addToast('error', 'Failed to load steps');
+    }
+  };
+
+  const handleImportSubmit = async () => {
+    if (!importSelectedStepId) return;
+    setImporting(true);
+    try {
+      await api.post(`/experiments/${id}/steps/import`, { source_step_id: importSelectedStepId });
+      addToast('success', 'ステップをインポートしました');
+      setShowImportModal(false);
+      fetchData();
+    } catch (e: any) {
+      addToast('error', e.message || 'インポートに失敗しました');
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -250,7 +297,10 @@ export default function ExperimentDetail() {
       {/* Steps Tab */}
       {activeTab === 'steps' && (
         <div>
-          <div style={{ marginBottom: 'var(--space-md)', display: 'flex', justifyContent: 'flex-end' }}>
+          <div style={{ marginBottom: 'var(--space-md)', display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-sm)' }}>
+            <button className="btn btn-secondary btn-sm" onClick={openImportModal}>
+              <Edit size={14} /> インポート
+            </button>
             <button className="btn btn-primary btn-sm" onClick={() => {
               setEditingStep(null);
               setStepForm({ name: '', description: '', duration_minutes: 0, is_overnight: false, pattern_label: selectedPattern !== 'all' ? selectedPattern : 'default', sub_protocol: '', preparations: [] });
@@ -395,7 +445,7 @@ export default function ExperimentDetail() {
 
       {/* Step Modal */}
       {showStepModal && (
-        <div className="modal-overlay" onClick={() => setShowStepModal(false)}>
+        <div className="modal-overlay">
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3 className="modal-title">{editingStep ? t('experiments.editStep') : t('experiments.addStep')}</h3>
@@ -482,7 +532,7 @@ export default function ExperimentDetail() {
 
       {/* Block Modal */}
       {showBlockModal && (
-        <div className="modal-overlay" onClick={() => setShowBlockModal(false)}>
+        <div className="modal-overlay">
           <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3 className="modal-title">{editingBlock ? t('experiments.editBlock') : t('experiments.addBlock')}</h3>
@@ -505,30 +555,76 @@ export default function ExperimentDetail() {
               </div>
               <div className="form-group">
                 <label className="form-label">{t('experiments.selectSteps')}</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-xs)', maxHeight: 250, overflowY: 'auto' }}>
-                  {steps.length === 0 ? (
-                    <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--font-size-sm)' }}>{t('experiments.noSteps')}</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-xs)' }}>
+                  {blockForm.step_ids.length === 0 ? (
+                    <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--font-size-sm)' }}>追加されたステップはありません</p>
                   ) : (
-                    steps.map(step => (
-                      <label key={step.id} className="form-checkbox" style={{ padding: 'var(--space-sm)', borderRadius: 'var(--border-radius-md)', border: '1px solid var(--border-default)' }}>
-                        <input
-                          type="checkbox"
-                          checked={blockForm.step_ids.includes(step.id)}
-                          onChange={e => {
-                            if (e.target.checked) {
-                              setBlockForm({ ...blockForm, step_ids: [...blockForm.step_ids, step.id] });
-                            } else {
-                              setBlockForm({ ...blockForm, step_ids: blockForm.step_ids.filter(id => id !== step.id) });
-                            }
-                          }}
-                        />
-                        <span>{step.name}</span>
-                        <span style={{ marginLeft: 'auto', fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)' }}>
-                          {step.pattern_label !== 'default' ? `[${step.pattern_label}] ` : ''}{step.is_overnight ? 'Overnight' : formatDuration(step.duration_minutes)}
-                        </span>
-                      </label>
-                    ))
+                    blockForm.step_ids.map((stepId, index) => {
+                      const step = steps.find(s => s.id === stepId);
+                      if (!step) return null;
+                      return (
+                        <div key={`${step.id}-${index}`} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', padding: 'var(--space-xs) var(--space-sm)', borderRadius: 'var(--border-radius-md)', border: '1px solid var(--border-default)', backgroundColor: 'var(--bg-secondary)' }}>
+                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>{index + 1}. {step.name}</span>
+                            <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)' }}>
+                              {step.pattern_label !== 'default' ? `[${step.pattern_label}] ` : ''}{step.is_overnight ? 'Overnight' : formatDuration(step.duration_minutes)}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', gap: 2 }}>
+                            <button 
+                              className="btn btn-ghost btn-icon btn-sm" 
+                              disabled={index === 0}
+                              onClick={() => {
+                                const newIds = [...blockForm.step_ids];
+                                [newIds[index - 1], newIds[index]] = [newIds[index], newIds[index - 1]];
+                                setBlockForm({ ...blockForm, step_ids: newIds });
+                              }}
+                            ><ArrowUp size={14} /></button>
+                            <button 
+                              className="btn btn-ghost btn-icon btn-sm" 
+                              disabled={index === blockForm.step_ids.length - 1}
+                              onClick={() => {
+                                const newIds = [...blockForm.step_ids];
+                                [newIds[index], newIds[index + 1]] = [newIds[index + 1], newIds[index]];
+                                setBlockForm({ ...blockForm, step_ids: newIds });
+                              }}
+                            ><ArrowDown size={14} /></button>
+                            <button 
+                              className="btn btn-ghost btn-icon btn-sm" 
+                              style={{ color: 'var(--color-danger)' }}
+                              onClick={() => {
+                                const newIds = [...blockForm.step_ids];
+                                newIds.splice(index, 1);
+                                setBlockForm({ ...blockForm, step_ids: newIds });
+                              }}
+                            ><Trash2 size={14} /></button>
+                          </div>
+                        </div>
+                      );
+                    })
                   )}
+                  <div style={{ marginTop: 'var(--space-sm)', display: 'flex', gap: 'var(--space-sm)' }}>
+                    <select 
+                      className="form-input" 
+                      id="block-step-add-select"
+                      style={{ flex: 1 }}
+                    >
+                      <option value="">-- ステップを選択して追加 --</option>
+                      {steps.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                    <button 
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        const select = document.getElementById('block-step-add-select') as HTMLSelectElement;
+                        if (select && select.value) {
+                          setBlockForm({ ...blockForm, step_ids: [...blockForm.step_ids, parseInt(select.value)] });
+                          select.value = "";
+                        }
+                      }}
+                    >
+                      追加
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -542,7 +638,7 @@ export default function ExperimentDetail() {
 
       {/* Protocol Modal */}
       {showProtocolModal && (
-        <div className="modal-overlay" onClick={() => setShowProtocolModal(false)}>
+        <div className="modal-overlay">
           <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3 className="modal-title">{editingProtocol ? t('experiments.editProtocol') : t('experiments.addProtocol')}</h3>
@@ -603,6 +699,50 @@ export default function ExperimentDetail() {
               <button className="btn btn-secondary" onClick={() => setShowProtocolModal(false)}>{t('common.cancel')}</button>
               <button className="btn btn-primary" onClick={handleProtocolSubmit} disabled={!protocolForm.name.trim()}>
                 {editingProtocol ? t('common.save') : t('common.create')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Import Step Modal */}
+      {showImportModal && (
+        <div className="modal-overlay">
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">他の実験種からステップをインポート</h3>
+              <button className="btn btn-ghost btn-icon" onClick={() => setShowImportModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label className="form-label">インポート元の実験種</label>
+                <select className="form-input" value={importSelectedExpId || ''} onChange={e => loadImportSteps(parseInt(e.target.value))}>
+                  <option value="">-- 選択してください --</option>
+                  {allExperiments.map(e => (
+                    <option key={e.id} value={e.id}>{e.name}</option>
+                  ))}
+                </select>
+              </div>
+              
+              {importSelectedExpId && (
+                <div className="form-group">
+                  <label className="form-label">インポートするステップ</label>
+                  {importSteps.length === 0 ? (
+                    <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-tertiary)' }}>ステップが登録されていません</p>
+                  ) : (
+                    <select className="form-input" value={importSelectedStepId || ''} onChange={e => setImportSelectedStepId(parseInt(e.target.value))}>
+                      <option value="">-- ステップを選択 --</option>
+                      {importSteps.map(s => (
+                        <option key={s.id} value={s.id}>{s.name} ({s.duration_minutes}分)</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setShowImportModal(false)}>{t('common.cancel')}</button>
+              <button className="btn btn-primary" onClick={handleImportSubmit} disabled={!importSelectedStepId || importing}>
+                {importing ? 'インポート中...' : 'インポート'}
               </button>
             </div>
           </div>

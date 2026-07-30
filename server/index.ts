@@ -14,6 +14,8 @@ import routineRoutes from './routes/routines.js';
 import settingsRoutes from './routes/settings.js';
 import eventRoutes from './routes/events.js';
 import notebookRoutes from './routes/notebook.js';
+import miniMemosRoutes from './routes/miniMemos.js';
+import quickLinksRoutes from './routes/quickLinks.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -40,6 +42,8 @@ app.use('/api/routines', requireAuth, routineRoutes);
 app.use('/api/settings', requireAuth, settingsRoutes);
 app.use('/api/events', requireAuth, eventRoutes);
 app.use('/api/notebook', requireAuth, notebookRoutes);
+app.use('/api/mini_memos', requireAuth, miniMemosRoutes);
+app.use('/api/quick_links', requireAuth, quickLinksRoutes);
 
 // Backup endpoint
 app.get('/api/backup', requireAuth, async (req, res) => {
@@ -60,6 +64,32 @@ app.get('/api/backup', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('[Backup] Error:', error);
     res.status(500).json({ message: 'Backup failed' });
+  }
+});
+
+import multer from 'multer';
+import { restoreDatabase } from './db/database.js';
+
+const upload = multer({ dest: 'data/temp_uploads/' });
+
+// Restore endpoint
+app.post('/api/restore', requireAuth, upload.single('backupFile'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+    
+    await restoreDatabase(req.file.path);
+    
+    // Clean up the uploaded temp file
+    if (fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    
+    res.json({ message: 'Restore completed successfully' });
+  } catch (error) {
+    console.error('[Restore] Error:', error);
+    res.status(500).json({ message: 'Restore failed' });
   }
 });
 

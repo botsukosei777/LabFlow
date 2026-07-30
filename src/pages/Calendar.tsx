@@ -94,18 +94,19 @@ export default function Calendar() {
       const newEvents: any[] = [];
       
       blocksData.forEach((b: any) => {
-        if (!b.scheduled_date) return;
-        const blockStart = new Date(`${b.scheduled_date}T00:00:00`);
-        // react-big-calendar is exclusive for allDay events' end dates.
-        // We must add 1 day to the end_date to make it span correctly.
-        const blockEnd = new Date(`${b.end_date || b.scheduled_date}T00:00:00`);
-        blockEnd.setDate(blockEnd.getDate() + 1);
+        const blockStart = new Date(`${b.scheduled_date}T${b.start_time || '09:00'}:00`);
+        const blockEnd = new Date(`${b.end_date || b.scheduled_date}T${b.end_time || '10:00'}:00`);
+        
+        // Also keep an all-day version of end date for month view
+        const blockEndAllDay = new Date(`${b.end_date || b.scheduled_date}T00:00:00`);
+        blockEndAllDay.setDate(blockEndAllDay.getDate() + 1);
         
         newEvents.push({
           id: `block-${b.id}`,
           title: `${b.experiment_type_name} ${b.label ? '('+b.label+')' : ''}`,
           start: blockStart,
           end: blockEnd,
+          _allDayEnd: blockEndAllDay, // Store this for month view swap
           allDay: true,
           resource: b,
           type: 'block',
@@ -304,7 +305,7 @@ export default function Calendar() {
     } else if (event.type === 'holiday') {
       if (window.confirm(t('common.confirmDelete', '削除しますか？'))) {
         // Id prefix is 'hol-123'
-        const id = event.id.replace('hol-', '');
+        const id = String(event.id).replace('hol-', '');
         api.delete(`/settings/holidays/${id}`)
           .then(() => {
             addToast('success', t('common.deletedSuccessfully', '削除しました'));
@@ -393,30 +394,53 @@ export default function Calendar() {
   };
 
   const eventStyleGetter = (event: any) => {
-    if (event.type === 'block') {
-      return {
-        style: {
-          backgroundColor: event.color,
-          opacity: 0.8,
-          border: 'none',
-          color: 'white',
-        }
-      };
-    }
     if (event.type === 'milestone') {
       return { style: { backgroundColor: 'var(--color-warning)', color: 'white', border: 'none' } };
     }
     if (event.type === 'holiday') {
       return { style: { backgroundColor: 'var(--color-danger)', color: 'white', border: 'none' } };
     }
+    if (event.color) {
+      return {
+        style: {
+          backgroundColor: event.color,
+          border: 'none',
+          color: 'white',
+          opacity: event.type === 'block' || event.type === 'step' ? 0.8 : 1,
+        }
+      };
+    }
     return {};
   };
 
   const visibleEvents = useMemo(() => {
+    let filtered = events;
     if (currentView === 'month') {
-      return events.filter(e => e.type !== 'step');
+      filtered = events.filter(e => e.type !== 'step');
+    } else {
+      // Show blocks in week view if they have no steps, or just show them anyway
+      // For a cleaner look, if a block has steps, we might want to hide it, but the user requested it.
+      // So let's keep block visible, but change allDay flag based on view.
     }
-    return events.filter(e => e.type !== 'block');
+
+    return filtered.map(e => {
+      if (e.type === 'block') {
+        if (currentView === 'month') {
+          return {
+            ...e,
+            allDay: true,
+            start: new Date(`${e.resource.scheduled_date}T00:00:00`),
+            end: e._allDayEnd
+          };
+        } else {
+          return {
+            ...e,
+            allDay: false
+          };
+        }
+      }
+      return e;
+    });
   }, [events, currentView]);
 
   return (

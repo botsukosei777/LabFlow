@@ -55,7 +55,7 @@ router.delete('/:id', (req, res) => {
 
 // POST add milestone item
 router.post('/:id/items', (req, res) => {
-  const { name, data_type, target_count } = req.body;
+  const { name, data_type, target_count, unit } = req.body;
   if (!name) return res.status(400).json({ message: 'Name is required' });
   
   // Verify milestone belongs to user
@@ -67,15 +67,15 @@ router.post('/:id/items', (req, res) => {
   ).get(req.params.id) as any;
   
   const result = db.prepare(
-    'INSERT INTO milestone_items (milestone_id, name, data_type, target_count, order_index) VALUES (?, ?, ?, ?, ?)'
-  ).run(req.params.id, name, data_type || 'qualitative', target_count || 1, (max?.max_idx ?? -1) + 1);
+    'INSERT INTO milestone_items (milestone_id, name, data_type, target_count, unit, order_index) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(req.params.id, name, data_type || 'qualitative', target_count || 1, unit || '', (max?.max_idx ?? -1) + 1);
   const created = db.prepare('SELECT * FROM milestone_items WHERE id = ?').get(result.lastInsertRowid);
   res.status(201).json(created);
 });
 
 // PUT update milestone item
 router.put('/items/:itemId', (req, res) => {
-  const { name, data_type, target_count, current_count, is_completed } = req.body;
+  const { name, data_type, target_count, current_count, unit, is_completed } = req.body;
   
   // Verify item belongs to user's milestone
   const item = db.prepare(`
@@ -95,8 +95,8 @@ router.put('/items/:itemId', (req, res) => {
   // Auto-complete task items when all subitems are completed? Handled in subitem PUT.
   
   db.prepare(
-    'UPDATE milestone_items SET name = ?, data_type = ?, target_count = ?, current_count = ?, is_completed = ? WHERE id = ?'
-  ).run(name, data_type, target_count, current_count || 0, completed ? 1 : 0, req.params.itemId);
+    'UPDATE milestone_items SET name = ?, data_type = ?, target_count = ?, current_count = ?, unit = ?, is_completed = ? WHERE id = ?'
+  ).run(name, data_type, target_count, current_count || 0, unit || '', completed ? 1 : 0, req.params.itemId);
   
   const updated = db.prepare('SELECT * FROM milestone_items WHERE id = ?').get(req.params.itemId);
   res.json(updated);
@@ -120,7 +120,7 @@ router.delete('/items/:itemId', (req, res) => {
 
 // POST add subitem
 router.post('/items/:itemId/subitems', (req, res) => {
-  const { name, data_type = 'qualitative', target_count = 1 } = req.body;
+  const { name, data_type = 'qualitative', target_count = 1, unit = '' } = req.body;
   if (!name) return res.status(400).json({ message: 'Name is required' });
   
   const item = db.prepare(`
@@ -133,15 +133,15 @@ router.post('/items/:itemId/subitems', (req, res) => {
   if (!item || item.user_id !== req.userId) return res.status(403).json({ message: 'Forbidden' });
 
   const max = db.prepare('SELECT COALESCE(MAX(order_index), -1) as max_idx FROM milestone_sub_items WHERE milestone_item_id = ?').get(req.params.itemId) as any;
-  const result = db.prepare('INSERT INTO milestone_sub_items (milestone_item_id, name, data_type, target_count, order_index) VALUES (?, ?, ?, ?, ?)')
-    .run(req.params.itemId, name, data_type, target_count, (max?.max_idx ?? -1) + 1);
+  const result = db.prepare('INSERT INTO milestone_sub_items (milestone_item_id, name, data_type, target_count, unit, order_index) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(req.params.itemId, name, data_type, target_count, unit, (max?.max_idx ?? -1) + 1);
     
   res.status(201).json(db.prepare('SELECT * FROM milestone_sub_items WHERE id = ?').get(result.lastInsertRowid));
 });
 
 // PUT update subitem
 router.put('/subitems/:id', (req, res) => {
-  const { name, is_completed, current_count } = req.body;
+  const { name, is_completed, current_count, unit } = req.body;
   
   const subitemInfo = db.prepare(`
     SELECT m.user_id, i.id as item_id, si.target_count, si.data_type, si.current_count 
@@ -160,8 +160,9 @@ router.put('/subitems/:id', (req, res) => {
     newCompleted = newCurrent >= subitemInfo.target_count ? 1 : 0;
   }
   
-  db.prepare('UPDATE milestone_sub_items SET name = ?, is_completed = ?, current_count = ? WHERE id = ?')
-    .run(name, newCompleted, newCurrent, req.params.id);
+  db.prepare(
+    'UPDATE milestone_sub_items SET name = ?, current_count = ?, unit = ?, is_completed = ? WHERE id = ?'
+  ).run(name, current_count || 0, unit || '', newCompleted ? 1 : 0, req.params.id);
   
   // Auto-complete parent if all subitems are completed
   const allSubItems = db.prepare('SELECT is_completed FROM milestone_sub_items WHERE milestone_item_id = ?').all(subitemInfo.item_id) as any[];

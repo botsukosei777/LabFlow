@@ -17,7 +17,7 @@ export default function Milestones() {
   const [showItemModal, setShowItemModal] = useState(false);
   const [currentMsId, setCurrentMsId] = useState<number | null>(null);
   const [editingItem, setEditingItem] = useState<MilestoneItem | null>(null);
-  const [itemForm, setItemForm] = useState({ name: '', data_type: 'qualitative' as const, target_count: 3, current_count: 0 });
+  const [itemForm, setItemForm] = useState({ name: '', data_type: 'qualitative' as const, target_count: 3, current_count: 0, unit: '' });
   const [expandedMs, setExpandedMs] = useState<Set<number>>(new Set());
 
   const fetchMilestones = async () => {
@@ -57,7 +57,7 @@ export default function Milestones() {
       }
       addToast('success', t('common.savedSuccessfully'));
       setShowItemModal(false); setEditingItem(null);
-      setItemForm({ name: '', data_type: 'qualitative', target_count: 3, current_count: 0 });
+      setItemForm({ name: '', data_type: 'qualitative', target_count: 3, current_count: 0, unit: '' });
       fetchMilestones();
     } catch (e) { addToast('error', t('common.errorOccurred')); }
   };
@@ -81,14 +81,14 @@ export default function Milestones() {
 
   const [showSubItemModal, setShowSubItemModal] = useState(false);
   const [currentParentItemId, setCurrentParentItemId] = useState<number | null>(null);
-  const [subItemForm, setSubItemForm] = useState({ name: '', data_type: 'qualitative' as const, target_count: 1, current_count: 0 });
+  const [subItemForm, setSubItemForm] = useState({ name: '', data_type: 'qualitative' as const, target_count: 1, current_count: 0, unit: '' });
 
   const handleSubItemSubmit = async () => {
     if (!subItemForm.name.trim() || !currentParentItemId) return;
     try {
       await api.post(`/milestones/items/${currentParentItemId}/subitems`, subItemForm);
       setShowSubItemModal(false);
-      setSubItemForm({ name: '', data_type: 'qualitative', target_count: 1, current_count: 0 });
+      setSubItemForm({ name: '', data_type: 'qualitative', target_count: 1, current_count: 0, unit: '' });
       fetchMilestones();
     } catch (e) { addToast('error', t('common.errorOccurred')); }
   };
@@ -260,7 +260,9 @@ export default function Milestones() {
                             ) : (
                               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                 <button className="btn btn-ghost btn-icon btn-sm" onClick={() => updateItemCount(item, Math.max(0, item.current_count - 1))} disabled={item.current_count <= 0}><MinusCircle size={16} /></button>
-                                <span style={{ fontWeight: 600, minWidth: 50, textAlign: 'center' }}>{item.current_count}/{item.target_count}</span>
+                                <span style={{ fontWeight: 600, minWidth: 50, textAlign: 'center' }}>
+                                  {item.current_count}/{item.target_count} {item.unit && <span style={{ fontSize: 'var(--font-size-xs)', fontWeight: 'normal', color: 'var(--text-secondary)' }}>{item.unit}</span>}
+                                </span>
                                 <button className="btn btn-ghost btn-icon btn-sm" onClick={() => updateItemCount(item, item.current_count + 1)}><Plus size={16} /></button>
                               </div>
                             )}
@@ -295,7 +297,9 @@ export default function Milestones() {
                                     ) : (
                                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                         <button className="btn btn-ghost btn-icon btn-sm" onClick={() => updateSubItemCount(sub, Math.max(0, sub.current_count - 1))} disabled={sub.current_count <= 0}><MinusCircle size={14} /></button>
-                                        <span style={{ fontWeight: 600, minWidth: 40, textAlign: 'center', fontSize: 'var(--font-size-xs)' }}>{sub.current_count}/{sub.target_count}</span>
+                                        <span style={{ fontWeight: 600, minWidth: 40, textAlign: 'center', fontSize: 'var(--font-size-xs)' }}>
+                                          {sub.current_count}/{sub.target_count} {sub.unit && <span style={{ fontWeight: 'normal', color: 'var(--text-secondary)' }}>{sub.unit}</span>}
+                                        </span>
                                         <button className="btn btn-ghost btn-icon btn-sm" onClick={() => updateSubItemCount(sub, sub.current_count + 1)}><Plus size={14} /></button>
                                       </div>
                                     )}
@@ -317,10 +321,10 @@ export default function Milestones() {
                               <div style={{ display: 'flex', gap: 'var(--space-xs)', marginTop: 4 }}>
                                 <button className="btn btn-ghost btn-sm" style={{ fontSize: 'var(--font-size-xs)' }} onClick={() => {
                                   setCurrentParentItemId(item.id);
-                                  setSubItemForm({ name: '', data_type: 'qualitative', target_count: 1, current_count: 0 });
+                                  setSubItemForm({ name: '', data_type: 'qualitative', target_count: 1, current_count: 0, unit: '' });
                                   setShowSubItemModal(true);
                                 }}>
-                                  <Plus size={12} /> サブタスクを追加
+                                  <Plus size={12} /> {t('milestones.addSubItem', { defaultValue: 'サブタスクを追加' })}
                                 </button>
                               </div>
                             </div>
@@ -329,7 +333,7 @@ export default function Milestones() {
                       </div>
                     )}
                     <button className="btn btn-secondary btn-sm" style={{ marginTop: 'var(--space-md)' }} onClick={() => {
-                      setCurrentMsId(ms.id); setEditingItem(null); setItemForm({ name: '', data_type: 'qualitative', target_count: 3, current_count: 0 }); setShowItemModal(true);
+                      setCurrentMsId(ms.id); setEditingItem(null); setItemForm({ name: '', data_type: 'qualitative', target_count: 3, current_count: 0, unit: '' }); setShowItemModal(true);
                     }}><Plus size={14} /> {t('milestones.addItem')}</button>
                   </div>
                 )}
@@ -391,9 +395,15 @@ export default function Milestones() {
                 </select>
               </div>
               {itemForm.data_type === 'quantitative' && (
-                <div className="form-group">
-                  <label className="form-label">{t('milestones.targetCount')}</label>
-                  <input className="form-input" type="number" min="1" value={itemForm.target_count} onChange={e => setItemForm({ ...itemForm, target_count: parseInt(e.target.value) || 1 })} />
+                <div style={{ display: 'flex', gap: 'var(--space-md)' }}>
+                  <div className="form-group" style={{ flex: 1 }}>
+                    <label className="form-label">{t('milestones.targetCount')}</label>
+                    <input className="form-input" type="number" min="1" value={itemForm.target_count} onChange={e => setItemForm({ ...itemForm, target_count: parseInt(e.target.value) || 1 })} />
+                  </div>
+                  <div className="form-group" style={{ flex: 1 }}>
+                    <label className="form-label">{t('milestones.unitLabel', { defaultValue: '単位 (例: kg, ml)' })}</label>
+                    <input className="form-input" value={itemForm.unit} onChange={e => setItemForm({ ...itemForm, unit: e.target.value })} placeholder={t('milestones.unitPlaceholder', { defaultValue: '任意' })} />
+                  </div>
                 </div>
               )}
             </div>
@@ -410,13 +420,13 @@ export default function Milestones() {
         <div className="modal-overlay" onClick={() => setShowSubItemModal(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3 className="modal-title">サブタスクを追加</h3>
+              <h3 className="modal-title">{t('milestones.addSubItem', { defaultValue: 'サブタスクを追加' })}</h3>
               <button className="btn btn-ghost btn-icon" onClick={() => setShowSubItemModal(false)}>×</button>
             </div>
             <div className="modal-body">
               <div className="form-group">
                 <label className="form-label">{t('milestones.itemName')} *</label>
-                <input className="form-input" value={subItemForm.name} onChange={e => setSubItemForm({ ...subItemForm, name: e.target.value })} placeholder="サブタスク名" autoFocus />
+                <input className="form-input" value={subItemForm.name} onChange={e => setSubItemForm({ ...subItemForm, name: e.target.value })} placeholder={t('milestones.subItemNamePlaceholder', { defaultValue: 'サブタスク名' })} autoFocus />
               </div>
               <div className="form-group">
                 <label className="form-label">{t('milestones.itemType')}</label>
@@ -427,9 +437,15 @@ export default function Milestones() {
                 </select>
               </div>
               {subItemForm.data_type === 'quantitative' && (
-                <div className="form-group">
-                  <label className="form-label">{t('milestones.targetCount')}</label>
-                  <input className="form-input" type="number" min="1" value={subItemForm.target_count} onChange={e => setSubItemForm({ ...subItemForm, target_count: parseInt(e.target.value) || 1 })} />
+                <div style={{ display: 'flex', gap: 'var(--space-md)' }}>
+                  <div className="form-group" style={{ flex: 1 }}>
+                    <label className="form-label">{t('milestones.targetCount')}</label>
+                    <input className="form-input" type="number" min="1" value={subItemForm.target_count} onChange={e => setSubItemForm({ ...subItemForm, target_count: parseInt(e.target.value) || 1 })} />
+                  </div>
+                  <div className="form-group" style={{ flex: 1 }}>
+                    <label className="form-label">{t('milestones.unitLabel', { defaultValue: '単位 (例: kg, ml)' })}</label>
+                    <input className="form-input" value={subItemForm.unit} onChange={e => setSubItemForm({ ...subItemForm, unit: e.target.value })} placeholder={t('milestones.unitPlaceholder', { defaultValue: '任意' })} />
+                  </div>
                 </div>
               )}
             </div>

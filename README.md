@@ -5,163 +5,164 @@
 <h1 align="center">LabFlow</h1>
 
 <p align="center">
-  <strong>研究スケジュール管理アプリケーション</strong><br>
-  実験の計画・進捗管理・ルーティンワーク・在庫管理をひとつに。
+  <strong>Research Schedule Management Application</strong><br>
+  Manage your experimental protocols, schedule, routines, and inventory all in one place.
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.0.0-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.0.1-blue" alt="Version">
   <img src="https://img.shields.io/badge/license-BSL--1.1-green" alt="License">
   <img src="https://img.shields.io/badge/platform-Windows-lightgrey" alt="Platform">
 </p>
 
 ---
 
-## ✨ 概要
+## ✨ Overview
 
-**LabFlow** は、研究者のための統合スケジュール管理ツールです。  
-実験プロトコルの登録からカレンダーへのスケジュール配置、日々のルーティン管理、マイルストーン追跡、試薬在庫管理、実験ノートまで、研究活動に必要な管理機能をオールインワンで提供します。
+**LabFlow** is an integrated scheduling and management tool for researchers.
+It provides all the essential management features needed for research activities in one place: from registering experimental protocols to scheduling them on the calendar, managing daily routines, tracking milestones, managing reagent inventory, and writing lab notebooks.
 
-**インストール不要** — ZIPを解凍して `start.bat` をダブルクリックするだけで起動します。
+**No Installation Required** — Simply extract the ZIP file and double-click `start.bat` to launch.
 
-## 🚀 クイックスタート
+## 🚀 Quick Start
 
-### ダウンロード
+### Download
 
-1. [Releases](../../releases) ページから最新の `labflow-release.zip` をダウンロード
-2. 任意のフォルダに解凍
-3. `start.bat` をダブルクリック
-4. ブラウザが自動的に開きます（`http://localhost:3001`）
+1. Download the latest `labflow-release.zip` from the [Releases](../../releases) page.
+2. Extract it to any folder.
+3. Double-click `start.bat`.
+4. Your browser will automatically open (`http://localhost:3001`).
 
-### 初回ログイン
+### First Login
 
-| ユーザー名 | パスワード |
+| Username | Password |
 |---|---|
 | `admin` | `password` |
 
-> ⚠️ **セキュリティ上の注意**: 初回ログイン後、**設定画面 → アカウント設定**からパスワードを必ず変更してください。
+> ⚠️ **Security Notice**: Please change your password from the **Settings → Account Settings** screen immediately after your first login.
 
-## 📋 主な機能
+## 📋 Key Features
 
-### 🔬 実験管理
-- **実験種の登録** — Western Blot、RT-qPCR など、実験の種類をカスタム登録
-- **ステップ定義** — 各実験のステップ（手順）を時間付きで定義。オーバーナイト対応
-- **ブロック構成** — 1日で行うステップの集合をブロックとして管理
-- **プロトコル作成** — ブロックを組み合わせて複数日にまたがる実験プロトコルを構築
-- **サブプロトコル** — 再利用可能な操作手順や試薬表を独立して管理・参照
-- **事前準備メッセージ（In-Advance）** — ステップ実行前の準備事項を定義・リマインド
+### 🔬 Experiment Management
+- **Experiment Types** — Custom register experiment types like Western Blot, RT-qPCR, etc.
+- **Step Definition** — Define the steps (procedures) for each experiment with time estimates. Supports overnight steps.
+- **Block Configuration** — Manage a set of steps performed on a single day as a "block".
+- **Protocol Creation** — Combine blocks to build multi-day experimental protocols.
+- **Sub-protocols** — Manage and reference reusable operation procedures and reagent tables independently.
+- **In-Advance Messages** — Define and set reminders for preparation tasks before executing steps.
 
-### 📅 カレンダー & スケジュール
-- **カレンダービュー** — 月・週・日・アジェンダの4種類の表示
-- **実験スケジュール** — プロトコルを選んで開始日を指定するだけで自動配置
-- **休日管理** — 休日を登録し、スケジュールの自動調整に反映
-- **イベント登録** — 実験以外の予定（セミナー、ミーティング等）も管理
-- **ドラッグ＆リスケジュール** — ブロック単位での日程変更と自動再調整
+### 📅 Calendar & Schedule
+- **Calendar Views** — Four view types: Month, Week, Day, and Agenda.
+- **Experiment Scheduling** — Automatically arrange your schedule just by selecting a protocol and a start date.
+- **Holiday Management** — Register holidays to automatically reflect them in schedule adjustments.
+- **Event Registration** — Manage non-experiment events (seminars, meetings, etc.).
+- **Drag & Reschedule** — Easily change dates and automatically readjust schedules by dragging and dropping blocks.
 
-### ✅ ルーティンワーク
-- **定期タスク管理** — 毎日 / 特定曜日のルーティンを登録
-- **期間指定** — 開始日・終了日の設定で、一時的なルーティンにも対応
-- **チェックリスト** — ダッシュボードからワンクリックで完了記録
+### ✅ Routine Work
+- **Recurring Task Management** — Register daily or specific day-of-week routines.
+- **Timeframe Specification** — Set start and end dates for temporary routines.
+- **Checklists** — Record completion with a single click from the Dashboard.
 
-### 🎯 マイルストーン
-- **目標管理** — 期限付きの研究目標を設定
-- **サブタスク** — 各マイルストーン項目にサブタスクを追加可能
-- **データ種別** — 定性・定量・カウント型のデータ項目をサポート
-- **進捗バー** — ダッシュボードで達成率をリアルタイム表示
+### 🎯 Milestones
+- **Goal Management** — Set research goals with deadlines.
+- **Subtasks** — Add subtasks to each milestone item.
+- **Data Types** — Support for qualitative, quantitative, and count-based data tracking.
+- **Progress Bars** — Real-time display of completion rates on the Dashboard.
 
-### 📦 在庫管理
-- **試薬・物品管理** — 名前、カテゴリ、サプライヤー、カタログ番号を登録
-- **数量トラッキング** — 在庫数の追跡と最低数量アラート
-- **実験紐付け** — 実験種ごとに使用試薬と消費量を関連付け
+### 📦 Inventory Management
+- **Reagents & Supplies** — Register name, category, supplier, and catalog number.
+- **Quantity Tracking** — Track inventory counts and receive minimum quantity alerts.
+- **Experiment Linkage** — Associate reagents and consumption amounts with specific experiment types.
 
-### 📝 実験ノート
-- **Markdownエディタ** — リッチテキスト編集 / Markdownのデュアルモード
-- **ローカルファイル保存** — `data/notebooks/` に `.md` ファイルとして自動保存
-- **外部エディタ連携** — Obsidian、VSCode等からも直接編集可能
-- **カレンダー連携** — ノートがカレンダー上にも表示
+### 📝 Lab Notebook
+- **Markdown Editor** — Dual-mode editor supporting Rich Text and Markdown.
+- **Local File Storage** — Automatically saved as `.md` files in the `data/notebooks/` directory.
+- **External Editor Support** — Can be edited directly from external tools like Obsidian and VSCode.
+- **Calendar Integration** — Notes are also displayed on the calendar.
 
-### ⚙️ その他
-- **ダークモード** — ライト / ダーク / システム連動の3種切り替え
-- **日英バイリンガル** — 日本語・英語のUI切り替え
-- **メール通知** — SMTP設定により、日次スケジュールやリマインダーをメール送信
-- **データバックアップ** — SQLiteデータベースのワンクリックバックアップ
-- **自動アップデート** — GitHub Releasesからワンクリックで最新版に更新
+### ⚙️ Other Features
+- **Dark Mode** — Toggle between Light, Dark, or System default modes.
+- **Bilingual Interface** — Switch between English and Japanese UI.
+- **Email Notifications** — Send daily schedules and reminders via email using SMTP settings.
+- **Data Backup** — One-click backup for the SQLite database.
+- **Automatic Updates** — One-click update to the latest version from GitHub Releases.
+- **Dashboard Quick Links** — Manage frequently used links (e.g., Google Sheets) and open them in-app.
 
-## 🏗️ 技術スタック
+## 🏗️ Technology Stack
 
-| レイヤー | 技術 |
+| Layer | Technology |
 |---|---|
-| フロントエンド | React 19 + Vite 6 + TypeScript |
-| バックエンド | Express 5 (Node.js) |
-| データベース | SQLite (better-sqlite3) |
-| カレンダー | react-big-calendar + date-fns |
-| エディタ | @uiw/react-md-editor |
-| メール | Nodemailer |
-| スケジューラ | node-cron |
-| 国際化 | react-i18next |
+| Frontend | React 19 + Vite 6 + TypeScript |
+| Backend | Express 5 (Node.js) |
+| Database | SQLite (better-sqlite3) |
+| Calendar | react-big-calendar + date-fns |
+| Editor | @uiw/react-md-editor |
+| Email | Nodemailer |
+| Scheduler | node-cron |
+| i18n | react-i18next |
 
-## 📁 プロジェクト構成
+## 📁 Project Structure
 
 ```
 labflow/
-├── src/                    # フロントエンド (React)
-│   ├── pages/              # 各画面コンポーネント
-│   ├── api/                # APIクライアント
-│   ├── i18n/               # 国際化 (日本語/英語)
-│   └── App.tsx             # ルーティング・レイアウト
-├── server/                 # バックエンド (Express)
-│   ├── db/                 # データベーススキーマ・初期化
-│   ├── routes/             # APIルート
-│   ├── services/           # メール・スケジューラ
-│   └── index.ts            # サーバーエントリポイント
-├── data/                   # ユーザーデータ (Git管理外)
-│   ├── labflow.db          # SQLiteデータベース
-│   └── notebooks/          # Markdownノート
-├── scripts/                # ビルド・リリーススクリプト
+├── src/                    # Frontend (React)
+│   ├── pages/              # Screen components
+│   ├── api/                # API client
+│   ├── i18n/               # Internationalization
+│   └── App.tsx             # Routing & Layout
+├── server/                 # Backend (Express)
+│   ├── db/                 # Database schema & initialization
+│   ├── routes/             # API routes
+│   ├── services/           # Mail & Scheduler services
+│   └── index.ts            # Server entry point
+├── data/                   # User data (ignored by Git)
+│   ├── labflow.db          # SQLite database
+│   └── notebooks/          # Markdown notebooks
+├── scripts/                # Build & Release scripts
 └── package.json
 ```
 
-## 🛠️ 開発環境のセットアップ
+## 🛠️ Development Setup
 
-### 前提条件
-- Node.js 20 以上
+### Prerequisites
+- Node.js 20 or higher
 - npm
 
-### 手順
+### Instructions
 
 ```bash
-# リポジトリをクローン
+# Clone the repository
 git clone https://github.com/botsukosei777/LabFlow.git
 cd LabFlow
 
-# 依存関係のインストール
+# Install dependencies
 npm install
 
-# 開発サーバー起動 (フロントエンド + バックエンド同時起動)
+# Start development server (Frontend + Backend)
 npm run dev
 ```
 
-フロントエンド: `http://localhost:5173`  
-バックエンドAPI: `http://localhost:3001/api`
+Frontend: `http://localhost:5173`  
+Backend API: `http://localhost:3001/api`
 
-### リリースビルド
+### Release Build
 
 ```bash
-# ポータブル配布パッケージ (ZIP) を生成
+# Generate a portable distribution package (ZIP)
 npm run build:release
 ```
 
-## 📄 ライセンス
+## 📄 License
 
-このプロジェクトは [Business Source License 1.1 (BSL-1.1)](./LICENSE) の下で公開されています。
+This project is licensed under the [Business Source License 1.1 (BSL-1.1)](./LICENSE).
 
-- ✅ **個人利用・学術利用**: 自由に使用・改変できます
-- ✅ **ソースコードの閲覧・学習**: 自由に閲覧できます
-- ❌ **商用利用**: 商用目的での使用には別途ライセンスが必要です
-- 🔄 **Change Date (2030-07-29)** 以降: Apache License 2.0 に自動移行します
+- ✅ **Personal & Academic Use**: Free to use and modify.
+- ✅ **Source Code Viewing & Learning**: Free to view.
+- ❌ **Commercial Use**: Requires a separate license for commercial purposes.
+- 🔄 **Change Date (2030-07-29)**: Automatically transitions to the Apache License 2.0 after this date.
 
-詳細は [LICENSE](./LICENSE) ファイルをご参照ください。
+Please refer to the [LICENSE](./LICENSE) file for more details.
 
-## 📮 お問い合わせ
+## 📮 Contact & Support
 
-バグ報告や機能リクエストは [Issues](../../issues) ページからお願いします。
+For bug reports or feature requests, please use the [Issues](../../issues) page.
