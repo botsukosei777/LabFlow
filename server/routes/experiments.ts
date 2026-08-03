@@ -81,10 +81,10 @@ router.put('/steps/:stepId', (req, res) => {
   `).get(req.params.stepId) as any;
   if (!step || step.user_id !== req.userId) return res.status(403).json({ message: 'Forbidden' });
 
-  const { name, description, duration_minutes, is_overnight, pattern_label, order_index, sub_protocol_id, preparations } = req.body;
+  const { name, description, duration_minutes, is_overnight, pattern_label, order_index, sub_protocol_id, preparations, routine_name, routine_duration_days, routine_recurrence, routine_recurrence_days } = req.body;
   db.prepare(
-    'UPDATE steps SET name = ?, description = ?, duration_minutes = ?, is_overnight = ?, pattern_label = ?, order_index = ?, sub_protocol_id = ? WHERE id = ?'
-  ).run(name, description, duration_minutes, is_overnight ? 1 : 0, pattern_label, order_index, sub_protocol_id || null, req.params.stepId);
+    'UPDATE steps SET name = ?, description = ?, duration_minutes = ?, is_overnight = ?, pattern_label = ?, order_index = ?, sub_protocol_id = ?, routine_name = ?, routine_duration_days = ?, routine_recurrence = ?, routine_recurrence_days = ? WHERE id = ?'
+  ).run(name, description, duration_minutes, is_overnight ? 1 : 0, pattern_label, order_index, sub_protocol_id || null, routine_name || null, routine_duration_days || null, routine_recurrence || null, routine_recurrence_days || null, req.params.stepId);
   
   if (preparations && Array.isArray(preparations)) {
     db.prepare('DELETE FROM step_preparations WHERE step_id = ?').run(req.params.stepId);
@@ -173,25 +173,32 @@ router.put('/blocks/:blockId', (req, res) => {
   `).get(req.params.blockId) as any;
   if (!block || block.user_id !== req.userId) return res.status(403).json({ message: 'Forbidden' });
 
-  const { name, description, pattern_label, order_index, step_ids } = req.body;
+  const { name, description, pattern_label, order_index, step_nodes } = req.body;
   db.prepare(
     'UPDATE blocks SET name = ?, description = ?, pattern_label = ?, order_index = ? WHERE id = ?'
   ).run(name, description, pattern_label, order_index, req.params.blockId);
   
-  if (step_ids && Array.isArray(step_ids)) {
+  if (step_nodes && Array.isArray(step_nodes)) {
     db.prepare('DELETE FROM block_steps WHERE block_id = ?').run(req.params.blockId);
     const insertBlockStep = db.prepare(
-      'INSERT INTO block_steps (block_id, step_id, order_index) VALUES (?, ?, ?)'
+      'INSERT INTO block_steps (block_id, step_id, order_index, branch_index, delay_minutes) VALUES (?, ?, ?, ?, ?)'
     );
     const getStep = db.prepare('SELECT is_overnight FROM steps WHERE id = ?');
     
-    for (let i = 0; i < step_ids.length; i++) {
-      const stepId = step_ids[i];
-      const stepInfo = getStep.get(stepId) as any;
-      if (stepInfo?.is_overnight === 1 && i !== step_ids.length - 1) {
-        return res.status(400).json({ message: 'オーバーナイトのステップはブロックの最後にしか配置できません。' });
+    for (let i = 0; i < step_nodes.length; i++) {
+      const stage = step_nodes[i];
+      for (let j = 0; j < stage.length; j++) {
+        const branch = stage[j];
+        for (let k = 0; k < branch.length; k++) {
+          const node = branch[k];
+          const stepInfo = getStep.get(node.step_id) as any;
+          // Overnight step is allowed only in the last stage
+          if (stepInfo?.is_overnight === 1 && i !== step_nodes.length - 1) {
+            return res.status(400).json({ message: 'オーバーナイトのステップはブロックの最後にしか配置できません。' });
+          }
+          insertBlockStep.run(req.params.blockId, node.step_id, i, j, node.delay_minutes || 0);
+        }
       }
-      insertBlockStep.run(req.params.blockId, stepId, i);
     }
   }
   
@@ -209,15 +216,40 @@ router.delete('/blocks/:blockId', (req, res) => {
   res.status(204).send();
 });
 
+router.post('/blocks/:blockId/copy', (req, res) => {
+  const blockId = req.params.blockId;
+  const block = db.prepare(`
+    SELECT b.*, e.user_id FROM blocks b JOIN experiment_types e ON b.experiment_type_id = e.id WHERE b.id = ?
+  `).get(blockId) as any;
+  if (!block || block.user_id !== req.userId) return res.status(403).json({ message: 'Forbidden' });
+
+  const newBlock = db.prepare(
+    'INSERT INTO blocks (experiment_type_id, pattern_label, name, description, order_index) VALUES (?, ?, ?, ?, ?)'
+  ).run(block.experiment_type_id, block.pattern_label, `${block.name} - コピー`, block.description, block.order_index);
+  
+  const newBlockId = newBlock.lastInsertRowid;
+  
+  const blockSteps = db.prepare('SELECT * FROM block_steps WHERE block_id = ?').all(blockId) as any[];
+  const insertStep = db.prepare(
+    'INSERT INTO block_steps (block_id, step_id, order_index, branch_index, delay_minutes) VALUES (?, ?, ?, ?, ?)'
+  );
+  for (const bs of blockSteps) {
+    insertStep.run(newBlockId, bs.step_id, bs.order_index, bs.branch_index, bs.delay_minutes || 0);
+  }
+  
+  const created = db.prepare('SELECT * FROM blocks WHERE id = ?').get(newBlockId);
+  res.status(201).json(created);
+});
+
 router.put('/protocols/:protocolId', (req, res) => {
-  const { name, description, blocks } = req.body;
+  const { name, description, color, blocks } = req.body;
   
   const protocol = db.prepare('SELECT user_id FROM protocols WHERE id = ?').get(req.params.protocolId) as any;
   if (!protocol || protocol.user_id !== req.userId) return res.status(403).json({ message: 'Forbidden' });
 
   db.prepare(
-    `UPDATE protocols SET name = ?, description = ?, updated_at = datetime('now', 'localtime') WHERE id = ? AND user_id = ?`
-  ).run(name, description, req.params.protocolId, req.userId);
+    `UPDATE protocols SET name = ?, description = ?, color = ?, updated_at = datetime('now', 'localtime') WHERE id = ? AND user_id = ?`
+  ).run(name, description, color, req.params.protocolId, req.userId);
   
   if (blocks && Array.isArray(blocks)) {
     db.prepare('DELETE FROM protocol_blocks WHERE protocol_id = ?').run(req.params.protocolId);
@@ -236,6 +268,29 @@ router.put('/protocols/:protocolId', (req, res) => {
 router.delete('/protocols/:protocolId', (req, res) => {
   db.prepare('DELETE FROM protocols WHERE id = ? AND user_id = ?').run(req.params.protocolId, req.userId);
   res.status(204).send();
+});
+
+router.post('/protocols/:protocolId/copy', (req, res) => {
+  const protocolId = req.params.protocolId;
+  const protocol = db.prepare('SELECT * FROM protocols WHERE id = ? AND user_id = ?').get(protocolId, req.userId) as any;
+  if (!protocol) return res.status(403).json({ message: 'Forbidden' });
+
+  const newProtocol = db.prepare(
+    'INSERT INTO protocols (experiment_type_id, name, description, color, user_id) VALUES (?, ?, ?, ?, ?)'
+  ).run(protocol.experiment_type_id, `${protocol.name} - コピー`, protocol.description, protocol.color, req.userId);
+  
+  const newProtocolId = newProtocol.lastInsertRowid;
+  
+  const protocolBlocks = db.prepare('SELECT * FROM protocol_blocks WHERE protocol_id = ?').all(protocolId) as any[];
+  const insertPB = db.prepare(
+    'INSERT INTO protocol_blocks (protocol_id, block_id, day_offset, order_index) VALUES (?, ?, ?, ?)'
+  );
+  for (const pb of protocolBlocks) {
+    insertPB.run(newProtocolId, pb.block_id, pb.day_offset, pb.order_index);
+  }
+  
+  const created = db.prepare('SELECT * FROM protocols WHERE id = ?').get(newProtocolId);
+  res.status(201).json(created);
 });
 
 // GET single experiment type with all data
@@ -295,7 +350,7 @@ router.post('/:id/steps', (req, res) => {
   const expType = db.prepare('SELECT id FROM experiment_types WHERE id = ? AND user_id = ?').get(req.params.id, req.userId);
   if (!expType) return res.status(403).json({ message: 'Forbidden' });
 
-  const { name, description, duration_minutes, is_overnight, pattern_label, order_index, sub_protocol_id, preparations } = req.body;
+  const { name, description, duration_minutes, is_overnight, pattern_label, order_index, sub_protocol_id, preparations, routine_name, routine_duration_days, routine_recurrence, routine_recurrence_days } = req.body;
   if (!name) return res.status(400).json({ message: 'Name is required' });
   
   let idx = order_index;
@@ -307,8 +362,8 @@ router.post('/:id/steps', (req, res) => {
   }
 
   const result = db.prepare(
-    'INSERT INTO steps (experiment_type_id, name, description, duration_minutes, is_overnight, pattern_label, order_index, sub_protocol_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(req.params.id, name, description || '', duration_minutes || 0, is_overnight ? 1 : 0, pattern_label || 'default', idx, sub_protocol_id || null);
+    'INSERT INTO steps (experiment_type_id, name, description, duration_minutes, is_overnight, pattern_label, order_index, sub_protocol_id, routine_name, routine_duration_days, routine_recurrence, routine_recurrence_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(req.params.id, name, description || '', duration_minutes || 0, is_overnight ? 1 : 0, pattern_label || 'default', idx, sub_protocol_id || null, routine_name || null, routine_duration_days || null, routine_recurrence || null, routine_recurrence_days || null);
   
   const stepId = result.lastInsertRowid;
   
@@ -341,7 +396,7 @@ router.get('/:id/blocks', (req, res) => {
       FROM block_steps bs
       JOIN steps s ON bs.step_id = s.id
       WHERE bs.block_id = ?
-      ORDER BY bs.order_index
+      ORDER BY bs.order_index, bs.branch_index, bs.id
     `).all(block.id);
   }
   
@@ -353,7 +408,7 @@ router.post('/:id/blocks', (req, res) => {
   const expType = db.prepare('SELECT id FROM experiment_types WHERE id = ? AND user_id = ?').get(req.params.id, req.userId);
   if (!expType) return res.status(403).json({ message: 'Forbidden' });
 
-  const { name, description, pattern_label, order_index, step_ids } = req.body;
+  const { name, description, pattern_label, order_index, step_nodes } = req.body;
   if (!name) return res.status(400).json({ message: 'Name is required' });
   
   let idx = order_index;
@@ -370,20 +425,26 @@ router.post('/:id/blocks', (req, res) => {
   
   const blockId = result.lastInsertRowid;
   
-  if (step_ids && Array.isArray(step_ids)) {
+  if (step_nodes && Array.isArray(step_nodes)) {
     const insertBlockStep = db.prepare(
-      'INSERT INTO block_steps (block_id, step_id, order_index) VALUES (?, ?, ?)'
+      'INSERT INTO block_steps (block_id, step_id, order_index, branch_index, delay_minutes) VALUES (?, ?, ?, ?, ?)'
     );
     const getStep = db.prepare('SELECT is_overnight FROM steps WHERE id = ?');
     
-    for (let i = 0; i < step_ids.length; i++) {
-      const stepId = step_ids[i];
-      const stepInfo = getStep.get(stepId) as any;
-      if (stepInfo?.is_overnight === 1 && i !== step_ids.length - 1) {
-        db.prepare('DELETE FROM blocks WHERE id = ?').run(blockId); // Rollback
-        return res.status(400).json({ message: 'オーバーナイトのステップはブロックの最後にしか配置できません。' });
+    for (let i = 0; i < step_nodes.length; i++) {
+      const stage = step_nodes[i];
+      for (let j = 0; j < stage.length; j++) {
+        const branch = stage[j];
+        for (let k = 0; k < branch.length; k++) {
+          const node = branch[k];
+          const stepInfo = getStep.get(node.step_id) as any;
+          if (stepInfo?.is_overnight === 1 && i !== step_nodes.length - 1) {
+            db.prepare('DELETE FROM blocks WHERE id = ?').run(blockId); // Rollback
+            return res.status(400).json({ message: 'オーバーナイトのステップはブロックの最後にしか配置できません。' });
+          }
+          insertBlockStep.run(blockId, node.step_id, i, j, node.delay_minutes || 0);
+        }
       }
-      insertBlockStep.run(blockId, stepId, i);
     }
   }
   
@@ -420,12 +481,12 @@ router.post('/:id/protocols', (req, res) => {
   const expType = db.prepare('SELECT id FROM experiment_types WHERE id = ? AND user_id = ?').get(req.params.id, req.userId);
   if (!expType) return res.status(403).json({ message: 'Forbidden' });
 
-  const { name, description, blocks } = req.body;
+  const { name, description, color, blocks } = req.body;
   if (!name) return res.status(400).json({ message: 'Name is required' });
   
   const result = db.prepare(
-    'INSERT INTO protocols (user_id, experiment_type_id, name, description) VALUES (?, ?, ?, ?)'
-  ).run(req.userId, req.params.id, name, description || '');
+    'INSERT INTO protocols (user_id, experiment_type_id, name, description, color) VALUES (?, ?, ?, ?, ?)'
+  ).run(req.userId, req.params.id, name, description || '', color || '#6366F1');
   
   const protocolId = result.lastInsertRowid;
   

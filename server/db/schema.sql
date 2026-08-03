@@ -54,6 +54,10 @@ CREATE TABLE IF NOT EXISTS steps (
     sub_protocol TEXT DEFAULT '',
     sub_protocol_id INTEGER,
     order_index INTEGER NOT NULL DEFAULT 0,
+    routine_name TEXT,
+    routine_duration_days INTEGER,
+    routine_recurrence TEXT,
+    routine_recurrence_days TEXT,
     created_at TEXT DEFAULT (datetime('now', 'localtime')),
     FOREIGN KEY (experiment_type_id) REFERENCES experiment_types(id) ON DELETE CASCADE,
     FOREIGN KEY (sub_protocol_id) REFERENCES sub_protocols(id) ON DELETE SET NULL
@@ -91,6 +95,8 @@ CREATE TABLE IF NOT EXISTS block_steps (
     block_id INTEGER NOT NULL,
     step_id INTEGER NOT NULL,
     order_index INTEGER NOT NULL DEFAULT 0,
+    branch_index INTEGER NOT NULL DEFAULT 0,
+    delay_minutes INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (block_id) REFERENCES blocks(id) ON DELETE CASCADE,
     FOREIGN KEY (step_id) REFERENCES steps(id) ON DELETE CASCADE
 );
@@ -102,6 +108,7 @@ CREATE TABLE IF NOT EXISTS protocols (
     experiment_type_id INTEGER NOT NULL,
     name TEXT NOT NULL,
     description TEXT DEFAULT '',
+    color TEXT,
     created_at TEXT DEFAULT (datetime('now', 'localtime')),
     updated_at TEXT DEFAULT (datetime('now', 'localtime')),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,

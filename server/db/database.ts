@@ -58,6 +58,12 @@ function initDb() {
   try { dbInstance.exec("ALTER TABLE scheduled_steps ADD COLUMN end_time TEXT DEFAULT '10:00'"); } catch (e) {}
   try { dbInstance.exec("ALTER TABLE scheduled_steps ADD COLUMN start_date TEXT"); } catch (e) {}
   try { dbInstance.exec("ALTER TABLE scheduled_steps ADD COLUMN end_date TEXT"); } catch (e) {}
+  
+  // Migration for routine automated generation fields
+  try { dbInstance.exec("ALTER TABLE steps ADD COLUMN routine_name TEXT"); } catch (e) {}
+  try { dbInstance.exec("ALTER TABLE steps ADD COLUMN routine_duration_days INTEGER"); } catch (e) {}
+  try { dbInstance.exec("ALTER TABLE steps ADD COLUMN routine_recurrence TEXT"); } catch (e) {}
+  try { dbInstance.exec("ALTER TABLE steps ADD COLUMN routine_recurrence_days TEXT"); } catch (e) {}
   try { dbInstance.exec("ALTER TABLE steps ADD COLUMN is_overnight INTEGER NOT NULL DEFAULT 0"); } catch (e) {}
   try { dbInstance.exec("ALTER TABLE steps ADD COLUMN sub_protocol TEXT DEFAULT ''"); } catch (e) {}
   try { dbInstance.exec("ALTER TABLE scheduled_blocks ADD COLUMN end_date TEXT"); } catch (e) {}
@@ -67,6 +73,9 @@ function initDb() {
   try { dbInstance.exec("ALTER TABLE milestone_sub_items ADD COLUMN target_count INTEGER DEFAULT 1"); } catch(e) {}
   try { dbInstance.exec("ALTER TABLE milestone_sub_items ADD COLUMN current_count INTEGER DEFAULT 0"); } catch(e) {}
   try { dbInstance.exec("ALTER TABLE milestone_items ADD COLUMN unit TEXT DEFAULT ''"); } catch(e) {}
+  
+  // Migration for branched parallel steps
+  try { dbInstance.exec("ALTER TABLE block_steps ADD COLUMN branch_index INTEGER NOT NULL DEFAULT 0"); } catch(e) {}
   try { dbInstance.exec("ALTER TABLE milestone_sub_items ADD COLUMN unit TEXT DEFAULT ''"); } catch(e) {}
   try { 
     dbInstance.exec(`

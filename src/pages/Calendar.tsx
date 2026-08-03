@@ -7,6 +7,7 @@ import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { enUS, ja } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import '../calendar-overrides.css';
+import CustomAgendaView from '../components/CustomAgendaView';
 
 import { api } from '../api/client';
 import { ToastContext } from '../App';
@@ -62,10 +63,12 @@ export default function Calendar() {
     start_date: format(new Date(), 'yyyy-MM-dd'),
     mode: 'management',
     label: '',
-    notes: ''
+    notes: '',
+    color: '#3B82F6'
   });
   const [blockStartTimes, setBlockStartTimes] = useState<Record<number, string>>({});
   const selectedProtocol = useMemo(() => protocols.find(p => p.id === Number(scheduleForm.protocol_id)), [protocols, scheduleForm.protocol_id]);
+  const [editColor, setEditColor] = useState('');
 
   useEffect(() => {
     fetchProtocols();
@@ -244,7 +247,7 @@ export default function Calendar() {
       }
       
       setShowScheduleModal(false);
-      setScheduleForm({ ...scheduleForm, protocol_id: '', label: '', notes: '' });
+      setScheduleForm({ ...scheduleForm, protocol_id: '', label: '', notes: '', color: '#3B82F6' });
       setBlockStartTimes({});
       fetchData();
     } catch (e) {
@@ -253,14 +256,17 @@ export default function Calendar() {
   };
 
   const handleDeleteExperiment = async () => {
-    if (!selectedBlock || !window.confirm(t('calendar.confirmDeleteExperiment', 'この実験計画と関連するすべてのスケジュールを削除しますか？'))) return;
-    try {
-      await api.delete(`/schedule/${selectedBlock.scheduled_experiment_id}`);
-      addToast('success', t('calendar.deleteSuccess', '実験計画を削除しました'));
-      setSelectedBlock(null);
-      fetchData();
-    } catch (e) {
-      addToast('error', t('common.errorOccurred'));
+    if (!selectedBlock) return;
+    if (window.confirm(t('calendar.confirmDeleteExp', 'この実験計画全体（全日程のブロック）を削除しますか？'))) {
+      try {
+        const expId = selectedBlock.scheduled_experiment_id || selectedBlock.experiment_id;
+        await api.delete(`/schedule/${expId}`);
+        addToast('success', t('common.deletedSuccessfully', '削除しました'));
+        setShowScheduleModal(false);
+        fetchData();
+      } catch (e) {
+        addToast('error', t('common.errorOccurred'));
+      }
     }
   };
 
@@ -284,6 +290,7 @@ export default function Calendar() {
     if (event.type === 'block') {
       setSelectedBlock(event.resource);
       setRescheduleDate(event.resource.scheduled_date);
+      setEditColor(event.resource.color || event.color || '#3B82F6');
     } else if (event.type === 'step') {
       setSelectedStep(event.resource);
       setRescheduleDate(event.resource.scheduled_date);
@@ -418,9 +425,12 @@ export default function Calendar() {
     if (currentView === 'month') {
       filtered = events.filter(e => e.type !== 'step');
     } else {
-      // Show blocks in week view if they have no steps, or just show them anyway
-      // For a cleaner look, if a block has steps, we might want to hide it, but the user requested it.
-      // So let's keep block visible, but change allDay flag based on view.
+      // Show steps, milestones, holidays, notes in week/day/agenda views, but HIDE blocks
+      filtered = events.filter(e => e.type !== 'block');
+      // Hide notes in agenda view
+      if (currentView === 'agenda') {
+        filtered = filtered.filter(e => e.type !== 'note');
+      }
     }
 
     return filtered.map(e => {
@@ -473,7 +483,7 @@ export default function Calendar() {
           startAccessor="start"
           endAccessor="end"
           style={{ flex: 1 }}
-          views={['month', 'week', 'day', 'agenda']}
+          views={{ month: true, week: true, day: true, agenda: CustomAgendaView }}
           view={currentView}
           showMultiDayTimes={true}
           onView={setCurrentView}
@@ -484,6 +494,9 @@ export default function Calendar() {
           onSelectEvent={handleSelectEvent}
           eventPropGetter={eventStyleGetter}
           culture={i18n.language.startsWith('ja') ? 'ja' : 'en'}
+          step={10}
+          timeslots={6}
+          dayLayoutAlgorithm="no-overlap"
           popup
         />
       </div>
@@ -505,8 +518,8 @@ export default function Calendar() {
                   value={scheduleForm.protocol_id}
                   onChange={(e) => {
                     const id = e.target.value;
-                    setScheduleForm({...scheduleForm, protocol_id: id});
                     const p = protocols.find(x => x.id === Number(id));
+                    setScheduleForm({...scheduleForm, protocol_id: id, color: p?.color || p?.experiment_type_color || '#3B82F6'});
                     if (p && p.blocks) {
                       const initialTimes: Record<number, string> = {};
                       p.blocks.forEach((blk: any) => initialTimes[blk.id] = '09:00');
@@ -567,15 +580,26 @@ export default function Calendar() {
                   <option value="silent">{t('calendar.modeSilent', 'サイレントモード (カレンダー表示のみ)')}</option>
                 </select>
               </div>
-              <div>
-                <label className="form-label">{t('calendar.labelOptional', 'ラベル (任意)')}</label>
-                <input 
-                  type="text" 
-                  className="form-input"
-                  placeholder={t('calendar.labelPlaceholder', '例: Sample A')}
-                  value={scheduleForm.label}
-                  onChange={(e) => setScheduleForm({...scheduleForm, label: e.target.value})}
-                />
+              <div style={{ display: 'flex', gap: 'var(--space-md)' }}>
+                <div style={{ flex: 1 }}>
+                  <label className="form-label">{t('calendar.labelOptional', 'ラベル (任意)')}</label>
+                  <input 
+                    type="text" 
+                    className="form-input"
+                    placeholder={t('calendar.labelPlaceholder', '例: Sample A')}
+                    value={scheduleForm.label}
+                    onChange={(e) => setScheduleForm({...scheduleForm, label: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="form-label">{t('common.color', '色')}</label>
+                  <input 
+                    type="color" 
+                    value={scheduleForm.color}
+                    onChange={(e) => setScheduleForm({...scheduleForm, color: e.target.value})}
+                    style={{ width: '60px', height: '40px', padding: 0, border: 'none', borderRadius: '4px' }}
+                  />
+                </div>
               </div>
               <div>
                 <label className="form-label">{t('calendar.notesOptional', 'メモ (任意)')}</label>
@@ -617,6 +641,24 @@ export default function Calendar() {
                 <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)' }}>{t('experiments.blockName', 'ブロック名')}</div>
                 <div>{selectedBlock.block_name}</div>
               </div>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)' }}>{t('common.color', '色設定')}</div>
+                <input type="color" value={editColor} onChange={e => setEditColor(e.target.value)} style={{ width: '40px', height: '24px', padding: 0, border: 'none' }} />
+                <button className="btn btn-secondary btn-sm" onClick={async () => {
+                  try {
+                    const expId = selectedBlock.scheduled_experiment_id || selectedBlock.experiment_id;
+                    await api.put(`/schedule/${expId}/color`, { color: editColor });
+                    addToast('success', t('common.savedSuccessfully', '保存しました'));
+                    fetchData();
+                  } catch(e) {
+                    addToast('error', t('common.errorOccurred'));
+                  }
+                }}>
+                  {t('common.save', '保存')}
+                </button>
+              </div>
+
               <div>
                 <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)' }}>{t('common.date', '日付')}</div>
                 <div>{selectedBlock.scheduled_date} {selectedBlock.start_time} - {selectedBlock.end_time}</div>

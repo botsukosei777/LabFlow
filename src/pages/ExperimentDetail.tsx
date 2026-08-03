@@ -1,7 +1,7 @@
 import { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Plus, Trash2, Edit, Clock, GripVertical, Check, FileText, ArrowUp, ArrowDown } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Edit, Clock, GripVertical, Check, FileText, ArrowUp, ArrowDown, Copy } from 'lucide-react';
 import { api } from '../api/client';
 import { ToastContext } from '../App';
 import type { ExperimentType, Step, Block, Protocol, SubProtocol } from '../types';
@@ -25,12 +25,12 @@ export default function ExperimentDetail() {
   // Step form
   const [showStepModal, setShowStepModal] = useState(false);
   const [editingStep, setEditingStep] = useState<Step | null>(null);
-  const [stepForm, setStepForm] = useState({ name: '', description: '', duration_minutes: 0, is_overnight: false, pattern_label: 'default', sub_protocol_id: null as number | null, preparations: [] as any[] });
+  const [stepForm, setStepForm] = useState({ name: '', description: '', duration_minutes: 0, is_overnight: false, pattern_label: 'default', sub_protocol_id: null as number | null, preparations: [] as any[], routine_name: '', routine_duration_days: 0, routine_recurrence: 'daily' as any });
 
   // Block form
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [editingBlock, setEditingBlock] = useState<any>(null);
-  const [blockForm, setBlockForm] = useState({ name: '', description: '', pattern_label: 'default', step_ids: [] as number[] });
+  const [blockForm, setBlockForm] = useState({ name: '', description: '', pattern_label: 'default', step_nodes: [] as { step_id: number, delay_minutes: number }[][][] });
 
   // Import Step form
   const [showImportModal, setShowImportModal] = useState(false);
@@ -43,7 +43,7 @@ export default function ExperimentDetail() {
   // Protocol form
   const [showProtocolModal, setShowProtocolModal] = useState(false);
   const [editingProtocol, setEditingProtocol] = useState<any>(null);
-  const [protocolForm, setProtocolForm] = useState({ name: '', description: '', blocks: [] as { block_id: number; day_offset: number }[] });
+  const [protocolForm, setProtocolForm] = useState({ name: '', description: '', color: '', blocks: [] as { block_id: number; day_offset: number }[] });
 
 
 
@@ -95,7 +95,7 @@ export default function ExperimentDetail() {
       addToast('success', t('common.savedSuccessfully'));
       setShowStepModal(false);
       setEditingStep(null);
-      setStepForm({ name: '', description: '', duration_minutes: 0, is_overnight: false, pattern_label: 'default', sub_protocol: '', preparations: [] });
+      setStepForm({ name: '', description: '', duration_minutes: 0, is_overnight: false, pattern_label: 'default', sub_protocol_id: null, preparations: [], routine_name: '', routine_duration_days: 0, routine_recurrence: 'daily' });
       fetchData();
     } catch (error) {
       addToast('error', t('common.errorOccurred'));
@@ -163,7 +163,7 @@ export default function ExperimentDetail() {
       addToast('success', t('common.savedSuccessfully'));
       setShowBlockModal(false);
       setEditingBlock(null);
-      setBlockForm({ name: '', description: '', pattern_label: 'default', step_ids: [] });
+      setBlockForm({ name: '', description: '', pattern_label: 'default', step_nodes: [] });
       fetchData();
     } catch (error: any) {
       addToast('error', error.message || t('common.errorOccurred'));
@@ -171,6 +171,7 @@ export default function ExperimentDetail() {
   };
 
   const deleteBlock = async (blockId: number) => {
+    if (!window.confirm(t('common.confirmDelete'))) return;
     try {
       await api.delete(`/experiments/blocks/${blockId}`);
       addToast('success', t('common.deletedSuccessfully'));
@@ -200,9 +201,30 @@ export default function ExperimentDetail() {
   };
 
   const deleteProtocol = async (protocolId: number) => {
+    if (!window.confirm(t('common.confirmDelete'))) return;
     try {
       await api.delete(`/experiments/protocols/${protocolId}`);
       addToast('success', t('common.deletedSuccessfully'));
+      fetchData();
+    } catch (error) {
+      addToast('error', t('common.errorOccurred'));
+    }
+  };
+
+  const copyBlock = async (blockId: number) => {
+    try {
+      await api.post(`/experiments/blocks/${blockId}/copy`);
+      addToast('success', t('common.savedSuccessfully'));
+      fetchData();
+    } catch (error) {
+      addToast('error', t('common.errorOccurred'));
+    }
+  };
+
+  const copyProtocol = async (protocolId: number) => {
+    try {
+      await api.post(`/experiments/protocols/${protocolId}/copy`);
+      addToast('success', t('common.savedSuccessfully'));
       fetchData();
     } catch (error) {
       addToast('error', t('common.errorOccurred'));
@@ -303,7 +325,7 @@ export default function ExperimentDetail() {
             </button>
             <button className="btn btn-primary btn-sm" onClick={() => {
               setEditingStep(null);
-              setStepForm({ name: '', description: '', duration_minutes: 0, is_overnight: false, pattern_label: selectedPattern !== 'all' ? selectedPattern : 'default', sub_protocol: '', preparations: [] });
+              setStepForm({ name: '', description: '', duration_minutes: 0, is_overnight: false, pattern_label: selectedPattern !== 'all' ? selectedPattern : 'default', sub_protocol_id: null, preparations: [], routine_name: '', routine_duration_days: 0, routine_recurrence: 'daily' });
               setShowStepModal(true);
             }}>
               <Plus size={14} /> {t('experiments.addStep')}
@@ -326,7 +348,7 @@ export default function ExperimentDetail() {
                     <span className="badge badge-info"><Clock size={12} /> {step.is_overnight ? 'Overnight' : formatDuration(step.duration_minutes)}</span>
                     <button className="btn btn-ghost btn-icon btn-sm" onClick={() => {
                       setEditingStep(step);
-                      setStepForm({ name: step.name, description: step.description || '', duration_minutes: step.duration_minutes, is_overnight: !!step.is_overnight, pattern_label: step.pattern_label, sub_protocol: step.sub_protocol || '', preparations: step.preparations || [] });
+                      setStepForm({ name: step.name, description: step.description || '', duration_minutes: step.duration_minutes, is_overnight: !!step.is_overnight, pattern_label: step.pattern_label, sub_protocol_id: step.sub_protocol_id || null, preparations: step.preparations || [], routine_name: step.routine_name || '', routine_duration_days: step.routine_duration_days || 0, routine_recurrence: step.routine_recurrence || 'daily' });
                       setShowStepModal(true);
                     }}><Edit size={14} /></button>
                     <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-danger)' }} onClick={() => deleteStep(step.id)}><Trash2 size={14} /></button>
@@ -344,7 +366,7 @@ export default function ExperimentDetail() {
           <div style={{ marginBottom: 'var(--space-md)', display: 'flex', justifyContent: 'flex-end' }}>
             <button className="btn btn-primary btn-sm" onClick={() => {
               setEditingBlock(null);
-              setBlockForm({ name: '', description: '', pattern_label: selectedPattern !== 'all' ? selectedPattern : 'default', step_ids: [] });
+              setBlockForm({ name: '', description: '', pattern_label: selectedPattern !== 'all' ? selectedPattern : 'default', step_nodes: [] });
               setShowBlockModal(true);
             }}>
               <Plus size={14} /> {t('experiments.addBlock')}
@@ -364,24 +386,52 @@ export default function ExperimentDetail() {
                     <div style={{ display: 'flex', gap: 'var(--space-xs)' }}>
                       <button className="btn btn-ghost btn-icon btn-sm" onClick={() => {
                         setEditingBlock(block);
+                        const grouped: {step_id: number, delay_minutes: number}[][][] = [];
+                        block.steps?.forEach((bs: any) => {
+                          while(grouped.length <= bs.order_index) grouped.push([]);
+                          while(grouped[bs.order_index].length <= (bs.branch_index || 0)) grouped[bs.order_index].push([]);
+                          grouped[bs.order_index][bs.branch_index || 0].push({ step_id: bs.step_id, delay_minutes: bs.delay_minutes || 0 });
+                        });
                         setBlockForm({
                           name: block.name, description: block.description || '', pattern_label: block.pattern_label,
-                          step_ids: block.steps?.map((s: any) => s.step_id) || []
+                          step_nodes: grouped
                         });
                         setShowBlockModal(true);
                       }}><Edit size={14} /></button>
+                      <button className="btn btn-ghost btn-icon btn-sm" onClick={() => copyBlock(block.id)}><Copy size={14} /></button>
                       <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-danger)' }} onClick={() => deleteBlock(block.id)}><Trash2 size={14} /></button>
                     </div>
                   </div>
                   {block.description && <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)', marginBottom: 'var(--space-sm)' }}>{block.description}</p>}
                   {block.steps && block.steps.length > 0 && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingLeft: 'var(--space-md)', borderLeft: '2px solid var(--border-default)' }}>
-                      {block.steps.map((bs: any) => (
-                        <div key={bs.id} style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
-                          <span>{bs.step_name}</span>
-                          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)' }}>{bs.duration_minutes}{t('common.minutes')}</span>
-                        </div>
-                      ))}
+                      {(() => {
+                        const stages: any[][][] = [];
+                        block.steps.forEach((bs: any) => {
+                          while(stages.length <= bs.order_index) stages.push([]);
+                          while(stages[bs.order_index].length <= (bs.branch_index || 0)) stages[bs.order_index].push([]);
+                          stages[bs.order_index][bs.branch_index || 0].push(bs);
+                        });
+                        return stages.map((stage, i) => (
+                          <div key={i} style={{ display: 'flex', flexDirection: 'column', padding: '4px 0', borderBottom: i < stages.length - 1 ? '1px dashed var(--border-default)' : 'none' }}>
+                            <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)', marginBottom: 2 }}>Stage {i + 1}</div>
+                            <div style={{ display: 'flex', gap: 'var(--space-md)', overflowX: 'auto', paddingBottom: 4 }}>
+                              {stage.map((branch, j) => (
+                                <div key={j} style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 120 }}>
+                                  <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>Branch {j + 1}</div>
+                                  {branch.map((bs: any) => (
+                                    <div key={bs.id} className="badge" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-default)', display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                      <span>{bs.step_name}</span>
+                                      {bs.delay_minutes > 0 && <span style={{ fontSize: '10px', color: 'var(--color-warning)' }}>(Delay: {formatDuration(bs.delay_minutes)})</span>}
+                                      <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{formatDuration(bs.duration_minutes)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ));
+                      })()}
                     </div>
                   )}
                 </div>
@@ -397,7 +447,7 @@ export default function ExperimentDetail() {
           <div style={{ marginBottom: 'var(--space-md)', display: 'flex', justifyContent: 'flex-end' }}>
             <button className="btn btn-primary btn-sm" onClick={() => {
               setEditingProtocol(null);
-              setProtocolForm({ name: '', description: '', blocks: [] });
+              setProtocolForm({ name: '', description: '', color: experiment?.color || '#6366F1', blocks: [] });
               setShowProtocolModal(true);
             }}>
               <Plus size={14} /> {t('experiments.addProtocol')}
@@ -410,16 +460,20 @@ export default function ExperimentDetail() {
               {protocols.map(protocol => (
                 <div key={protocol.id} className="card">
                   <div className="card-header">
-                    <h3 className="card-title">{protocol.name}</h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                      <div style={{ width: 16, height: 16, borderRadius: '50%', backgroundColor: protocol.color || 'var(--color-primary)' }} />
+                      <h3 className="card-title">{protocol.name}</h3>
+                    </div>
                     <div style={{ display: 'flex', gap: 'var(--space-xs)' }}>
                       <button className="btn btn-ghost btn-icon btn-sm" onClick={() => {
                         setEditingProtocol(protocol);
                         setProtocolForm({
-                          name: protocol.name, description: protocol.description || '',
+                          name: protocol.name, description: protocol.description || '', color: protocol.color || experiment?.color || '#6366F1',
                           blocks: protocol.blocks?.map((b: any) => ({ block_id: b.block_id, day_offset: b.day_offset })) || []
                         });
                         setShowProtocolModal(true);
                       }}><Edit size={14} /></button>
+                      <button className="btn btn-ghost btn-icon btn-sm" onClick={() => copyProtocol(protocol.id)}><Copy size={14} /></button>
                       <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-danger)' }} onClick={() => deleteProtocol(protocol.id)}><Trash2 size={14} /></button>
                     </div>
                   </div>
@@ -428,7 +482,7 @@ export default function ExperimentDetail() {
                     <div style={{ display: 'flex', gap: 'var(--space-sm)', flexWrap: 'wrap' }}>
                       {protocol.blocks.map((pb: any, i: number) => (
                         <div key={pb.id || i} className="badge badge-info" style={{ padding: '6px 12px' }}>
-                          {t('experiments.dayOffset')} {pb.day_offset}: {pb.block_name}
+                          {t('experiments.dayOffsetFormat', { day: pb.day_offset })}: {pb.block_name}
                         </div>
                       ))}
                     </div>
@@ -482,6 +536,41 @@ export default function ExperimentDetail() {
                     <option key={sp.id} value={sp.id}>{sp.name}</option>
                   ))}
                 </select>
+              </div>
+              <div className="form-group" style={{ padding: 'var(--space-md)', background: 'var(--bg-glass)', border: '1px solid var(--border-default)', borderRadius: 'var(--border-radius-md)', marginBottom: 'var(--space-md)' }}>
+                <label className="form-checkbox" style={{ marginBottom: stepForm.routine_name ? 'var(--space-md)' : 0 }}>
+                  <input type="checkbox" checked={!!stepForm.routine_name} onChange={e => {
+                    if (e.target.checked) {
+                      setStepForm({ ...stepForm, routine_name: stepForm.name ? `${stepForm.name} 確認` : '自動生成ルーティン', routine_duration_days: 7, routine_recurrence: 'daily' });
+                    } else {
+                      setStepForm({ ...stepForm, routine_name: '', routine_duration_days: 0, routine_recurrence: 'daily' });
+                    }
+                  }} />
+                  <span style={{ fontWeight: '500' }}>完了時に自動でルーティンを生成する</span>
+                </label>
+
+                {!!stepForm.routine_name && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)', marginTop: 'var(--space-sm)' }}>
+                    <div>
+                      <label className="form-label" style={{ fontSize: 'var(--font-size-sm)' }}>ルーティン名</label>
+                      <input className="form-input" value={stepForm.routine_name} onChange={e => setStepForm({ ...stepForm, routine_name: e.target.value })} />
+                    </div>
+                    <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+                      <div style={{ flex: 1 }}>
+                        <label className="form-label" style={{ fontSize: 'var(--font-size-sm)' }}>期間 (実行日から何日間)</label>
+                        <input type="number" className="form-input" value={stepForm.routine_duration_days} onChange={e => setStepForm({ ...stepForm, routine_duration_days: parseInt(e.target.value) || 0 })} min={1} />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <label className="form-label" style={{ fontSize: 'var(--font-size-sm)' }}>繰り返しパターン</label>
+                        <select className="form-input" value={stepForm.routine_recurrence} onChange={e => setStepForm({ ...stepForm, routine_recurrence: e.target.value as any })}>
+                          <option value="daily">毎日</option>
+                          <option value="weekdays">平日のみ</option>
+                          <option value="weekly">毎週</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="form-group">
                 <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -555,75 +644,135 @@ export default function ExperimentDetail() {
               </div>
               <div className="form-group">
                 <label className="form-label">{t('experiments.selectSteps')}</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-xs)' }}>
-                  {blockForm.step_ids.length === 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+                  {blockForm.step_nodes.length === 0 ? (
                     <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--font-size-sm)' }}>追加されたステップはありません</p>
                   ) : (
-                    blockForm.step_ids.map((stepId, index) => {
-                      const step = steps.find(s => s.id === stepId);
-                      if (!step) return null;
-                      return (
-                        <div key={`${step.id}-${index}`} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', padding: 'var(--space-xs) var(--space-sm)', borderRadius: 'var(--border-radius-md)', border: '1px solid var(--border-default)', backgroundColor: 'var(--bg-secondary)' }}>
-                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                            <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>{index + 1}. {step.name}</span>
-                            <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)' }}>
-                              {step.pattern_label !== 'default' ? `[${step.pattern_label}] ` : ''}{step.is_overnight ? 'Overnight' : formatDuration(step.duration_minutes)}
-                            </span>
-                          </div>
-                          <div style={{ display: 'flex', gap: 2 }}>
-                            <button 
-                              className="btn btn-ghost btn-icon btn-sm" 
-                              disabled={index === 0}
-                              onClick={() => {
-                                const newIds = [...blockForm.step_ids];
-                                [newIds[index - 1], newIds[index]] = [newIds[index], newIds[index - 1]];
-                                setBlockForm({ ...blockForm, step_ids: newIds });
-                              }}
-                            ><ArrowUp size={14} /></button>
-                            <button 
-                              className="btn btn-ghost btn-icon btn-sm" 
-                              disabled={index === blockForm.step_ids.length - 1}
-                              onClick={() => {
-                                const newIds = [...blockForm.step_ids];
-                                [newIds[index], newIds[index + 1]] = [newIds[index + 1], newIds[index]];
-                                setBlockForm({ ...blockForm, step_ids: newIds });
-                              }}
-                            ><ArrowDown size={14} /></button>
-                            <button 
-                              className="btn btn-ghost btn-icon btn-sm" 
-                              style={{ color: 'var(--color-danger)' }}
-                              onClick={() => {
-                                const newIds = [...blockForm.step_ids];
-                                newIds.splice(index, 1);
-                                setBlockForm({ ...blockForm, step_ids: newIds });
-                              }}
-                            ><Trash2 size={14} /></button>
+                    blockForm.step_nodes.map((stage, stageIndex) => (
+                      <div key={stageIndex} style={{ padding: 'var(--space-sm)', borderRadius: 'var(--border-radius-md)', border: '1px solid var(--border-default)', backgroundColor: 'var(--bg-secondary)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--space-xs)' }}>
+                          <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'bold' }}>Stage {stageIndex + 1}</span>
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button className="btn btn-ghost btn-icon btn-sm" disabled={stageIndex === 0} onClick={() => {
+                              const newNodes = [...blockForm.step_nodes];
+                              [newNodes[stageIndex - 1], newNodes[stageIndex]] = [newNodes[stageIndex], newNodes[stageIndex - 1]];
+                              setBlockForm({ ...blockForm, step_nodes: newNodes });
+                            }}><ArrowUp size={14} /></button>
+                            <button className="btn btn-ghost btn-icon btn-sm" disabled={stageIndex === blockForm.step_nodes.length - 1} onClick={() => {
+                              const newNodes = [...blockForm.step_nodes];
+                              [newNodes[stageIndex], newNodes[stageIndex + 1]] = [newNodes[stageIndex + 1], newNodes[stageIndex]];
+                              setBlockForm({ ...blockForm, step_nodes: newNodes });
+                            }}><ArrowDown size={14} /></button>
+                            <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-danger)' }} onClick={() => {
+                              const newNodes = [...blockForm.step_nodes];
+                              newNodes.splice(stageIndex, 1);
+                              setBlockForm({ ...blockForm, step_nodes: newNodes });
+                            }}><Trash2 size={14} /></button>
                           </div>
                         </div>
-                      );
-                    })
+                        <div style={{ display: 'flex', gap: 'var(--space-md)', overflowX: 'auto', paddingBottom: 8 }}>
+                          {stage.map((branch, branchIndex) => (
+                            <div key={branchIndex} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-xs)', minWidth: 200, backgroundColor: 'var(--bg-primary)', padding: 'var(--space-xs)', borderRadius: 'var(--border-radius-sm)', border: '1px solid var(--border-default)' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Branch {branchIndex + 1}</span>
+                                <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-danger)' }} onClick={() => {
+                                  const newNodes = [...blockForm.step_nodes];
+                                  newNodes[stageIndex].splice(branchIndex, 1);
+                                  if (newNodes[stageIndex].length === 0) newNodes.splice(stageIndex, 1);
+                                  setBlockForm({ ...blockForm, step_nodes: newNodes });
+                                }}><Trash2 size={12} /></button>
+                              </div>
+                              {branch.map((node, nodeIndex) => {
+                                const step = steps.find(s => s.id === node.step_id);
+                                if (!step) return null;
+                                return (
+                                  <div key={`${node.step_id}-${nodeIndex}`} style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: 4, backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--border-radius-sm)', border: '1px solid var(--border-default)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                      <span style={{ fontSize: 'var(--font-size-sm)' }}>{step.name}</span>
+                                      <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-danger)' }} onClick={() => {
+                                        const newNodes = [...blockForm.step_nodes];
+                                        newNodes[stageIndex][branchIndex].splice(nodeIndex, 1);
+                                        let currentDelay = 0;
+                                        newNodes[stageIndex][branchIndex].forEach(n => {
+                                          n.delay_minutes = currentDelay;
+                                          const s = steps.find(st => st.id === n.step_id);
+                                          if (s) currentDelay += s.duration_minutes;
+                                        });
+                                        if (newNodes[stageIndex][branchIndex].length === 0) newNodes[stageIndex].splice(branchIndex, 1);
+                                        if (newNodes[stageIndex].length === 0) newNodes.splice(stageIndex, 1);
+                                        setBlockForm({ ...blockForm, step_nodes: newNodes });
+                                      }}><Trash2 size={12} /></button>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-tertiary)' }}>
+                                      <span>所要: {formatDuration(step.duration_minutes)}</span>
+                                      {nodeIndex === 0 && branchIndex > 0 ? (
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                          開始: +<input 
+                                            type="number" 
+                                            value={node.delay_minutes} 
+                                            onChange={e => {
+                                              const val = Math.max(0, parseInt(e.target.value) || 0);
+                                              const newNodes = [...blockForm.step_nodes];
+                                              newNodes[stageIndex][branchIndex][nodeIndex].delay_minutes = val;
+                                              let currentDelay = val;
+                                              for (let k = 1; k < newNodes[stageIndex][branchIndex].length; k++) {
+                                                const prevNode = newNodes[stageIndex][branchIndex][k - 1];
+                                                const prevStep = steps.find(st => st.id === prevNode.step_id);
+                                                currentDelay += prevStep?.duration_minutes || 0;
+                                                newNodes[stageIndex][branchIndex][k].delay_minutes = currentDelay;
+                                              }
+                                              setBlockForm({ ...blockForm, step_nodes: newNodes });
+                                            }}
+                                            style={{ width: 45, padding: '0 2px', fontSize: '10px', height: 18 }} 
+                                          />分
+                                        </span>
+                                      ) : (
+                                        <span>開始: +{formatDuration(node.delay_minutes)}</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                              <select className="form-input" style={{ padding: '2px 8px', fontSize: '11px', marginTop: 'auto' }} value="" onChange={e => {
+                                if (e.target.value) {
+                                  const newNodes = [...blockForm.step_nodes];
+                                  const b = newNodes[stageIndex][branchIndex];
+                                  const stepId = parseInt(e.target.value);
+                                  let delay = 0;
+                                  if (b.length > 0) {
+                                    const lastNode = b[b.length - 1];
+                                    const lastStep = steps.find(s => s.id === lastNode.step_id);
+                                    delay = lastNode.delay_minutes + (lastStep?.duration_minutes || 0);
+                                  }
+                                  b.push({ step_id: stepId, delay_minutes: delay });
+                                  setBlockForm({ ...blockForm, step_nodes: newNodes });
+                                }
+                              }}>
+                                <option value="">{branch.length === 0 ? "-- ステップを選択 --" : "-- 直列に追加 --"}</option>
+                                {steps.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                              </select>
+                            </div>
+                          ))}
+                          <div style={{ display: 'flex', alignItems: 'center', padding: 'var(--space-xs)' }}>
+                            <button className="btn btn-ghost btn-sm" style={{ color: 'var(--text-tertiary)', fontSize: '11px', border: '1px dashed var(--border-default)' }} onClick={() => {
+                              const newNodes = [...blockForm.step_nodes];
+                              newNodes[stageIndex].push([]);
+                              setBlockForm({ ...blockForm, step_nodes: newNodes });
+                            }}>+ ブランチを追加</button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
                   )}
-                  <div style={{ marginTop: 'var(--space-sm)', display: 'flex', gap: 'var(--space-sm)' }}>
-                    <select 
-                      className="form-input" 
-                      id="block-step-add-select"
-                      style={{ flex: 1 }}
-                    >
-                      <option value="">-- ステップを選択して追加 --</option>
+                  <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+                    <select className="form-input" id="block-new-stage-select" style={{ flex: 1 }} value="" onChange={e => {
+                      if (e.target.value) {
+                        setBlockForm({ ...blockForm, step_nodes: [...blockForm.step_nodes, [[{ step_id: parseInt(e.target.value), delay_minutes: 0 }]]] });
+                      }
+                    }}>
+                      <option value="">-- 新しいステージを追加 --</option>
                       {steps.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
-                    <button 
-                      className="btn btn-secondary"
-                      onClick={() => {
-                        const select = document.getElementById('block-step-add-select') as HTMLSelectElement;
-                        if (select && select.value) {
-                          setBlockForm({ ...blockForm, step_ids: [...blockForm.step_ids, parseInt(select.value)] });
-                          select.value = "";
-                        }
-                      }}
-                    >
-                      追加
-                    </button>
                   </div>
                 </div>
               </div>
@@ -645,9 +794,15 @@ export default function ExperimentDetail() {
               <button className="btn btn-ghost btn-icon" onClick={() => setShowProtocolModal(false)}>×</button>
             </div>
             <div className="modal-body">
-              <div className="form-group">
-                <label className="form-label">{t('experiments.protocolName')} *</label>
-                <input className="form-input" value={protocolForm.name} onChange={e => setProtocolForm({ ...protocolForm, name: e.target.value })} placeholder={t('experiments.protocolNamePlaceholder')} autoFocus />
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">{t('experiments.protocolName')} *</label>
+                  <input className="form-input" value={protocolForm.name} onChange={e => setProtocolForm({ ...protocolForm, name: e.target.value })} placeholder={t('experiments.protocolNamePlaceholder')} autoFocus />
+                </div>
+                <div className="form-group" style={{ maxWidth: '100px' }}>
+                  <label className="form-label">色設定</label>
+                  <input type="color" className="form-input" value={protocolForm.color} onChange={e => setProtocolForm({ ...protocolForm, color: e.target.value })} style={{ width: '100%', height: '40px', padding: 0 }} />
+                </div>
               </div>
               <div className="form-group">
                 <label className="form-label">{t('common.description')}</label>

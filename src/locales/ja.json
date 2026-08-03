@@ -173,7 +173,8 @@
     "stepsCount": "{{count}}ステップ",
     "blocksCount": "{{count}}ブロック",
     "protocolsCount": "{{count}}プロトコル",
-    "daysCount": "{{count}}日間"
+    "daysCount": "{{count}}日間",
+    "dayOffsetFormat": "{{day}}日目"
   },
   "milestones": {
     "title": "マイルストーン",

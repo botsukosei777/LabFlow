@@ -168,7 +168,8 @@
     "stepsCount": "{{count}} steps",
     "blocksCount": "{{count}} blocks",
     "protocolsCount": "{{count}} protocols",
-    "daysCount": "{{count}} days"
+    "daysCount": "{{count}} days",
+    "dayOffsetFormat": "Day {{day}}"
   },
   "milestones": {
     "title": "Milestones",

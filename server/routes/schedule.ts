@@ -16,7 +16,7 @@ function addMinutes(timeStr: string, minutes: number): string {
 router.get('/', (req, res) => {
   const { start, end } = req.query;
   let query = `
-    SELECT se.*, p.name as protocol_name, e.name as experiment_type_name, e.color
+    SELECT se.*, p.name as protocol_name, e.name as experiment_type_name, COALESCE(se.color, e.color) as color
     FROM scheduled_experiments se
     JOIN protocols p ON se.protocol_id = p.id
     JOIN experiment_types e ON p.experiment_type_id = e.id
@@ -51,7 +51,7 @@ router.get('/today', (req, res) => {
   const today = new Date().toISOString().split('T')[0];
   const blocks = db.prepare(`
     SELECT sb.*, se.label, se.mode, se.status as experiment_status,
-           p.name as protocol_name, e.name as experiment_type_name, e.color,
+           p.name as protocol_name, e.name as experiment_type_name, COALESCE(se.color, e.color) as color,
            b.name as block_name, b.description as block_description
     FROM scheduled_blocks sb
     JOIN scheduled_experiments se ON sb.scheduled_experiment_id = se.id
@@ -91,14 +91,15 @@ router.get('/today', (req, res) => {
 // GET all scheduled blocks for calendar
 router.get('/blocks', (req, res) => {
   const blocks = db.prepare(`
-    SELECT sb.*, se.label, se.mode, se.status as experiment_status,
-           p.name as protocol_name, e.name as experiment_type_name, e.color,
+    SELECT sb.*, se.label, se.mode, se.status as experiment_status, se.start_time as start_time,
+           p.name as protocol_name, e.name as experiment_type_name, 
+           COALESCE(se.color, p.color, e.color) as color,
            b.name as block_name
     FROM scheduled_blocks sb
     JOIN scheduled_experiments se ON sb.scheduled_experiment_id = se.id
-    JOIN protocols p ON se.protocol_id = p.id
-    JOIN experiment_types e ON p.experiment_type_id = e.id
     JOIN protocol_blocks pb ON sb.protocol_block_id = pb.id
+    JOIN protocols p ON pb.protocol_id = p.id
+    JOIN experiment_types e ON p.experiment_type_id = e.id
     JOIN blocks b ON pb.block_id = b.id
     WHERE se.status != 'cancelled' AND se.user_id = ?
     ORDER BY sb.scheduled_date
@@ -125,7 +126,7 @@ router.get('/blocks', (req, res) => {
 
 // POST schedule an experiment
 router.post('/', (req, res) => {
-  const { protocol_id, start_date, block_start_times, mode, label, notes } = req.body;
+  const { protocol_id, start_date, block_start_times, mode, label, notes, color } = req.body;
   if (!protocol_id || !start_date) {
     return res.status(400).json({ message: 'protocol_id and start_date are required' });
   }
@@ -144,11 +145,21 @@ router.post('/', (req, res) => {
   if (protocolBlocks.length === 0) return res.status(400).json({ message: 'Protocol has no blocks' });
   
   const initialStartTime = block_start_times && Object.values(block_start_times).length > 0 ? Object.values(block_start_times)[0] : '09:00';
-  const result = db.prepare(
-    'INSERT INTO scheduled_experiments (user_id, protocol_id, start_date, start_time, mode, label, notes) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).run(req.userId, protocol_id, start_date, initialStartTime, mode || 'management', label || '', notes || '');
   
-  const experimentId = result.lastInsertRowid;
+  const insertExp = db.prepare(
+    'INSERT INTO scheduled_experiments (protocol_id, label, start_date, start_time, mode, notes, user_id, color) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  );
+  const experimentId = insertExp.run(
+    protocol_id, 
+    label || '', 
+    start_date, 
+    initialStartTime,
+    mode || 'management', 
+    notes || '', 
+    req.userId,
+    color || null
+  ).lastInsertRowid;
+  
   const startDateObj = new Date(start_date + 'T00:00:00');
   
   const insertBlock = db.prepare(
@@ -471,6 +482,46 @@ router.put('/steps/:stepId/complete', (req, res) => {
   }
 
   db.prepare(`UPDATE scheduled_steps SET status = 'completed', completed_at = datetime('now', 'localtime') WHERE id = ?`).run(req.params.stepId);
+
+  // Auto-generate routine if configured
+  const stepConfig = db.prepare(`
+    SELECT s.routine_name, s.routine_duration_days, s.routine_recurrence, s.routine_recurrence_days
+    FROM scheduled_steps ss
+    JOIN block_steps bs ON ss.block_step_id = bs.id
+    JOIN steps s ON bs.step_id = s.id
+    WHERE ss.id = ?
+  `).get(req.params.stepId) as any;
+
+  if (stepConfig && stepConfig.routine_name) {
+    const startStr = localNow.toISOString().split('T')[0];
+    let endStr = startStr;
+    if (stepConfig.routine_duration_days) {
+      const d = new Date(localNow.getTime());
+      d.setDate(d.getDate() + (stepConfig.routine_duration_days - 1));
+      endStr = d.toISOString().split('T')[0];
+    }
+    
+    // Prevent duplicates (same name, same start date)
+    const existingRoutine = db.prepare(`
+      SELECT id FROM routine_tasks WHERE user_id = ? AND name = ? AND start_date = ?
+    `).get(req.userId, stepConfig.routine_name, startStr);
+    
+    if (!existingRoutine) {
+      db.prepare(`
+        INSERT INTO routine_tasks (user_id, name, description, recurrence, recurrence_days, start_date, end_date, is_active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+      `).run(
+        req.userId, 
+        stepConfig.routine_name, 
+        `Generated from step completion`, 
+        stepConfig.routine_recurrence || 'daily', 
+        stepConfig.routine_recurrence_days || '[]', 
+        startStr, 
+        endStr
+      );
+    }
+  }
+
   res.json({ message: 'Step completed' });
 });
 // PUT incomplete a step
@@ -515,6 +566,14 @@ router.put('/steps/:stepId/incomplete', (req, res) => {
   db.prepare(`UPDATE scheduled_experiments SET status = 'in_progress', updated_at = datetime('now', 'localtime') WHERE id = ?`).run(stepInfo.exp_id);
   
   res.json({ message: 'Step marked incomplete' });
+});
+
+// PUT change color of an experiment
+router.put('/:id/color', (req, res) => {
+  const { color } = req.body;
+  if (!color) return res.status(400).json({ message: 'color is required' });
+  db.prepare("UPDATE scheduled_experiments SET color = ?, updated_at = datetime('now', 'localtime') WHERE id = ? AND user_id = ?").run(color, req.params.id, req.userId);
+  res.json({ message: 'Success' });
 });
 
 // DELETE scheduled experiment

@@ -22,7 +22,11 @@ export interface Step {
   sub_protocol?: string;
   sub_protocol_id?: number | null;
   order_index: number;
-  created_at: string;
+  routine_name?: string | null;
+  routine_duration_days?: number | null;
+  routine_recurrence?: 'daily' | 'weekly' | 'weekdays' | 'custom' | null;
+  routine_recurrence_days?: string | null;
+  created_at?: string;
   preparations?: StepPreparation[];
 }
 
@@ -52,6 +56,7 @@ export interface BlockStep {
   block_id: number;
   step_id: number;
   order_index: number;
+  delay_minutes: number;
   step?: Step;
 }
 
