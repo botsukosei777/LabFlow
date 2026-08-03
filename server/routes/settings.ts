@@ -160,93 +160,91 @@ router.post('/update/apply', (req, res) => {
   if (!download_url) return res.status(400).json({ message: 'Missing download_url' });
 
   // 1. Create update.bat
+  // IMPORTANT: We build the batch file from an array of lines joined with \r\n.
+  // This avoids issues where:
+  //   - JS template literals produce LF-only newlines
+  //   - esbuild double-escapes regex patterns, breaking .replace() fixes
+  //   - cmd.exe with chcp 65001 misreads LF-only files containing multibyte UTF-8,
+  //     causing byte-offset misalignment and garbled commands
   const batPath = path.join(process.cwd(), 'update.bat');
-  const batContent = `@echo off
-chcp 65001 > nul
-echo =======================================
-echo   LabFlow Updater
-echo =======================================
-echo.
-echo   サーバーを停止しています...
-REM Kill any running node processes for this server
-taskkill /F /IM node.exe /FI "WINDOWTITLE eq LabFlow*" > nul 2>&1
-timeout /t 3 /nobreak > nul
-
-REM Make sure port 3001 is free (kill any remaining node on that port)
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr :3001 ^| findstr LISTENING 2^>nul') do (
-  taskkill /F /PID %%a > nul 2>&1
-)
-timeout /t 2 /nobreak > nul
-
-echo.
-echo   データをバックアップしています...
-if exist "data" (
-  xcopy /E /I /Y "data" "data_backup" > nul 2>&1
-)
-
-echo.
-echo   新しいバージョンをダウンロードしています...
-powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '${download_url}' -OutFile 'update.zip'"
-if errorlevel 1 (
-  echo   ダウンロードに失敗しました。
-  if exist "data_backup" (
-    xcopy /E /I /Y "data_backup" "data" > nul 2>&1
-    rmdir /S /Q "data_backup" > nul 2>&1
-  )
-  pause
-  exit /b 1
-)
-
-echo.
-echo   展開しています...
-if exist "update_temp" rmdir /S /Q "update_temp" > nul 2>&1
-powershell -Command "Expand-Archive -Path 'update.zip' -DestinationPath 'update_temp' -Force"
-
-REM Detect extracted structure: flat or nested in a single subfolder
-REM Check if the extracted folder contains start.bat directly or inside a subfolder
-set "UPDATE_SRC=update_temp"
-if not exist "update_temp\start.bat" (
-  if not exist "update_temp\server.cjs" (
-    REM Probably extracted into a subfolder, find it
-    for /d %%D in (update_temp\*) do (
-      if exist "%%D\start.bat" set "UPDATE_SRC=%%D"
-      if exist "%%D\server.cjs" set "UPDATE_SRC=%%D"
-    )
-  )
-)
-
-echo.
-echo   ファイルを更新しています...
-REM Copy new files over existing ones (preserving data/)
-xcopy /E /Y "%UPDATE_SRC%\*" "." /EXCLUDE:update_exclude.txt > nul 2>&1
-if errorlevel 1 (
-  xcopy /E /Y "%UPDATE_SRC%\*" "." > nul 2>&1
-)
-
-echo.
-echo   データを復元しています...
-if exist "data_backup" (
-  xcopy /E /I /Y "data_backup" "data" > nul 2>&1
-  rmdir /S /Q "data_backup" > nul 2>&1
-)
-
-echo.
-echo   クリーンアップしています...
-del update.zip > nul 2>&1
-rmdir /S /Q "update_temp" > nul 2>&1
-
-echo.
-echo   LabFlowを再起動します...
-start "LabFlow" cmd /c start.bat
-
-echo.
-echo   アップデート完了！
-timeout /t 3 > nul
-del "%~f0"
-`;
+  const batLines = [
+    '@echo off',
+    'chcp 65001 > nul',
+    'echo =======================================',
+    'echo   LabFlow Updater',
+    'echo.',
+    'echo   Backing up data...',
+    'if exist "data" (',
+    '  xcopy /E /I /Y "data" "data_backup" > nul 2>&1',
+    ')',
+    '',
+    'echo.',
+    'echo   Downloading new version...',
+    'powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri \'' + download_url + '\' -OutFile \'update.zip\'"',
+    'if errorlevel 1 (',
+    '  echo   Download failed.',
+    '  if exist "data_backup" (',
+    '    xcopy /E /I /Y "data_backup" "data" > nul 2>&1',
+    '    rmdir /S /Q "data_backup" > nul 2>&1',
+    '  )',
+    '  pause',
+    '  exit /b 1',
+    ')',
+    '',
+    'echo.',
+    'echo   Extracting...',
+    'if exist "update_temp" rmdir /S /Q "update_temp" > nul 2>&1',
+    'powershell -Command "Expand-Archive -Path \'update.zip\' -DestinationPath \'update_temp\' -Force"',
+    '',
+    'REM Detect extracted structure: flat or nested in a single subfolder',
+    'set "UPDATE_SRC=update_temp"',
+    'if not exist "update_temp\\start.bat" (',
+    '  if not exist "update_temp\\server.cjs" (',
+    '    for /d %%D in (update_temp\\*) do (',
+    '      if exist "%%D\\start.bat" set "UPDATE_SRC=%%D"',
+    '      if exist "%%D\\server.cjs" set "UPDATE_SRC=%%D"',
+    '    )',
+    '  )',
+    ')',
+    '',
+    'echo.',
+    'echo   Stopping server...',
+    'taskkill /F /IM node.exe /FI "WINDOWTITLE eq LabFlow*" > nul 2>&1',
+    'timeout /t 2 /nobreak > nul',
+    'for /f "tokens=5" %%a in (\'netstat -aon ^| findstr :3001 ^| findstr LISTENING 2^>nul\') do (',
+    '  taskkill /F /PID %%a > nul 2>&1',
+    ')',
+    'timeout /t 2 /nobreak > nul',
+    '',
+    'echo.',
+    'echo   Updating files...',
+    'xcopy /E /Y "%UPDATE_SRC%\\*" "." /EXCLUDE:update_exclude.txt > nul 2>&1',
+    'if errorlevel 1 (',
+    '  xcopy /E /Y "%UPDATE_SRC%\\*" "." > nul 2>&1',
+    ')',
+    '',
+    'echo.',
+    'echo   Restoring data...',
+    'if exist "data_backup" (',
+    '  xcopy /E /I /Y "data_backup" "data" > nul 2>&1',
+    '  rmdir /S /Q "data_backup" > nul 2>&1',
+    ')',
+    '',
+    'echo.',
+    'echo   Cleaning up...',
+    'del update.zip > nul 2>&1',
+    'rmdir /S /Q "update_temp" > nul 2>&1',
+    '',
+    'echo.',
+    'echo   Update complete! Restarting LabFlow...',
+    'timeout /t 3 > nul',
+    'del "%~f0"',
+  ];
+  const batContent = batLines.join('\r\n') + '\r\n';
 
   try {
-    fs.writeFileSync(batPath, batContent, 'utf-8');
+    // Write as binary buffer to prevent any encoding layer from altering line endings
+    fs.writeFileSync(batPath, Buffer.from(batContent, 'utf-8'));
     
     // 2. Respond to client first
     res.json({ message: 'Update started. The server will restart shortly.' });

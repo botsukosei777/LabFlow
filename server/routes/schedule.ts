@@ -16,7 +16,7 @@ function addMinutes(timeStr: string, minutes: number): string {
 router.get('/', (req, res) => {
   const { start, end } = req.query;
   let query = `
-    SELECT se.*, p.name as protocol_name, e.name as experiment_type_name, COALESCE(se.color, e.color) as color
+    SELECT se.*, p.name as protocol_name, e.name as experiment_type_name, COALESCE(se.color, p.color, e.color) as color
     FROM scheduled_experiments se
     JOIN protocols p ON se.protocol_id = p.id
     JOIN experiment_types e ON p.experiment_type_id = e.id
@@ -51,7 +51,7 @@ router.get('/today', (req, res) => {
   const today = new Date().toISOString().split('T')[0];
   const blocks = db.prepare(`
     SELECT sb.*, se.label, se.mode, se.status as experiment_status,
-           p.name as protocol_name, e.name as experiment_type_name, COALESCE(se.color, e.color) as color,
+           p.name as protocol_name, e.name as experiment_type_name, COALESCE(se.color, p.color, e.color) as color,
            b.name as block_name, b.description as block_description
     FROM scheduled_blocks sb
     JOIN scheduled_experiments se ON sb.scheduled_experiment_id = se.id

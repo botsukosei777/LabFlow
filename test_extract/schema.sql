@@ -137,7 +137,6 @@ CREATE TABLE IF NOT EXISTS scheduled_experiments (
     mode TEXT NOT NULL DEFAULT 'management',
     status TEXT NOT NULL DEFAULT 'scheduled',
     notes TEXT DEFAULT '',
-    color TEXT,
     created_at TEXT DEFAULT (datetime('now', 'localtime')),
     updated_at TEXT DEFAULT (datetime('now', 'localtime')),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,

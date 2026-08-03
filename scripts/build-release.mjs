@@ -121,103 +121,104 @@ try {
 
   // 8.5. Create start.bat (with auto-update check)
   log('Creating launcher (start.bat)...');
-  const batContent = `@echo off
-setlocal enabledelayedexpansion
-chcp 65001 >nul
-cd /d "%~dp0"
-
-title LabFlow - Research Schedule Manager
-
-echo.
-echo   ========================================
-echo   LabFlow v${APP_VERSION}
-echo   ========================================
-echo.
-
-REM --- Auto-update check ---
-echo   Checking for updates...
-
-powershell -ExecutionPolicy Bypass -File check_update.ps1 -CurrentVersion "${APP_VERSION}" > update_result.tmp 2>nul
-
-set "STATUS="
-set "NEW_VER="
-set "DL_URL="
-set LINENUM=0
-for /f "usebackq delims=" %%L in ("update_result.tmp") do (
-  set /a LINENUM+=1
-  if !LINENUM! equ 1 set "STATUS=%%L"
-  if !LINENUM! equ 2 set "NEW_VER=%%L"
-  if !LINENUM! equ 3 set "DL_URL=%%L"
-)
-del update_result.tmp >nul 2>nul
-
-if "!STATUS!"=="UPDATE_AVAILABLE" (
-  echo.
-  echo   *** New version available: v!NEW_VER! ***
-  echo.
-  set /p DOUPDATE="  Update now? [y/n]: "
-  if /i "!DOUPDATE!"=="y" (
-    echo.
-    echo   Downloading v!NEW_VER!...
-    powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '!DL_URL!' -OutFile 'update.zip'"
-    if errorlevel 1 (
-      echo   Download failed. Starting current version...
-      del update.zip >nul 2>nul
-      goto :start_server
-    )
-
-    echo   Backing up data...
-    if exist "data" xcopy /E /I /Y "data" "data_backup" >nul 2>&1
-
-    echo   Extracting...
-    if exist "update_temp" rmdir /S /Q "update_temp" >nul 2>&1
-    powershell -Command "Expand-Archive -Path 'update.zip' -DestinationPath 'update_temp' -Force"
-
-    set "UPDATE_SRC=update_temp"
-    if not exist "update_temp\start.bat" (
-      if not exist "update_temp\server.cjs" (
-        for /d %%D in (update_temp\*) do (
-          if exist "%%D\start.bat" set "UPDATE_SRC=%%D"
-          if exist "%%D\server.cjs" set "UPDATE_SRC=%%D"
-        )
-      )
-    )
-
-    echo   Applying update...
-    xcopy /E /Y "!UPDATE_SRC!\*" "." >nul 2>&1
-
-    echo   Restoring data...
-    if exist "data_backup" (
-      xcopy /E /I /Y "data_backup" "data" >nul 2>&1
-      rmdir /S /Q "data_backup" >nul 2>&1
-    )
-
-    echo   Cleaning up...
-    del update.zip >nul 2>&1
-    rmdir /S /Q "update_temp" >nul 2>&1
-
-    echo.
-    echo   Update complete!
-    echo.
-  ) else (
-    echo   Skipping update.
-  )
-) else if "!STATUS!"=="UP_TO_DATE" (
-  echo   Up to date.
-) else (
-  echo   Could not check for updates. Starting normally...
-)
-
-:start_server
-echo.
-echo   Starting server...
-echo   Close this window to stop LabFlow.
-echo   ----------------------------------------
-echo.
-set LABFLOW_AUTO_OPEN=1
-node.exe server.cjs
-`;
-  fs.writeFileSync(path.join(RELEASE_DIR, 'start.bat'), batContent, 'utf-8');
+  const startBatLines = [
+    '@echo off',
+    'setlocal enabledelayedexpansion',
+    'chcp 65001 >nul',
+    'cd /d "%~dp0"',
+    '',
+    'title LabFlow - Research Schedule Manager',
+    '',
+    'echo.',
+    'echo   ========================================',
+    `echo   LabFlow v${APP_VERSION}`,
+    'echo   ========================================',
+    'echo.',
+    '',
+    'REM --- Auto-update check ---',
+    'echo   Checking for updates...',
+    '',
+    `powershell -ExecutionPolicy Bypass -File check_update.ps1 -CurrentVersion "${APP_VERSION}" > update_result.tmp 2>nul`,
+    '',
+    'set "STATUS="',
+    'set "NEW_VER="',
+    'set "DL_URL="',
+    'set LINENUM=0',
+    'for /f "usebackq delims=" %%L in ("update_result.tmp") do (',
+    '  set /a LINENUM+=1',
+    '  if !LINENUM! equ 1 set "STATUS=%%L"',
+    '  if !LINENUM! equ 2 set "NEW_VER=%%L"',
+    '  if !LINENUM! equ 3 set "DL_URL=%%L"',
+    ')',
+    'del update_result.tmp >nul 2>nul',
+    '',
+    'if "!STATUS!"=="UPDATE_AVAILABLE" (',
+    '  echo.',
+    '  echo   *** New version available: v!NEW_VER! ***',
+    '  echo.',
+    '  set /p DOUPDATE="  Update now? [y/n]: "',
+    '  if /i "!DOUPDATE!"=="y" (',
+    '    echo.',
+    '    echo   Downloading v!NEW_VER!...',
+    "    powershell -Command \"[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '!DL_URL!' -OutFile 'update.zip'\"",
+    '    if errorlevel 1 (',
+    '      echo   Download failed. Starting current version...',
+    '      del update.zip >nul 2>nul',
+    '      goto :start_server',
+    '    )',
+    '',
+    '    echo   Backing up data...',
+    '    if exist "data" xcopy /E /I /Y "data" "data_backup" >nul 2>&1',
+    '',
+    '    echo   Extracting...',
+    '    if exist "update_temp" rmdir /S /Q "update_temp" >nul 2>&1',
+    "    powershell -Command \"Expand-Archive -Path 'update.zip' -DestinationPath 'update_temp' -Force\"",
+    '',
+    '    set "UPDATE_SRC=update_temp"',
+    '    if not exist "update_temp\\start.bat" (',
+    '      if not exist "update_temp\\server.cjs" (',
+    '        for /d %%D in (update_temp\\*) do (',
+    '          if exist "%%D\\start.bat" set "UPDATE_SRC=%%D"',
+    '          if exist "%%D\\server.cjs" set "UPDATE_SRC=%%D"',
+    '        )',
+    '      )',
+    '    )',
+    '',
+    '    echo   Applying update...',
+    '    xcopy /E /Y "!UPDATE_SRC!\\*" "." >nul 2>&1',
+    '',
+    '    echo   Restoring data...',
+    '    if exist "data_backup" (',
+    '      xcopy /E /I /Y "data_backup" "data" >nul 2>&1',
+    '      rmdir /S /Q "data_backup" >nul 2>&1',
+    '    )',
+    '',
+    '    echo   Cleaning up...',
+    '    del update.zip >nul 2>&1',
+    '    rmdir /S /Q "update_temp" >nul 2>&1',
+    '',
+    '    echo.',
+    '    echo   Update complete!',
+    '    echo.',
+    '  ) else (',
+    '    echo   Skipping update.',
+    '  )',
+    ') else if "!STATUS!"=="UP_TO_DATE" (',
+    '  echo   Up to date.',
+    ') else (',
+    '  echo   Could not check for updates. Starting normally...',
+    ')',
+    '',
+    ':start_server',
+    'echo.',
+    'echo   Starting server...',
+    'echo   Close this window to stop LabFlow.',
+    'echo   ----------------------------------------',
+    'echo.',
+    'set LABFLOW_AUTO_OPEN=1',
+    'node.exe server.cjs',
+  ];
+  fs.writeFileSync(path.join(RELEASE_DIR, 'start.bat'), Buffer.from(startBatLines.join('\r\n') + '\r\n', 'utf-8'));
 
   // 9. Create README
   log('Creating README...');
