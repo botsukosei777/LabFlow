@@ -1,11 +1,13 @@
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { FlaskConical, Plus, Trash2, ChevronRight, Beaker } from 'lucide-react';
+import { FlaskConical, Plus, Trash2, ChevronRight, Beaker, Share2, Download } from 'lucide-react';
 import { api } from '../api/client';
 import { ToastContext } from '../App';
 import type { ExperimentType } from '../types';
 import SubProtocols from './SubProtocols';
+import { ShareModal } from '../components/ShareModal';
+import { ImportModal } from '../components/ImportModal';
 
 const COLORS = [
   '#6366F1', '#8B5CF6', '#EC4899', '#EF4444', '#F59E0B',
@@ -22,6 +24,8 @@ export default function ExperimentTypes() {
   const [editingExperiment, setEditingExperiment] = useState<ExperimentType | null>(null);
   const [form, setForm] = useState({ name: '', description: '', color: '#6366F1' });
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [shareTarget, setShareTarget] = useState<{ id: number; name: string } | null>(null);
+  const [showImport, setShowImport] = useState(false);
 
   const fetchExperiments = async () => {
     try {
@@ -103,6 +107,10 @@ export default function ExperimentTypes() {
           <p className="page-description">{t('experiments.subtitle')}</p>
         </div>
         <div className="page-actions">
+          <button className="btn btn-secondary" onClick={() => setShowImport(true)}>
+            <Download size={16} />
+            {t('common.importFromTeam', 'Import from Team')}
+          </button>
           <button className="btn btn-primary" onClick={openCreate}>
             <Plus size={16} />
             {t('experiments.addExperiment')}
@@ -135,6 +143,14 @@ export default function ExperimentTypes() {
                   <h3 className="card-title">{exp.name}</h3>
                 </div>
                 <div style={{ display: 'flex', gap: 'var(--space-xs)' }}>
+                  <button
+                    className="btn btn-ghost btn-icon btn-sm"
+                    onClick={(e) => { e.stopPropagation(); setShareTarget({ id: exp.id, name: exp.name }); }}
+                    title={t('common.share', 'Share')}
+                    style={{ color: 'var(--color-info)' }}
+                  >
+                    <Share2 size={14} />
+                  </button>
                   <button
                     className="btn btn-ghost btn-icon btn-sm"
                     onClick={(e) => { e.stopPropagation(); openEdit(exp); }}
@@ -259,6 +275,26 @@ export default function ExperimentTypes() {
 
       <hr style={{ margin: 'var(--space-2xl) 0', border: 'none', borderTop: '1px solid var(--border-default)' }} />
       <SubProtocols />
+
+      {/* Share Modal */}
+      {shareTarget && (
+        <ShareModal
+          isOpen={true}
+          onClose={() => setShareTarget(null)}
+          itemType="experiment-types"
+          localItemId={shareTarget.id}
+          itemName={shareTarget.name}
+          onSuccess={() => setShareTarget(null)}
+        />
+      )}
+
+      {/* Import Modal */}
+      <ImportModal
+        isOpen={showImport}
+        onClose={() => setShowImport(false)}
+        itemType="experiment-types"
+        onSuccess={() => { setShowImport(false); fetchExperiments(); }}
+      />
     </div>
   );
 }

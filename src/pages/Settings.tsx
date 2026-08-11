@@ -1,8 +1,9 @@
 import { useState, useEffect, useContext } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Mail, Globe, Download, Monitor, Moon, Sun, User, Calendar, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Mail, Globe, Download, Monitor, Moon, Sun, User, Calendar, RefreshCw, Cloud, CloudOff, Link as LinkIcon, Unlink, Lock, Users } from 'lucide-react';
 import { api } from '../api/client';
+import { useAuth } from '../contexts/AuthContext';
 import { ToastContext } from '../App';
 
 export default function Settings() {
@@ -13,6 +14,12 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
 
+  const { setSupabaseSession } = useAuth();
+  const [supabaseStatus, setSupabaseStatus] = useState<{ linked: boolean; email?: string; userId?: string } | null>(null);
+  const [supabaseForm, setSupabaseForm] = useState({ email: '', password: '', username: '' });
+  const [supabaseLoading, setSupabaseLoading] = useState(false);
+  const [supabaseMode, setSupabaseMode] = useState<'login' | 'signup'>('login');
+
   const [profileForm, setProfileForm] = useState({
     currentPassword: '',
     newUsername: '',
@@ -22,6 +29,7 @@ export default function Settings() {
 
   useEffect(() => {
     loadData();
+    checkSupabaseStatus();
     const storedTheme = localStorage.getItem('labflow-theme') as 'light' | 'dark' | 'system';
     if (storedTheme) {
       setTheme(storedTheme);
@@ -33,6 +41,63 @@ export default function Settings() {
       const s = await api.get<Record<string, string>>('/settings');
       setSettings(s);
     } catch (e) { console.error(e); }
+  };
+
+  const checkSupabaseStatus = async () => {
+    try {
+      const res = await api.get<{ linked: boolean; email?: string; userId?: string }>('/supabase-auth/status');
+      setSupabaseStatus(res);
+    } catch (e) {
+      console.error('Failed to get Supabase status:', e);
+    }
+  };
+
+  const handleSupabaseAuth = async () => {
+    setSupabaseLoading(true);
+    try {
+      if (supabaseMode === 'signup') {
+        await api.post<any>('/supabase-auth/signup', supabaseForm);
+        // After signup, log in to get session
+        const loginRes = await api.post<any>('/supabase-auth/login', { email: supabaseForm.email, password: supabaseForm.password });
+        const sessionObj = {
+          access_token: loginRes.access_token,
+          refresh_token: loginRes.refresh_token,
+          expires_at: Math.floor(Date.now() / 1000) + loginRes.expires_in
+        };
+        setSupabaseSession?.(sessionObj);
+        addToast('success', 'Supabaseアカウントを作成し、連携しました');
+      } else {
+        const loginRes = await api.post<any>('/supabase-auth/login', { email: supabaseForm.email, password: supabaseForm.password });
+        await api.post('/supabase-auth/link', { supabase_access_token: loginRes.access_token });
+        const sessionObj = {
+          access_token: loginRes.access_token,
+          refresh_token: loginRes.refresh_token,
+          expires_at: Math.floor(Date.now() / 1000) + loginRes.expires_in
+        };
+        setSupabaseSession?.(sessionObj);
+        addToast('success', '既存のSupabaseアカウントと連携しました');
+      }
+      checkSupabaseStatus();
+      setSupabaseForm({ email: '', password: '', username: '' });
+    } catch (e: any) {
+      addToast('error', e.message || '認証に失敗しました');
+    } finally {
+      setSupabaseLoading(false);
+    }
+  };
+
+  const handleSupabaseUnlink = async () => {
+    if (!window.confirm('本当にSupabaseアカウントとの連携を解除しますか？')) return;
+    setSupabaseLoading(true);
+    try {
+      await api.post('/supabase-auth/unlink', {});
+      addToast('success', '連携を解除しました');
+    } catch (e: any) {
+      addToast('error', e.message || '解除に失敗しました');
+    } finally {
+      setSupabaseLoading(false);
+      checkSupabaseStatus();
+    }
   };
 
   const saveSettings = async () => {
@@ -462,6 +527,110 @@ export default function Settings() {
             )}
           </div>
         </div>
+
+        {/* Supabase Team Integration */}
+        <div className="card">
+          <div className="card-header"><h3 className="card-title"><Cloud size={18} style={{ marginRight: 8 }} />{t('settings.teamIntegration', { defaultValue: 'チーム連携 / Team Integration' })}</h3></div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)', marginTop: 'var(--space-md)' }}>
+            
+            {supabaseStatus?.linked ? (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', color: 'var(--color-success)' }}>
+                  <Cloud size={20} />
+                  <span style={{ fontWeight: 500 }}>接続済み / Connected</span>
+                </div>
+                <div style={{ backgroundColor: 'var(--bg-secondary)', padding: 'var(--space-md)', borderRadius: 'var(--radius-md)' }}>
+                  <p style={{ margin: '0 0 var(--space-sm) 0' }}><strong>Email:</strong> {supabaseStatus.email}</p>
+                  <p style={{ margin: 0, fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)' }}><strong>User ID:</strong> {supabaseStatus.userId}</p>
+                </div>
+                <div>
+                  <button className="btn btn-secondary" style={{ color: 'var(--color-danger)' }} onClick={handleSupabaseUnlink} disabled={supabaseLoading}>
+                    <Unlink size={16} /> {supabaseLoading ? t('common.loading', { defaultValue: '処理中...' }) : '連携を解除 / Unlink'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', color: 'var(--text-secondary)' }}>
+                  <CloudOff size={20} />
+                  <span style={{ fontWeight: 500 }}>未接続 / Not Connected</span>
+                </div>
+                <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-sm)' }}>
+                  チーム共有機能を使うには、Supabase アカウントとの連携が必要です
+                </p>
+
+                <div style={{ display: 'flex', gap: 'var(--space-sm)', marginBottom: 'var(--space-sm)' }}>
+                  <button 
+                    className={`btn ${supabaseMode === 'login' ? 'btn-primary' : 'btn-ghost'}`} 
+                    onClick={() => setSupabaseMode('login')}
+                  >
+                    既存のアカウントを連携
+                  </button>
+                  <button 
+                    className={`btn ${supabaseMode === 'signup' ? 'btn-primary' : 'btn-ghost'}`} 
+                    onClick={() => setSupabaseMode('signup')}
+                  >
+                    新しくアカウントを作成
+                  </button>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Email</label>
+                  <div style={{ position: 'relative' }}>
+                    <Mail size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+                    <input 
+                      className="form-input" 
+                      style={{ paddingLeft: '36px' }}
+                      type="email" 
+                      value={supabaseForm.email}
+                      onChange={e => setSupabaseForm(prev => ({ ...prev, email: e.target.value }))}
+                      placeholder="Email"
+                    />
+                  </div>
+                </div>
+
+                {supabaseMode === 'signup' && (
+                  <div className="form-group">
+                    <label className="form-label">Username</label>
+                    <div style={{ position: 'relative' }}>
+                      <User size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+                      <input 
+                        className="form-input" 
+                        style={{ paddingLeft: '36px' }}
+                        value={supabaseForm.username}
+                        onChange={e => setSupabaseForm(prev => ({ ...prev, username: e.target.value }))}
+                        placeholder="Username"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="form-group">
+                  <label className="form-label">Password</label>
+                  <div style={{ position: 'relative' }}>
+                    <Lock size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+                    <input 
+                      className="form-input" 
+                      style={{ paddingLeft: '36px' }}
+                      type="password" 
+                      value={supabaseForm.password}
+                      onChange={e => setSupabaseForm(prev => ({ ...prev, password: e.target.value }))}
+                      placeholder="Password"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <button className="btn btn-primary" onClick={handleSupabaseAuth} disabled={supabaseLoading || !supabaseForm.email || !supabaseForm.password || (supabaseMode === 'signup' && !supabaseForm.username)}>
+                    {supabaseMode === 'login' ? <LinkIcon size={16} /> : <Cloud size={16} />}
+                    {supabaseLoading ? t('common.loading', { defaultValue: '処理中...' }) : (supabaseMode === 'login' ? '連携する / Link Account' : '作成して連携 / Create Account')}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
       </div>
     </div>
   );

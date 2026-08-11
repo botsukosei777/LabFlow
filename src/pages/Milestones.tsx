@@ -1,9 +1,11 @@
 import { useState, useEffect, useContext } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Target, Plus, Trash2, Edit, ChevronDown, ChevronUp, CheckCircle2, MinusCircle } from 'lucide-react';
+import { Target, Plus, Trash2, Edit, ChevronDown, ChevronUp, CheckCircle2, MinusCircle, Share2, Download } from 'lucide-react';
 import { api } from '../api/client';
 import { ToastContext } from '../App';
 import type { Milestone, MilestoneItem } from '../types';
+import { ShareModal } from '../components/ShareModal';
+import { ImportModal } from '../components/ImportModal';
 
 export default function Milestones() {
   const { t } = useTranslation();
@@ -19,6 +21,8 @@ export default function Milestones() {
   const [editingItem, setEditingItem] = useState<MilestoneItem | null>(null);
   const [itemForm, setItemForm] = useState({ name: '', data_type: 'qualitative' as const, target_count: 3, current_count: 0, unit: '' });
   const [expandedMs, setExpandedMs] = useState<Set<number>>(new Set());
+  const [shareTarget, setShareTarget] = useState<{ id: number; name: string } | null>(null);
+  const [showImport, setShowImport] = useState(false);
 
   const fetchMilestones = async () => {
     try {
@@ -81,13 +85,19 @@ export default function Milestones() {
 
   const [showSubItemModal, setShowSubItemModal] = useState(false);
   const [currentParentItemId, setCurrentParentItemId] = useState<number | null>(null);
+  const [editingSubItem, setEditingSubItem] = useState<MilestoneSubItem | null>(null);
   const [subItemForm, setSubItemForm] = useState({ name: '', data_type: 'qualitative' as const, target_count: 1, current_count: 0, unit: '' });
 
   const handleSubItemSubmit = async () => {
-    if (!subItemForm.name.trim() || !currentParentItemId) return;
+    if (!subItemForm.name.trim() || (!currentParentItemId && !editingSubItem)) return;
     try {
-      await api.post(`/milestones/items/${currentParentItemId}/subitems`, subItemForm);
+      if (editingSubItem) {
+        await api.put(`/milestones/subitems/${editingSubItem.id}`, subItemForm);
+      } else {
+        await api.post(`/milestones/items/${currentParentItemId}/subitems`, subItemForm);
+      }
       setShowSubItemModal(false);
+      setEditingSubItem(null);
       setSubItemForm({ name: '', data_type: 'qualitative', target_count: 1, current_count: 0, unit: '' });
       fetchMilestones();
     } catch (e) { addToast('error', t('common.errorOccurred')); }
@@ -138,6 +148,7 @@ export default function Milestones() {
   };
 
   return (
+    <>
     <div className="animate-fade-in">
       <div className="page-header">
         <div>
@@ -147,6 +158,10 @@ export default function Milestones() {
         <div className="page-actions">
           <button className={`btn ${showArchived ? 'btn-secondary' : 'btn-ghost'} btn-sm`} onClick={() => setShowArchived(!showArchived)}>
             {showArchived ? t('milestones.active') : t('milestones.archived')}
+          </button>
+          <button className="btn btn-secondary" onClick={() => setShowImport(true)}>
+            <Download size={16} />
+            {t('common.importFromTeam', 'Import from Team')}
           </button>
           <button className="btn btn-primary" onClick={() => { setEditingMs(null); setMsForm({ name: '', description: '', deadline: '' }); setShowModal(true); }}>
             <Plus size={16} /> {t('milestones.addMilestone')}
@@ -223,6 +238,7 @@ export default function Milestones() {
                       </button>
                     )}
 
+                    <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-info)' }} onClick={() => setShareTarget({ id: ms.id, name: ms.name })} title={t('common.share', 'Share')}><Share2 size={14} /></button>
                     <button className="btn btn-ghost btn-icon btn-sm" onClick={() => { setEditingMs(ms); setMsForm({ name: ms.name, description: ms.description, deadline: ms.deadline || '' }); setShowModal(true); }}><Edit size={14} /></button>
                     <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-danger)' }} onClick={async () => {
                       if (window.confirm(t('common.confirmDelete', { defaultValue: '本当に削除しますか？' }))) {
@@ -279,11 +295,19 @@ export default function Milestones() {
                                 </div>
                               )}
                             </div>
-                            <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-danger)' }} onClick={async () => {
-                              if (window.confirm(t('common.confirmDelete', { defaultValue: '本当に削除しますか？' }))) {
-                                await api.delete(`/milestones/items/${item.id}`); fetchMilestones();
-                              }
-                            }}><Trash2 size={14} /></button>
+                            <div style={{ display: 'flex', gap: 4 }}>
+                              <button className="btn btn-ghost btn-icon btn-sm" onClick={() => {
+                                setEditingItem(item);
+                                setItemForm({ name: item.name, data_type: item.data_type, target_count: item.target_count || 1, current_count: item.current_count || 0, unit: item.unit || '' });
+                                setCurrentMsId(item.milestone_id);
+                                setShowItemModal(true);
+                              }}><Edit size={14} /></button>
+                              <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-danger)' }} onClick={async () => {
+                                if (window.confirm(t('common.confirmDelete', { defaultValue: '本当に削除しますか？' }))) {
+                                  await api.delete(`/milestones/items/${item.id}`); fetchMilestones();
+                                }
+                              }}><Trash2 size={14} /></button>
+                            </div>
                           </div>
                           {/* Sub Items (Available for all data types) */}
                             <div style={{ marginLeft: 'var(--space-xl)', borderLeft: '2px solid var(--border-default)', paddingLeft: 'var(--space-md)' }}>
@@ -309,6 +333,12 @@ export default function Milestones() {
                                         {sub.data_type === 'task' ? t('milestones.task', { defaultValue: '作業 (Task)' }) : t(`milestones.${sub.data_type}`)}
                                       </span>
                                     </div>
+                                    <button className="btn btn-ghost btn-icon btn-sm" onClick={() => {
+                                      setEditingSubItem(sub);
+                                      setSubItemForm({ name: sub.name, data_type: sub.data_type, target_count: sub.target_count || 1, current_count: sub.current_count || 0, unit: sub.unit || '' });
+                                      setCurrentParentItemId(item.id);
+                                      setShowSubItemModal(true);
+                                    }}><Edit size={14} /></button>
                                     <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-danger)', padding: 2 }} onClick={() => deleteSubItem(sub.id)}><Trash2 size={12} /></button>
                                   </div>
                                   {sub.data_type === 'quantitative' && (
@@ -321,6 +351,7 @@ export default function Milestones() {
                               <div style={{ display: 'flex', gap: 'var(--space-xs)', marginTop: 4 }}>
                                 <button className="btn btn-ghost btn-sm" style={{ fontSize: 'var(--font-size-xs)' }} onClick={() => {
                                   setCurrentParentItemId(item.id);
+                                  setEditingSubItem(null);
                                   setSubItemForm({ name: '', data_type: 'qualitative', target_count: 1, current_count: 0, unit: '' });
                                   setShowSubItemModal(true);
                                 }}>
@@ -420,8 +451,8 @@ export default function Milestones() {
         <div className="modal-overlay" onClick={() => setShowSubItemModal(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3 className="modal-title">{t('milestones.addSubItem', { defaultValue: 'サブタスクを追加' })}</h3>
-              <button className="btn btn-ghost btn-icon" onClick={() => setShowSubItemModal(false)}>×</button>
+              <h3 className="modal-title">{editingSubItem ? t('milestones.editSubItem', { defaultValue: 'サブタスクを編集' }) : t('milestones.addSubItem', { defaultValue: 'サブタスクを追加' })}</h3>
+              <button className="btn btn-ghost btn-icon" onClick={() => { setShowSubItemModal(false); setEditingSubItem(null); }}>×</button>
             </div>
             <div className="modal-body">
               <div className="form-group">
@@ -451,11 +482,32 @@ export default function Milestones() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setShowSubItemModal(false)}>{t('common.cancel')}</button>
-              <button className="btn btn-primary" onClick={handleSubItemSubmit} disabled={!subItemForm.name.trim()}>{t('common.create')}</button>
+              <button className="btn btn-primary" onClick={handleSubItemSubmit} disabled={!subItemForm.name.trim()}>{editingSubItem ? t('common.save') : t('common.create')}</button>
             </div>
           </div>
         </div>
       )}
     </div>
+
+    {/* Share Modal */}
+    {shareTarget && (
+      <ShareModal
+        isOpen={true}
+        onClose={() => setShareTarget(null)}
+        itemType="milestones"
+        localItemId={shareTarget.id}
+        itemName={shareTarget.name}
+        onSuccess={() => setShareTarget(null)}
+      />
+    )}
+
+    {/* Import Modal */}
+    <ImportModal
+      isOpen={showImport}
+      onClose={() => setShowImport(false)}
+      itemType="milestones"
+      onSuccess={() => { setShowImport(false); fetchMilestones(); }}
+    />
+    </>
   );
 }

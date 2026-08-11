@@ -60,6 +60,10 @@ function initDb() {
   try { dbInstance.exec("ALTER TABLE scheduled_steps ADD COLUMN end_date TEXT"); } catch (e) {}
   try { dbInstance.exec("ALTER TABLE scheduled_experiments ADD COLUMN color TEXT"); } catch (e) {}
   
+  // Supabase integration columns
+  try { dbInstance.exec("ALTER TABLE users ADD COLUMN supabase_user_id TEXT"); } catch (e) {}
+  try { dbInstance.exec("ALTER TABLE users ADD COLUMN supabase_email TEXT"); } catch (e) {}
+
   // Migration for routine automated generation fields
   try { dbInstance.exec("ALTER TABLE steps ADD COLUMN routine_name TEXT"); } catch (e) {}
   try { dbInstance.exec("ALTER TABLE steps ADD COLUMN routine_duration_days INTEGER"); } catch (e) {}

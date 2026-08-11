@@ -9,7 +9,21 @@ declare global {
   }
 }
 
+// Check if app is running in "local single-user" mode (no real users registered)
+function isSingleUserMode(): boolean {
+  // Always return true to disable local login UI as requested
+  return true;
+}
+
 export const requireAuth = (req: Request, res: Response, next: NextFunction) => {
+  // In single-user mode, skip auth and use user ID 1 (default admin)
+  if (isSingleUserMode()) {
+    const defaultUser = db.prepare('SELECT id FROM users LIMIT 1').get() as { id: number } | undefined;
+    req.userId = defaultUser?.id || 1;
+    return next();
+  }
+
+  // Multi-user mode: require Bearer token
   let token: string;
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -34,3 +48,4 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction) => 
   req.userId = session.user_id;
   next();
 };
+

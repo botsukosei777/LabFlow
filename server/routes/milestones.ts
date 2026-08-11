@@ -15,11 +15,9 @@ router.get('/', (req, res) => {
       'SELECT * FROM milestone_items WHERE milestone_id = ? ORDER BY order_index'
     ).all(ms.id);
     for (const item of ms.items) {
-      if (item.data_type === 'task') {
-        item.sub_items = db.prepare(
-          'SELECT * FROM milestone_sub_items WHERE milestone_item_id = ? ORDER BY order_index'
-        ).all(item.id);
-      }
+      item.sub_items = db.prepare(
+        'SELECT * FROM milestone_sub_items WHERE milestone_item_id = ? ORDER BY order_index'
+      ).all(item.id);
     }
   }
   

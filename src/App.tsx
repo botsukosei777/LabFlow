@@ -17,6 +17,7 @@ const Notebook = lazy(() => import('./pages/Notebook'));
 const Milestones = lazy(() => import('./pages/Milestones'));
 const Inventory = lazy(() => import('./pages/Inventory'));
 const Routines = lazy(() => import('./pages/Routines'));
+const Teams = lazy(() => import('./pages/Teams'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
@@ -83,6 +84,7 @@ export default function App() {
                     <Route path="/milestones" element={<Milestones />} />
                     <Route path="/inventory" element={<Inventory />} />
                     <Route path="/routines" element={<Routines />} />
+                    <Route path="/teams" element={<Teams />} />
                     <Route path="/settings" element={<Settings />} />
                   </Route>
                 </Route>

@@ -14,6 +14,7 @@ import {
   Beaker,
   LogOut,
   User,
+  Users,
   Book,
   FileText,
 } from 'lucide-react';
@@ -31,6 +32,7 @@ const navItems = [
   { path: '/milestones', icon: Target, labelKey: 'nav.milestones' },
   { path: '/inventory', icon: Package, labelKey: 'nav.inventory' },
   { path: '/routines', icon: RotateCcw, labelKey: 'nav.routines' },
+  { path: '/teams', icon: Users, labelKey: 'nav.teams' },
   { path: '/settings', icon: Settings, labelKey: 'nav.settings' },
 ];
 
@@ -38,7 +40,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { t, i18n } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, isSingleUserMode } = useAuth();
 
   const handleLogout = () => {
     logout();
@@ -75,7 +77,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </nav>
 
       <div className="sidebar-footer">
-        {!collapsed && user && (
+        {!collapsed && user && !isSingleUserMode && (
           <div className="mb-4 flex items-center justify-between bg-white/5 dark:bg-black/20 p-2 rounded-lg">
             <div className="flex items-center gap-2 overflow-hidden">
               <div className="bg-indigo-600 rounded-full p-1 flex-shrink-0">

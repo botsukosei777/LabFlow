@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Loader2 } from 'lucide-react';
 
 export const ProtectedRoute: React.FC = () => {
-  const { user, loading } = useAuth();
+  const { user, loading, isSingleUserMode } = useAuth();
 
   if (loading) {
     return (
@@ -14,9 +14,10 @@ export const ProtectedRoute: React.FC = () => {
     );
   }
 
-  if (!user) {
-    return <Navigate to="/login" replace />;
+  // In single-user mode or if user is logged in, allow access
+  if (user || isSingleUserMode) {
+    return <Outlet />;
   }
 
-  return <Outlet />;
+  return <Navigate to="/login" replace />;
 };

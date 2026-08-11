@@ -10,9 +10,9 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.0.2-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.0.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/license-BSL--1.1-green" alt="License">
-  <img src="https://img.shields.io/badge/platform-Windows-lightgrey" alt="Platform">
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Platform">
 </p>
 
 ---
@@ -22,15 +22,17 @@
 **LabFlow** is an integrated scheduling and management tool for researchers.
 It provides all the essential management features needed for research activities in one place: from registering experimental protocols to scheduling them on the calendar, managing daily routines, tracking milestones, managing reagent inventory, and writing lab notebooks.
 
-**No Installation Required** — Simply extract the ZIP file and double-click `start.bat` to launch.
+**No Installation Required** — Simply extract the archive and run the launch script (`start.bat` for Windows, `start.sh` for macOS/Linux).
 
 ## 🚀 Quick Start
 
 ### Download
 
-1. Download the latest `labflow-release.zip` from the [Releases](../../releases) page.
-2. Extract it to any folder.
-3. Double-click `start.bat`.
+1. Download the latest release for your OS (Windows, macOS Intel/Apple Silicon, or Linux) from the [Releases](../../releases) page.
+2. Extract the archive to any folder.
+3. Run the launcher:
+   - **Windows**: Double-click `start.bat`.
+   - **macOS/Linux**: Open terminal, run `chmod +x start.sh node` and then `./start.sh`.
 4. Your browser will automatically open (`http://localhost:3001`).
 
 ### First Login

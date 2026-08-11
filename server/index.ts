@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -28,6 +29,9 @@ import { requireAuth } from './middleware/auth.js';
 import authRoutes from './routes/auth.js';
 
 import subProtocolRoutes from './routes/sub_protocols.js';
+import teamsRoutes from './routes/teams.js';
+import supabaseAuthRoutes from './routes/supabaseAuth.js';
+import sharedRoutes from './routes/shared.js';
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -44,6 +48,9 @@ app.use('/api/events', requireAuth, eventRoutes);
 app.use('/api/notebook', requireAuth, notebookRoutes);
 app.use('/api/mini_memos', requireAuth, miniMemosRoutes);
 app.use('/api/quick_links', requireAuth, quickLinksRoutes);
+app.use('/api/teams', requireAuth, teamsRoutes);
+app.use('/api/supabase-auth', requireAuth, supabaseAuthRoutes);
+app.use('/api/shared', requireAuth, sharedRoutes);
 
 // Backup endpoint
 app.get('/api/backup', requireAuth, async (req, res) => {
