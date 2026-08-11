@@ -223,7 +223,7 @@ export const Teams: React.FC = () => {
                 {t('チーム共有機能を使うには、まず .env ファイルにSupabaseの接続情報を設定してサーバーを再起動してください。')}
               </p>
               <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--font-size-xs)', marginTop: 'var(--space-sm)' }}>
-                .env.example をコピーして .env を作成 → Supabase Dashboard から API キーを取得して入力 → npm run dev で再起動
+                .env.example をコピーして .env を作成 → Supabase Dashboard から API キーを取得して入力 → LabFlowアプリを再起動
               </p>
             </div>
           )}

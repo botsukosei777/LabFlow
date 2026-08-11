@@ -3,8 +3,9 @@ node_modules/
 
 # Build output
 dist/
-labflow-release/
-labflow-release.zip
+release/
+*.zip
+*.tar.gz
 
 # Data (contains user database, notebooks, and backups)
 data/*.db
