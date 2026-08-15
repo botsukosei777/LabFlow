@@ -11,6 +11,8 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [todayBlocks, setTodayBlocks] = useState<any[]>([]);
   const [todayRoutines, setTodayRoutines] = useState<any[]>([]);
+  const [overdueBlocks, setOverdueBlocks] = useState<any[]>([]);
+  const [overdueRoutines, setOverdueRoutines] = useState<any[]>([]);
   const [milestones, setMilestones] = useState<any[]>([]);
   const [alerts, setAlerts] = useState<any[]>([]);
   const [miniMemos, setMiniMemos] = useState<any[]>([]);
@@ -30,13 +32,15 @@ export default function Dashboard() {
 
   const loadData = async () => {
     try {
-      const [blocks, routines, ms, reagentAlerts, memos, links] = await Promise.all([
+      const [blocks, routines, ms, reagentAlerts, memos, links, oBlocks, oRoutines] = await Promise.all([
         api.get<any[]>('/schedule/today'),
         api.get<any[]>('/routines/today'),
         api.get<any[]>('/milestones?status=active'),
         api.get<any[]>('/reagents/alerts'),
         api.get<any[]>('/mini_memos'),
         api.get<any[]>('/quick_links'),
+        api.get<any[]>('/schedule/overdue'),
+        api.get<any[]>('/routines/overdue'),
       ]);
       setTodayBlocks(blocks);
       setTodayRoutines(routines);
@@ -44,13 +48,15 @@ export default function Dashboard() {
       setAlerts(reagentAlerts);
       setMiniMemos(memos);
       setQuickLinks(links);
+      setOverdueBlocks(oBlocks);
+      setOverdueRoutines(oRoutines);
       
       setStats({
         experiments: blocks.length,
         routines: routines.filter((r: any) => r.is_completed).length,
         routinesTotal: routines.length,
         milestones: ms.length,
-        alerts: reagentAlerts.length
+        alerts: reagentAlerts.length + oBlocks.length + oRoutines.length
       });
     } catch (e) {
       console.error(e);
@@ -62,11 +68,24 @@ export default function Dashboard() {
       if (routine.completed_today) {
         await api.put(`/routines/${routine.id}/incomplete`);
       } else {
-        await api.post(`/routines/${routine.id}/complete`);
+        await api.post(`/routines/${routine.id}/complete`, { date: getLocalTodayStr() });
         addToast('success', t('common.done'));
       }
       loadData();
     } catch (e) { addToast('error', t('common.errorOccurred')); }
+  };
+
+  const completeOverdueRoutine = async (routineId: number, missedDate: string) => {
+    try {
+      await api.post(`/routines/${routineId}/complete`, { date: missedDate });
+      addToast('success', t('common.done'));
+      loadData();
+    } catch (e) { addToast('error', t('common.errorOccurred')); }
+  };
+
+  const getLocalTodayStr = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   };
 
   const completeBlock = async (id: number) => {
@@ -335,6 +354,38 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Overdue Items Alert */}
+      {(overdueBlocks.length > 0 || overdueRoutines.length > 0) && (
+        <div className="card" style={{ marginBottom: 'var(--space-lg)', borderLeft: '4px solid var(--color-danger)' }}>
+          <div className="card-header">
+            <h3 className="card-title" style={{ color: 'var(--color-danger)' }}>
+              <AlertTriangle size={18} style={{ marginRight: 8 }} />
+              {t('dashboard.overdueItems', { defaultValue: '期限切れの未完了タスク' })}
+            </h3>
+          </div>
+          <div className="checklist">
+            {overdueRoutines.map((routine: any, idx: number) => (
+              <div key={`or-${routine.id}-${idx}`} className="checklist-item" style={{ background: 'var(--color-danger-dim)', borderColor: 'var(--color-danger-dim)', border: '1px solid var(--color-danger)' }}>
+                <button className="checklist-check" onClick={() => completeOverdueRoutine(routine.id, routine.missed_date)} />
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span className="checklist-text" style={{ color: 'var(--text-primary)' }}>{routine.name}</span>
+                  <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-danger)' }}>{routine.missed_date} のルーティン</span>
+                </div>
+              </div>
+            ))}
+            {overdueBlocks.map((block: any, idx: number) => (
+              <div key={`ob-${block.id}-${idx}`} className="checklist-item" style={{ background: 'var(--color-danger-dim)', borderColor: 'var(--color-danger-dim)', border: '1px solid var(--color-danger)' }}>
+                <button className="checklist-check" onClick={() => completeBlock(block.id)} />
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span className="checklist-text" style={{ color: 'var(--text-primary)' }}>{block.label ? `${block.label} - ` : ''}{block.experiment_type_name} ({block.block_name})</span>
+                  <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-danger)' }}>{block.scheduled_date} の予定</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-2">
         {/* Milestone Progress */}

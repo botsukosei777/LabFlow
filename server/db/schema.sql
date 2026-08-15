@@ -264,6 +264,8 @@ CREATE TABLE IF NOT EXISTS reagents (
     is_depleted INTEGER NOT NULL DEFAULT 0,
     supplier TEXT DEFAULT '',
     catalog_number TEXT DEFAULT '',
+    location TEXT DEFAULT '',
+    shared_id TEXT,
     created_at TEXT DEFAULT (datetime('now', 'localtime')),
     updated_at TEXT DEFAULT (datetime('now', 'localtime')),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -312,6 +314,7 @@ CREATE TABLE IF NOT EXISTS notebooks (
     file_path TEXT DEFAULT '',
     date TEXT NOT NULL,
     scheduled_experiment_id INTEGER,
+    tags TEXT DEFAULT '[]',
     created_at TEXT DEFAULT (datetime('now', 'localtime')),
     updated_at TEXT DEFAULT (datetime('now', 'localtime')),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -351,4 +354,42 @@ CREATE TABLE IF NOT EXISTS events (
     color TEXT DEFAULT '#3B82F6',
     created_at TEXT DEFAULT (datetime('now', 'localtime')),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- 投票・日程調整
+CREATE TABLE IF NOT EXISTS polls (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    type TEXT NOT NULL DEFAULT 'survey',
+    status TEXT NOT NULL DEFAULT 'open',
+    deadline TEXT,
+    settings TEXT DEFAULT '{}',
+    shared_id TEXT,
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS poll_options (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    poll_id INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    order_index INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (poll_id) REFERENCES polls(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS poll_votes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    poll_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    voter_name TEXT NOT NULL,
+    answers TEXT DEFAULT '{}',
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (poll_id) REFERENCES polls(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE(poll_id, user_id)
 );

@@ -7,10 +7,11 @@ import { ToastContext } from '../App';
 interface ShareModalProps {
   isOpen: boolean;
   onClose: () => void;
-  itemType: 'experiment-types' | 'protocols' | 'milestones';
-  localItemId: number;
+  itemType?: 'experiment-types' | 'protocols' | 'milestones' | 'sub-protocols' | 'reagents';
+  localItemId?: number;
   itemName: string;
-  onSuccess: () => void;
+  onSuccess?: () => void;
+  onShare?: (teamId: string) => Promise<void>;
 }
 
 interface Team {
@@ -25,6 +26,7 @@ export function ShareModal({
   localItemId,
   itemName,
   onSuccess,
+  onShare,
 }: ShareModalProps) {
   const { t } = useTranslation();
   const { addToast } = useContext(ToastContext);
@@ -32,13 +34,13 @@ export function ShareModal({
   const [teams, setTeams] = useState<Team[]>([]);
   const [loadingTeams, setLoadingTeams] = useState(false);
   const [selectedTeamId, setSelectedTeamId] = useState<string>('');
+  
   const [isSharing, setIsSharing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       fetchTeams();
-    } else {
       setSelectedTeamId('');
       setError(null);
     }
@@ -51,35 +53,47 @@ export function ShareModal({
       const response = await supabaseGet<Team[]>('/teams');
       if (response && Array.isArray(response)) {
         setTeams(response);
+        if (response.length > 0) {
+          setSelectedTeamId(response[0].id);
+        }
       }
     } catch (err: any) {
       console.error('Failed to fetch teams:', err);
-      setError(err.message || t('errors.failedToFetchTeams'));
+      setError(err.message || t('errors.failedToFetchTeams', 'Failed to fetch teams'));
     } finally {
       setLoadingTeams(false);
     }
   };
 
   const handleShare = async () => {
-    if (!selectedTeamId) return;
-    
+    if (!selectedTeamId) {
+      setError(t('errors.selectTeamFirst', 'Please select a team first'));
+      return;
+    }
+
     setIsSharing(true);
     setError(null);
-    
+
     try {
-      const payload: any = { team_id: selectedTeamId };
-      if (itemType === 'experiment-types') {
-        payload.local_experiment_type_id = localItemId;
-      } else if (itemType === 'protocols') {
-        payload.local_protocol_id = localItemId;
-      } else if (itemType === 'milestones') {
-        payload.local_milestone_id = localItemId;
+      if (onShare) {
+        await onShare(selectedTeamId);
+      } else if (itemType && localItemId) {
+        const payload: any = { team_id: selectedTeamId };
+        if (itemType === 'experiment-types') {
+          payload.local_experiment_type_id = localItemId;
+        } else if (itemType === 'protocols') {
+          payload.local_protocol_id = localItemId;
+        } else if (itemType === 'milestones') {
+          payload.local_milestone_id = localItemId;
+        } else if (itemType === 'sub-protocols') {
+          payload.local_sub_protocol_id = localItemId;
+        }
+        
+        await supabasePost(`/shared/${itemType}`, payload);
+        addToast('success', t('success.itemShared', 'Item shared successfully'));
       }
       
-      await supabasePost(`/shared/${itemType}`, payload);
-      
-      addToast('success', t('success.itemShared', 'Item shared successfully'));
-      onSuccess();
+      if (onSuccess) onSuccess();
       onClose();
     } catch (err: any) {
       console.error('Failed to share item:', err);

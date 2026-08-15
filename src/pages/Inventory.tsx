@@ -1,22 +1,28 @@
 import { useState, useEffect, useContext } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Package, Plus, Trash2, Edit, AlertTriangle, Search, Filter } from 'lucide-react';
+import { Package, Plus, Trash2, Edit, AlertTriangle, Search, Filter, Cloud, Share2, Download, RefreshCw, Unlink } from 'lucide-react';
 import { api } from '../api/client';
+import { supabaseGet, supabasePost, supabaseDelete } from '../api/supabaseClient';
 import { ToastContext } from '../App';
 import type { Reagent } from '../types';
+import { ShareModal } from '../components/ShareModal';
+import { ImportModal } from '../components/ImportModal';
 
 export default function Inventory() {
   const { t } = useTranslation();
   const { addToast } = useContext(ToastContext);
   const [reagents, setReagents] = useState<Reagent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [showModal, setShowModal] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [shareTarget, setShareTarget] = useState<{ id: number; name: string } | null>(null);
   const [editing, setEditing] = useState<Reagent | null>(null);
   const [form, setForm] = useState({
     name: '', description: '', category: '', quantity_trackable: false,
-    current_quantity: 0, min_quantity: 0, unit: '', supplier: '', catalog_number: ''
+    current_quantity: 0, min_quantity: 0, unit: '', supplier: '', catalog_number: '', location: ''
   });
 
   const fetchReagents = async () => {
@@ -27,7 +33,52 @@ export default function Inventory() {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchReagents(); }, []);
+  const handleSyncAll = async () => {
+    try {
+      setSyncing(true);
+      const data = await supabasePost<any>('/shared/reagents/sync-all');
+      if (data && data.updatedCount > 0) {
+         fetchReagents();
+      }
+    } catch (e) {
+      console.error('Auto-sync failed:', e);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  useEffect(() => { 
+    fetchReagents(); 
+    handleSyncAll();
+
+    const interval = setInterval(() => {
+      handleSyncAll();
+    }, 5 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleShareReagent = async (teamId: string, reagentId: number) => {
+    try {
+      await supabasePost(`/shared/reagents/${reagentId}/share`, { team_id: teamId });
+      addToast('success', t('common.sharedSuccessfully', { defaultValue: 'チームに共有しました' }));
+      setShareTarget(null);
+      fetchReagents();
+    } catch (error: any) {
+      addToast('error', error.message || t('common.errorOccurred'));
+    }
+  };
+
+  const unshareReagent = async (id: number) => {
+    if (!window.confirm(t('common.confirmUnshare', { defaultValue: 'チーム共有を解除しますか？ (自分が共有したアイテムはチームからも削除されます)' }))) return;
+    try {
+      await supabaseDelete(`/shared/reagents/local/${id}`);
+      addToast('success', t('common.unshareSuccess', { defaultValue: '共有を解除しました' }));
+      fetchReagents();
+    } catch (error: any) {
+      addToast('error', error.message || t('common.errorOccurred'));
+    }
+  };
 
   const categories = [...new Set(reagents.map(r => r.category).filter(Boolean))];
 
@@ -47,7 +98,7 @@ export default function Inventory() {
       }
       addToast('success', t('common.savedSuccessfully'));
       setShowModal(false); setEditing(null);
-      setForm({ name: '', description: '', category: '', quantity_trackable: false, current_quantity: 0, min_quantity: 0, unit: '', supplier: '', catalog_number: '' });
+      setForm({ name: '', description: '', category: '', quantity_trackable: false, current_quantity: 0, min_quantity: 0, unit: '', supplier: '', catalog_number: '', location: '' });
       fetchReagents();
     } catch (e) { addToast('error', t('common.errorOccurred')); }
   };
@@ -81,8 +132,16 @@ export default function Inventory() {
           <p className="page-description">{t('inventory.subtitle')}</p>
         </div>
         <div className="page-actions">
+          <button className="btn btn-secondary" onClick={() => setShowImport(true)}>
+            <Download size={16} />
+            {t('common.importFromTeam', 'チームからインポート')}
+          </button>
+          <button className="btn btn-secondary" onClick={handleSyncAll} disabled={syncing}>
+            <RefreshCw size={16} className={syncing ? 'animate-spin' : ''} />
+            {t('common.syncToTeam', 'チームへ同期')}
+          </button>
           <button className="btn btn-primary" onClick={() => {
-            setEditing(null); setForm({ name: '', description: '', category: '', quantity_trackable: false, current_quantity: 0, min_quantity: 0, unit: '', supplier: '', catalog_number: '' });
+            setEditing(null); setForm({ name: '', description: '', category: '', quantity_trackable: false, current_quantity: 0, min_quantity: 0, unit: '', supplier: '', catalog_number: '', location: '' });
             setShowModal(true);
           }}><Plus size={16} /> {t('inventory.addReagent')}</button>
         </div>
@@ -115,6 +174,7 @@ export default function Inventory() {
                 <th>{t('inventory.category')}</th>
                 <th>{t('common.status')}</th>
                 <th>{t('inventory.currentQuantity')}</th>
+                <th>{t('inventory.location', '場所')}</th>
                 <th>{t('inventory.supplier')}</th>
                 <th>{t('common.actions')}</th>
               </tr>
@@ -125,17 +185,39 @@ export default function Inventory() {
                 return (
                   <tr key={r.id}>
                     <td>
-                      <div style={{ fontWeight: 'var(--font-weight-medium)' }}>{r.name}</div>
+                      <div style={{ fontWeight: 'var(--font-weight-medium)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {r.shared_id && <Cloud size={14} className="text-indigo-500" title="Shared with team" />}
+                        {r.name}
+                      </div>
                       {r.catalog_number && <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)' }}>{r.catalog_number}</div>}
                     </td>
                     <td>{r.category || '-'}</td>
                     <td><span className={`badge ${status.class}`}>{status.label}</span></td>
                     <td>{r.quantity_trackable ? `${r.current_quantity} ${r.unit}` : '-'}</td>
+                    <td style={{ color: 'var(--text-secondary)' }}>{r.location || '-'}</td>
                     <td style={{ color: 'var(--text-secondary)' }}>{r.supplier || '-'}</td>
                     <td>
                       <div style={{ display: 'flex', gap: 'var(--space-xs)' }}>
+                        {!r.shared_id ? (
+                          <button 
+                            className="btn btn-ghost btn-icon btn-sm" 
+                            onClick={() => setShareTarget({ id: r.id, name: r.name })}
+                            title={t('common.share', 'チームへ共有')}
+                          >
+                            <Share2 size={14} />
+                          </button>
+                        ) : (
+                          <button 
+                            className="btn btn-ghost btn-icon btn-sm" 
+                            onClick={() => unshareReagent(r.id)}
+                            title={t('common.unshare', { defaultValue: 'チーム共有解除' })}
+                            style={{ color: 'var(--color-warning)' }}
+                          >
+                            <Unlink size={14} />
+                          </button>
+                        )}
                         <button className="btn btn-ghost btn-icon btn-sm" onClick={() => {
-                          setEditing(r); setForm({ name: r.name, description: r.description, category: r.category, quantity_trackable: !!r.quantity_trackable, current_quantity: r.current_quantity, min_quantity: r.min_quantity, unit: r.unit, supplier: r.supplier, catalog_number: r.catalog_number });
+                          setEditing(r); setForm({ name: r.name, description: r.description, category: r.category, quantity_trackable: !!r.quantity_trackable, current_quantity: r.current_quantity, min_quantity: r.min_quantity, unit: r.unit, supplier: r.supplier, catalog_number: r.catalog_number, location: (r as any).location || '' });
                           setShowModal(true);
                         }}><Edit size={14} /></button>
                         <button className={`btn btn-ghost btn-icon btn-sm`} onClick={() => toggleDeplete(r.id)}
@@ -187,6 +269,10 @@ export default function Inventory() {
                   <input className="form-input" value={form.catalog_number} onChange={e => setForm({ ...form, catalog_number: e.target.value })} placeholder={t('inventory.catalogNumberPlaceholder')} />
                 </div>
               </div>
+              <div className="form-group">
+                <label className="form-label">{t('inventory.location', '在庫の場所')}</label>
+                <input className="form-input" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} placeholder={t('inventory.locationPlaceholder', '例: 試薬棚A')} />
+              </div>
               <label className="form-checkbox" style={{ marginBottom: 'var(--space-md)' }}>
                 <input type="checkbox" checked={form.quantity_trackable} onChange={e => setForm({ ...form, quantity_trackable: e.target.checked })} />
                 <span>{t('inventory.quantityTrackable')}</span>
@@ -214,6 +300,24 @@ export default function Inventory() {
             </div>
           </div>
         </div>
+      )}
+
+      {shareTarget && (
+        <ShareModal
+          isOpen={true}
+          itemName={shareTarget.name}
+          onClose={() => setShareTarget(null)}
+          onShare={(teamId) => handleShareReagent(teamId, shareTarget.id)}
+        />
+      )}
+
+      {showImport && (
+        <ImportModal
+          isOpen={true}
+          itemType="reagents"
+          onClose={() => setShowImport(false)}
+          onSuccess={fetchReagents}
+        />
       )}
     </div>
   );

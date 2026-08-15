@@ -12,7 +12,8 @@
     "inventory": "在庫管理",
     "routines": "ルーティン",
     "teams": "チーム",
-    "settings": "設定"
+    "settings": "設定",
+    "polls": "投票"
   },
   "common": {
     "save": "保存",

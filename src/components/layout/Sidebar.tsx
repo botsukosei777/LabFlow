@@ -17,6 +17,7 @@ import {
   Users,
   Book,
   FileText,
+  CheckSquare,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -33,6 +34,7 @@ const navItems = [
   { path: '/inventory', icon: Package, labelKey: 'nav.inventory' },
   { path: '/routines', icon: RotateCcw, labelKey: 'nav.routines' },
   { path: '/teams', icon: Users, labelKey: 'nav.teams' },
+  { path: '/polls', icon: CheckSquare, labelKey: 'nav.polls', fallbackLabel: 'Polls' },
   { path: '/settings', icon: Settings, labelKey: 'nav.settings' },
 ];
 

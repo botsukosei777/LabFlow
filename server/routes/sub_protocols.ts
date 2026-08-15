@@ -45,6 +45,9 @@ router.delete('/:id', (req, res) => {
   const existing = db.prepare('SELECT user_id FROM sub_protocols WHERE id = ?').get(req.params.id) as any;
   if (!existing || existing.user_id !== req.userId) return res.status(403).json({ message: 'Forbidden' });
 
+  // Clear references from steps before deleting to avoid foreign key constraint violations
+  db.prepare('UPDATE steps SET sub_protocol_id = NULL, sub_protocol = NULL WHERE sub_protocol_id = ?').run(req.params.id);
+
   db.prepare('DELETE FROM sub_protocols WHERE id = ?').run(req.params.id);
   res.status(204).send();
 });

@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Download, Users, Loader2, CheckCircle2, AlertCircle, ChevronLeft } from 'lucide-react';
+import { Download, Users, Loader2, CheckCircle2, AlertCircle, ChevronLeft, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { supabaseGet, supabasePost } from '../api/supabaseClient';
+import { supabaseGet, supabasePost, supabaseDelete } from '../api/supabaseClient';
 import { ToastContext } from '../App';
 
 interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  itemType: 'experiment-types' | 'protocols' | 'milestones';
+  itemType: 'experiment-types' | 'protocols' | 'milestones' | 'sub-protocols' | 'reagents';
   onSuccess: () => void;
 }
 
@@ -22,6 +22,7 @@ interface SharedItem {
   description?: string;
   shared_by_name?: string;
   created_at: string;
+  can_delete?: boolean;
 }
 
 export function ImportModal({
@@ -41,6 +42,7 @@ export function ImportModal({
   const [loadingItems, setLoadingItems] = useState(false);
   
   const [importingItemId, setImportingItemId] = useState<string | null>(null);
+  const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -110,6 +112,27 @@ export function ImportModal({
       setError(err.message || t('errors.failedToImportItem', 'Failed to import item'));
     } finally {
       setImportingItemId(null);
+    }
+  };
+
+  const handleDelete = async (itemId: string) => {
+    if (!window.confirm(t('common.confirmDelete', 'Are you sure you want to delete this shared item?'))) {
+      return;
+    }
+    
+    setDeletingItemId(itemId);
+    setError(null);
+    try {
+      await supabaseDelete(`/shared/${itemType}/${itemId}`);
+      addToast('success', t('success.itemDeleted', 'Item deleted successfully'));
+      if (selectedTeam) {
+        fetchItems(selectedTeam.id);
+      }
+    } catch (err: any) {
+      console.error('Failed to delete item:', err);
+      setError(err.message || t('errors.failedToDeleteItem', 'Failed to delete item'));
+    } finally {
+      setDeletingItemId(null);
     }
   };
 
@@ -212,29 +235,53 @@ export function ImportModal({
                           )}
                         </div>
                       </div>
-                      <button
-                        className="btn btn-secondary"
-                        onClick={() => handleImport(item.id)}
-                        disabled={importingItemId !== null}
-                        style={{ 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          gap: '8px', 
-                          padding: '8px 16px', 
-                          borderRadius: '6px', 
-                          cursor: importingItemId !== null ? 'not-allowed' : 'pointer', 
-                          whiteSpace: 'nowrap',
-                          border: '1px solid var(--border-default)',
-                          background: 'var(--bg-primary)'
-                        }}
-                      >
-                        {importingItemId === item.id ? (
-                          <Loader2 size={16} className="animate-spin" />
-                        ) : (
-                          <Download size={16} />
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        {item.can_delete && (
+                          <button
+                            className="btn btn-ghost"
+                            onClick={() => handleDelete(item.id)}
+                            disabled={deletingItemId !== null}
+                            style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              padding: '8px', 
+                              borderRadius: '6px', 
+                              cursor: deletingItemId !== null ? 'not-allowed' : 'pointer', 
+                              color: 'var(--color-danger)'
+                            }}
+                            title={t('common.delete', 'Delete')}
+                          >
+                            {deletingItemId === item.id ? (
+                              <Loader2 size={16} className="animate-spin" />
+                            ) : (
+                              <Trash2 size={16} />
+                            )}
+                          </button>
                         )}
-                        {t('common.import', 'Import')}
-                      </button>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => handleImport(item.id)}
+                          disabled={importingItemId !== null}
+                          style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '8px', 
+                            padding: '8px 16px', 
+                            borderRadius: '6px', 
+                            cursor: importingItemId !== null ? 'not-allowed' : 'pointer', 
+                            whiteSpace: 'nowrap',
+                            border: '1px solid var(--border-default)',
+                            background: 'var(--bg-primary)'
+                          }}
+                        >
+                          {importingItemId === item.id ? (
+                            <Loader2 size={16} className="animate-spin" />
+                          ) : (
+                            <Download size={16} />
+                          )}
+                          {t('common.import', 'Import')}
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

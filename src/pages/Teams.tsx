@@ -271,13 +271,13 @@ export const Teams: React.FC = () => {
       </div>
 
       {error && (
-        <div className="p-4 bg-red-50 text-red-700 rounded-md border border-red-100">
+        <div className="p-4 bg-[var(--color-danger-dim)] text-[var(--color-danger-hover)] rounded-md border border-[var(--color-danger)]">
           {error}
         </div>
       )}
 
       {/* Join Team Section */}
-      <div className="bg-white p-6 rounded-lg shadow-sm border border-[var(--border)]">
+      <div className="bg-[var(--bg-card)] p-6 rounded-lg shadow-sm border border-[var(--border)]">
         <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-4 flex items-center gap-2">
           <Search size={20} className="text-[var(--text-secondary)]" />
           {t('Join a Team')}
@@ -294,7 +294,7 @@ export const Teams: React.FC = () => {
           <button
             type="submit"
             disabled={!joinCode || joinCode.length < 8 || actionLoading}
-            className="px-6 py-2 bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-primary)] rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50"
+            className="px-6 py-2 bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-primary)] rounded-md hover:bg-[var(--bg-surface-hover)] transition-colors disabled:opacity-50"
           >
             {actionLoading ? <Loader2 size={20} className="animate-spin" /> : t('Join')}
           </button>
@@ -307,8 +307,8 @@ export const Teams: React.FC = () => {
           <Loader2 size={32} className="animate-spin text-[var(--primary)]" />
         </div>
       ) : teams.length === 0 ? (
-        <div className="text-center p-12 bg-gray-50 rounded-lg border border-[var(--border)] border-dashed">
-          <Users size={48} className="mx-auto text-gray-400 mb-4" />
+        <div className="text-center p-12 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border)] border-dashed">
+          <Users size={48} className="mx-auto text-[var(--text-tertiary)] mb-4" />
           <h3 className="text-lg font-medium text-[var(--text-primary)] mb-2">{t('No teams yet')}</h3>
           <p className="text-[var(--text-secondary)] mb-6 max-w-md mx-auto">
             {t("You haven't joined or created any teams. Teams allow you to share protocols, reagents, and schedules with other lab members.")}
@@ -327,13 +327,13 @@ export const Teams: React.FC = () => {
             <div
               key={team.id}
               onClick={() => handleSelectTeam(team)}
-              className="bg-white rounded-lg shadow-sm border border-[var(--border)] hover:border-[var(--primary)] hover:shadow-md transition-all cursor-pointer overflow-hidden flex flex-col"
+              className="bg-[var(--bg-card)] rounded-lg shadow-sm border border-[var(--border)] hover:border-[var(--primary)] hover:shadow-md transition-all cursor-pointer overflow-hidden flex flex-col"
             >
               <div className="h-2 w-full bg-[var(--primary)] opacity-80" />
               <div className="p-6 flex-1 flex flex-col">
                 <div className="flex justify-between items-start mb-4">
                   <h3 className="text-xl font-semibold text-[var(--text-primary)] line-clamp-1">{team.name}</h3>
-                  <div className="flex items-center text-xs px-2 py-1 bg-indigo-50 text-indigo-700 rounded-full font-medium">
+                  <div className="flex items-center text-xs px-2 py-1 bg-[var(--color-primary-dim)] text-[var(--color-primary)] rounded-full font-medium">
                     {team.my_role === 'owner' && <Crown size={12} className="mr-1" />}
                     {team.my_role === 'admin' && <Shield size={12} className="mr-1" />}
                     {t(team.my_role || 'member')}
@@ -357,16 +357,16 @@ export const Teams: React.FC = () => {
 
   const renderCreateTeamModal = () => (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden">
-        <div className="p-4 border-b border-[var(--border)] flex justify-between items-center bg-gray-50">
+      <div className="bg-[var(--bg-card)] rounded-lg shadow-xl w-full max-w-md overflow-hidden">
+        <div className="p-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-secondary)]">
           <h2 className="text-lg font-semibold text-[var(--text-primary)]">{t('Create New Team')}</h2>
-          <button onClick={() => setIsCreating(false)} className="text-gray-400 hover:text-gray-600">
+          <button onClick={() => setIsCreating(false)} className="text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]">
             <span className="text-2xl leading-none">&times;</span>
           </button>
         </div>
         <form onSubmit={handleCreateTeam} className="p-6">
           {error && (
-            <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-md border border-red-100">
+            <div className="mb-4 p-3 bg-[var(--color-danger-dim)] text-[var(--color-danger-hover)] text-sm rounded-md border border-[var(--color-danger)]">
               {error}
             </div>
           )}
@@ -401,7 +401,7 @@ export const Teams: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsCreating(false)}
-              className="px-4 py-2 border border-[var(--border)] text-[var(--text-secondary)] rounded-md hover:bg-gray-50 transition-colors"
+              className="px-4 py-2 border border-[var(--border)] text-[var(--text-secondary)] rounded-md hover:bg-[var(--bg-surface-hover)] transition-colors"
             >
               {t('Cancel')}
             </button>
@@ -434,14 +434,14 @@ export const Teams: React.FC = () => {
           {t('Back to Teams')}
         </button>
 
-        <div className="bg-white rounded-lg shadow-sm border border-[var(--border)] overflow-hidden">
+        <div className="bg-[var(--bg-card)] rounded-lg shadow-sm border border-[var(--border)] overflow-hidden">
           <div className="h-3 w-full bg-[var(--primary)] opacity-80" />
           <div className="p-6 md:p-8">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
               <div>
                 <div className="flex items-center gap-3 mb-2">
                   <h1 className="text-3xl font-bold text-[var(--text-primary)]">{selectedTeam.name}</h1>
-                  <span className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-semibold flex items-center">
+                  <span className="px-3 py-1 bg-[var(--color-primary-dim)] text-[var(--color-primary)] rounded-full text-xs font-semibold flex items-center">
                     {selectedTeam.my_role === 'owner' && <Crown size={12} className="mr-1" />}
                     {t(selectedTeam.my_role || 'member')}
                   </span>
@@ -454,7 +454,7 @@ export const Teams: React.FC = () => {
                 {isOwner && (
                   <button 
                     onClick={() => handleDeleteTeam(selectedTeam.id)}
-                    className="px-4 py-2 border border-red-200 text-red-600 rounded-md hover:bg-red-50 flex items-center gap-2 text-sm transition-colors"
+                    className="px-4 py-2 border border-[var(--color-danger)] text-[var(--color-danger)] rounded-md hover:bg-[var(--color-danger-dim)] flex items-center gap-2 text-sm transition-colors"
                   >
                     <Trash2 size={16} />
                     {t('Delete Team')}
@@ -463,7 +463,7 @@ export const Teams: React.FC = () => {
                 {!isOwner && (
                   <button 
                     onClick={() => handleLeaveTeam(selectedTeam.id)}
-                    className="px-4 py-2 border border-[var(--border)] text-[var(--text-secondary)] rounded-md hover:bg-gray-50 flex items-center gap-2 text-sm transition-colors"
+                    className="px-4 py-2 border border-[var(--border)] text-[var(--text-secondary)] rounded-md hover:bg-[var(--bg-surface-hover)] flex items-center gap-2 text-sm transition-colors"
                   >
                     <UserMinus size={16} />
                     {t('Leave Team')}
@@ -474,21 +474,21 @@ export const Teams: React.FC = () => {
 
             {/* Invite Section */}
             {isOwnerOrAdmin && (
-              <div className="bg-indigo-50/50 p-6 rounded-lg border border-indigo-100 mb-8">
-                <h3 className="text-lg font-semibold text-indigo-900 mb-2">{t('Invite Members')}</h3>
-                <p className="text-sm text-indigo-700 mb-4">{t('Share this code with lab members to allow them to join this team.')}</p>
+              <div className="bg-[var(--color-primary-dim)] p-6 rounded-lg border border-[var(--color-primary-dim)] mb-8">
+                <h3 className="text-lg font-semibold text-[var(--color-primary)] mb-2">{t('Invite Members')}</h3>
+                <p className="text-sm text-[var(--color-primary)] opacity-80 mb-4">{t('Share this code with lab members to allow them to join this team.')}</p>
                 
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
                   <div className="relative group">
-                    <div className="flex items-center bg-white border border-indigo-200 rounded-md overflow-hidden">
-                      <code className="px-4 py-2 text-lg font-mono font-bold text-indigo-700 tracking-wider">
+                    <div className="flex items-center bg-[var(--bg-card)] border border-[var(--border)] rounded-md overflow-hidden">
+                      <code className="px-4 py-2 text-lg font-mono font-bold text-[var(--color-primary)] tracking-wider">
                         {selectedTeam.invite_code}
                       </code>
                       <button 
                         onClick={() => copyToClipboard(selectedTeam.invite_code)}
-                        className="px-4 py-3 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors border-l border-indigo-200 flex items-center gap-2 font-medium"
+                        className="px-4 py-3 bg-[var(--bg-secondary)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] transition-colors border-l border-[var(--border)] flex items-center gap-2 font-medium"
                       >
-                        {copied ? <CheckCircle2 size={18} className="text-green-600" /> : <Copy size={18} />}
+                        {copied ? <CheckCircle2 size={18} className="text-green-500" /> : <Copy size={18} />}
                         {copied ? t('Copied') : t('Copy')}
                       </button>
                     </div>
@@ -496,7 +496,7 @@ export const Teams: React.FC = () => {
                   <button 
                     onClick={() => handleRegenerateCode(selectedTeam.id)}
                     disabled={actionLoading}
-                    className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center gap-1 p-2 rounded hover:bg-indigo-100/50 transition-colors ml-2"
+                    className="text-sm text-[var(--color-primary)] hover:opacity-80 flex items-center gap-1 p-2 rounded hover:bg-[var(--bg-surface-hover)] transition-colors ml-2"
                   >
                     <RefreshCw size={14} className={actionLoading ? 'animate-spin' : ''} />
                     {t('Regenerate')}
@@ -510,19 +510,19 @@ export const Teams: React.FC = () => {
               <h3 className="text-xl font-semibold text-[var(--text-primary)] mb-4 flex items-center gap-2">
                 <Users size={20} className="text-[var(--text-secondary)]" />
                 {t('Members')} 
-                <span className="text-sm font-normal text-[var(--text-secondary)] bg-gray-100 px-2 py-0.5 rounded-full ml-2">
+                <span className="text-sm font-normal text-[var(--text-secondary)] bg-[var(--bg-secondary)] px-2 py-0.5 rounded-full ml-2">
                   {teamMembers.length}
                 </span>
               </h3>
               
-              <div className="bg-white border border-[var(--border)] rounded-lg overflow-hidden">
+              <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-lg overflow-hidden">
                 {loadingMembers ? (
                   <div className="p-8 flex justify-center">
                     <Loader2 size={24} className="animate-spin text-[var(--primary)]" />
                   </div>
                 ) : (
                   <table className="min-w-full divide-y divide-[var(--border)]">
-                    <thead className="bg-gray-50">
+                    <thead className="bg-[var(--bg-secondary)]">
                       <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider">{t('User')}</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider">{t('Role')}</th>
@@ -530,12 +530,12 @@ export const Teams: React.FC = () => {
                         <th className="px-6 py-3 text-right text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider">{t('Actions')}</th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-[var(--border)]">
+                    <tbody className="bg-[var(--bg-card)] divide-y divide-[var(--border)]">
                       {teamMembers.map((member) => (
-                        <tr key={member.id} className="hover:bg-gray-50/50 transition-colors">
+                        <tr key={member.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center">
-                              <div className="flex-shrink-0 h-8 w-8 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center font-bold text-sm">
+                              <div className="flex-shrink-0 h-8 w-8 bg-[var(--color-primary-dim)] text-[var(--color-primary)] rounded-full flex items-center justify-center font-bold text-sm">
                                 {(member.user?.username || 'U').charAt(0).toUpperCase()}
                               </div>
                               <div className="ml-4">
@@ -550,16 +550,16 @@ export const Teams: React.FC = () => {
                                 value={member.role}
                                 onChange={(e) => handleUpdateRole(selectedTeam.id, member.user_id, e.target.value)}
                                 disabled={actionLoading}
-                                className="text-sm border border-[var(--border)] rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
+                                className="text-sm border border-[var(--border)] rounded px-2 py-1 bg-[var(--bg-card)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
                               >
                                 <option value="admin">{t('Admin')}</option>
                                 <option value="member">{t('Member')}</option>
                               </select>
                             ) : (
                               <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                                member.role === 'owner' ? 'bg-purple-100 text-purple-800' :
-                                member.role === 'admin' ? 'bg-blue-100 text-blue-800' :
-                                'bg-green-100 text-green-800'
+                                member.role === 'owner' ? 'bg-purple-500/20 text-purple-500' :
+                                member.role === 'admin' ? 'bg-blue-500/20 text-blue-500' :
+                                'bg-green-500/20 text-green-500'
                               }`}>
                                 {t(member.role)}
                               </span>
@@ -573,7 +573,7 @@ export const Teams: React.FC = () => {
                               <button
                                 onClick={() => handleRemoveMember(selectedTeam.id, member.user_id)}
                                 disabled={actionLoading}
-                                className="text-red-600 hover:text-red-900 transition-colors"
+                                className="text-[var(--color-danger)] hover:opacity-80 transition-opacity"
                               >
                                 {t('Remove')}
                               </button>

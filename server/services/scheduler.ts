@@ -209,24 +209,34 @@ export function startScheduler() {
   // Daily plan email at 0:00
   const dailyTime = settings.daily_email_time || '00:00';
   const [dH, dM] = dailyTime.split(':');
-  cron.schedule(`${dM} ${dH} * * *`, () => {
+  const dailyTask = cron.schedule(`${dM} ${dH} * * *`, () => {
     console.log('[Scheduler] Sending daily plan email...');
     sentPreparationEmails.clear(); // Clear cache daily
     sendDailyPlanEmail();
-  }, { timezone: tz });
+  }, { timezone: tz, recoverMissedExecutions: false });
+  if (dailyTask && typeof dailyTask.on === 'function') {
+    dailyTask.on('execution:missed', () => {});
+  }
+
   
   // Reminder email at 19:00
   const reminderTime = settings.reminder_email_time || '19:00';
   const [rH, rM] = reminderTime.split(':');
-  cron.schedule(`${rM} ${rH} * * *`, () => {
+  const reminderTask = cron.schedule(`${rM} ${rH} * * *`, () => {
     console.log('[Scheduler] Sending reminder email...');
     sendReminderEmail();
-  }, { timezone: tz });
+  }, { timezone: tz, recoverMissedExecutions: false });
+  if (reminderTask && typeof reminderTask.on === 'function') {
+    reminderTask.on('execution:missed', () => {});
+  }
 
   // Preparation alerts every minute
-  cron.schedule('* * * * *', () => {
+  const prepTask = cron.schedule('* * * * *', () => {
     sendPreparationEmails();
-  });
+  }, { recoverMissedExecutions: false });
+  if (prepTask && typeof prepTask.on === 'function') {
+    prepTask.on('execution:missed', () => {});
+  }
   
   console.log(`[Scheduler] Daily plan email scheduled at ${dailyTime} (${tz})`);
   console.log(`[Scheduler] Reminder email scheduled at ${reminderTime} (${tz})`);

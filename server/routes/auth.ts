@@ -35,9 +35,9 @@ router.post('/register', (req, res) => {
     const token = generateToken();
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
     
-    db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(token, result.lastInsertRowid, expiresAt);
+    db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(token, Number(result.lastInsertRowid), expiresAt);
     
-    res.status(201).json({ token, user: { id: result.lastInsertRowid, username } });
+    res.status(201).json({ token, user: { id: Number(result.lastInsertRowid), username } });
   } catch (e: any) {
     if (e.code === 'SQLITE_CONSTRAINT_UNIQUE' || e.message.includes('UNIQUE')) {
       return res.status(409).json({ message: 'Username already exists' });
@@ -83,14 +83,14 @@ router.put('/profile', requireAuth, (req, res) => {
   
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId) as any;
   if (!user || !verifyPassword(currentPassword, user.password_hash)) {
-    return res.status(401).json({ message: '現在のパスワードが間違っています。' });
+    return res.status(401).json({ message: '現在のパスワードが間違っています' });
   }
 
   try {
     if (newUsername && newUsername !== user.username) {
       const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(newUsername);
       if (existing) {
-        return res.status(409).json({ message: 'このユーザー名は既に使用されています。' });
+        return res.status(409).json({ message: 'このユーザー名は既に使用されています' });
       }
       db.prepare('UPDATE users SET username = ? WHERE id = ?').run(newUsername, req.userId);
     }

@@ -36,14 +36,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // Since backend is forced to single-user mode, this will return user 1
-        const userData = await api.get<User>('/auth/me');
-        setUser(userData);
+        // Try to fetch from backend, but don't care if it fails because we are in single-user mode locally
+        const userData = await api.get<User>('/auth/me').catch(() => null);
+        setUser(userData || { id: 1, username: 'admin' });
         setIsSingleUserMode(true);
       } catch (e) {
         console.error('Auth check failed', e);
-        localStorage.removeItem('labflow-auth-token');
-        setUser(null);
+        setUser({ id: 1, username: 'admin' });
+        setIsSingleUserMode(true);
       }
 
       // Restore Supabase session from localStorage

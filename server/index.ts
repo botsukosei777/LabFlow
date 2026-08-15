@@ -3,6 +3,7 @@ dotenv.config();
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { exec } from 'child_process';
 import db from './db/database.js';
@@ -33,6 +34,8 @@ import subProtocolRoutes from './routes/sub_protocols.js';
 import teamsRoutes from './routes/teams.js';
 import supabaseAuthRoutes from './routes/supabaseAuth.js';
 import sharedRoutes from './routes/shared.js';
+import pollsRoutes from './routes/polls.js';
+import pollsSyncRoutes from './routes/polls_sync.js';
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -52,6 +55,8 @@ app.use('/api/quick_links', requireAuth, quickLinksRoutes);
 app.use('/api/teams', requireAuth, teamsRoutes);
 app.use('/api/supabase-auth', requireAuth, supabaseAuthRoutes);
 app.use('/api/shared', requireAuth, sharedRoutes);
+app.use('/api/shared/polls', requireAuth, pollsSyncRoutes);
+app.use('/api/polls', requireAuth, pollsRoutes);
 
 // Backup endpoint
 app.get('/api/backup', requireAuth, async (req, res) => {

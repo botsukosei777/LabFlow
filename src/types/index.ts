@@ -190,6 +190,8 @@ export interface Reagent {
   is_depleted: boolean;
   supplier: string;
   catalog_number: string;
+  location?: string;
+  shared_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -271,4 +273,38 @@ export interface Toast {
   type: ToastType;
   message: string;
   duration?: number;
+}
+
+// Polls
+export interface PollOption {
+  id: number;
+  poll_id: number;
+  text: string;
+  order_index: number;
+}
+
+export interface PollVote {
+  id: number;
+  poll_id: number;
+  user_id: number;
+  voter_name: string;
+  answers: Record<string, any>; // e.g. {"2026-08-15": {"09:00": "◎"}}
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Poll {
+  id: number;
+  user_id: number;
+  title: string;
+  description?: string;
+  type: 'survey' | 'schedule';
+  status: 'open' | 'closed';
+  deadline?: string;
+  settings: any;
+  shared_id?: string;
+  created_at: string;
+  updated_at: string;
+  options?: PollOption[];
+  votes?: PollVote[];
 }

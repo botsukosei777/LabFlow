@@ -1,20 +1,46 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, Edit2, Trash2, FileText } from 'lucide-react';
+import { Plus, Edit2, Trash2, FileText, Share2, RefreshCw, Unlink, Download } from 'lucide-react';
 import { api } from '../api/client';
+import { supabasePost, supabaseDelete } from '../api/supabaseClient';
+import { ToastContext } from '../App';
 import type { SubProtocol } from '../types';
 import MDEditor from '@uiw/react-md-editor';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { ShareModal } from '../components/ShareModal';
+import { ImportModal } from '../components/ImportModal';
 
 export default function SubProtocols() {
   const { t } = useTranslation();
+  const { addToast } = useContext(ToastContext);
   const [subProtocols, setSubProtocols] = useState<SubProtocol[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [showModal, setShowModal] = useState(false);
   const [editingSubProtocol, setEditingSubProtocol] = useState<SubProtocol | null>(null);
   const [subProtocolForm, setSubProtocolForm] = useState({ name: '', content: '' });
+  const [shareTarget, setShareTarget] = useState<{ id: number; name: string } | null>(null);
+  const [showImport, setShowImport] = useState(false);
+
+  const syncSharedSubProtocol = async (id: number) => {
+    try {
+      await supabasePost(`/shared/sub-protocols/${id}/sync`, {});
+      addToast('success', t('common.syncSuccess', { defaultValue: 'チームへ更新内容を送信しました' }));
+    } catch (error: any) {
+      addToast('error', error.message || t('common.errorOccurred'));
+    }
+  };
+
+  const unshareSharedSubProtocol = async (id: number) => {
+    if (!window.confirm(t('common.confirmUnshare', { defaultValue: 'すべてのチームから共有を解除しますか？' }))) return;
+    try {
+      await supabaseDelete(`/shared/sub-protocols/local/${id}`);
+      addToast('success', t('common.unshareSuccess', { defaultValue: '共有を解除しました' }));
+    } catch (error: any) {
+      addToast('error', error.message || t('common.errorOccurred'));
+    }
+  };
 
   useEffect(() => {
     fetchSubProtocols();
@@ -77,9 +103,14 @@ export default function SubProtocols() {
           <h2 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 600 }}>サブプロトコル</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-sm)' }}>再利用可能な手順や試薬表を管理します。ここで登録したサブプロトコルは、各実験種のステップに割り当てることができます。</p>
         </div>
-        <button className="btn btn-primary" onClick={openAddModal}>
-          <Plus size={20} /> 新規作成
-        </button>
+        <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+          <button className="btn btn-secondary" onClick={() => setShowImport(true)}>
+            <Download size={20} /> チームからインポート
+          </button>
+          <button className="btn btn-primary" onClick={openAddModal}>
+            <Plus size={20} /> 新規作成
+          </button>
+        </div>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
@@ -88,6 +119,30 @@ export default function SubProtocols() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--space-md)' }}>
               <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600 }}>{sp.name}</h3>
               <div style={{ display: 'flex', gap: 'var(--space-xs)' }}>
+                <button
+                  className="btn btn-ghost btn-icon btn-sm"
+                  onClick={() => syncSharedSubProtocol(sp.id)}
+                  title={t('common.syncToTeam', { defaultValue: 'チームへ更新内容を送信' })}
+                  style={{ color: 'var(--color-primary)' }}
+                >
+                  <RefreshCw size={16} />
+                </button>
+                <button
+                  className="btn btn-ghost btn-icon btn-sm"
+                  onClick={() => unshareSharedSubProtocol(sp.id)}
+                  title={t('common.unshare', { defaultValue: 'チーム共有解除' })}
+                  style={{ color: 'var(--color-warning)' }}
+                >
+                  <Unlink size={16} />
+                </button>
+                <button
+                  className="btn btn-ghost btn-icon btn-sm"
+                  onClick={() => setShareTarget({ id: sp.id, name: sp.name })}
+                  title={t('common.share', 'Share')}
+                  style={{ color: 'var(--color-info)' }}
+                >
+                  <Share2 size={16} />
+                </button>
                 <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openEditModal(sp)}><Edit2 size={16} /></button>
                 <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-danger)' }} onClick={() => handleDelete(sp.id)}><Trash2 size={16} /></button>
               </div>
@@ -140,6 +195,28 @@ export default function SubProtocols() {
           </div>
         </div>
       )}
+
+      {shareTarget && (
+        <ShareModal
+          isOpen={true}
+          onClose={() => setShareTarget(null)}
+          itemType="sub-protocols"
+          localItemId={shareTarget.id}
+          itemName={shareTarget.name}
+          onSuccess={() => {
+            setShareTarget(null);
+            fetchSubProtocols();
+          }}
+        />
+      )}
+
+      {/* Import Modal */}
+      <ImportModal
+        isOpen={showImport}
+        onClose={() => setShowImport(false)}
+        itemType="sub-protocols"
+        onSuccess={() => { setShowImport(false); fetchSubProtocols(); }}
+      />
     </div>
   );
 }

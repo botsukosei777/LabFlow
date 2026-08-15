@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import db from '../db/database.js';
 import { recalculateBlockSchedule } from '../services/scheduleHelper.js';
+import { getLocalTodayStr, toLocalYYYYMMDD } from '../utils/date.js';
 
 const router = Router();
 
@@ -11,6 +12,42 @@ function addMinutes(timeStr: string, minutes: number): string {
   date.setMinutes(date.getMinutes() + (minutes || 0));
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
+
+// GET overdue scheduled steps/blocks (before today, not completed)
+router.get('/overdue', (req, res) => {
+  const today = getLocalTodayStr();
+  const blocks = db.prepare(`
+    SELECT sb.*, se.label, se.mode, se.status as experiment_status,
+           p.name as protocol_name, e.name as experiment_type_name, COALESCE(se.color, p.color, e.color) as color,
+           b.name as block_name, b.description as block_description
+    FROM scheduled_blocks sb
+    JOIN scheduled_experiments se ON sb.scheduled_experiment_id = se.id
+    JOIN protocols p ON se.protocol_id = p.id
+    JOIN experiment_types e ON p.experiment_type_id = e.id
+    JOIN protocol_blocks pb ON sb.protocol_block_id = pb.id
+    JOIN blocks b ON pb.block_id = b.id
+    WHERE sb.scheduled_date < ? AND se.status != 'cancelled' AND se.user_id = ? AND sb.status != 'completed'
+    ORDER BY sb.scheduled_date ASC, se.start_date ASC
+  `).all(today, req.userId) as any[];
+  
+  for (const block of blocks) {
+    if (block.mode === 'management') {
+      block.steps = db.prepare(`
+        SELECT ss.*, bs.order_index, s.name as step_name, s.description as step_description, 
+               s.duration_minutes, s.is_overnight, s.sub_protocol
+        FROM scheduled_steps ss
+        JOIN block_steps bs ON ss.block_step_id = bs.id
+        JOIN steps s ON bs.step_id = s.id
+        WHERE ss.scheduled_block_id = ? AND ss.status != 'completed'
+        ORDER BY bs.order_index
+      `).all(block.id);
+    }
+  }
+  
+  // Filter out management blocks where all steps are completed (though block status should ideally handle this)
+  const overdueBlocks = blocks.filter(b => b.mode === 'management' ? b.steps?.length > 0 : b.status !== 'completed');
+  res.json(overdueBlocks);
+});
 
 // GET scheduled experiments for date range
 router.get('/', (req, res) => {
@@ -48,7 +85,7 @@ router.get('/', (req, res) => {
 
 // GET today's schedule
 router.get('/today', (req, res) => {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalTodayStr();
   const blocks = db.prepare(`
     SELECT sb.*, se.label, se.mode, se.status as experiment_status,
            p.name as protocol_name, e.name as experiment_type_name, COALESCE(se.color, p.color, e.color) as color,
@@ -338,7 +375,7 @@ router.post('/:id/postpone', (req, res) => {
     for (const b of blocksToShift) {
       const bDate = new Date(b.scheduled_date + 'T00:00:00');
       bDate.setDate(bDate.getDate() + 1);
-      updateDate.run(bDate.toISOString().split('T')[0], b.id);
+      updateDate.run(toLocalYYYYMMDD(bDate), b.id);
     }
     
     // Create new block on target date
@@ -409,7 +446,7 @@ router.post('/:id/delay', (req, res) => {
   for (const b of allBlocks) {
     const bDate = new Date(b.scheduled_date + 'T00:00:00');
     bDate.setDate(bDate.getDate() + deltaDays);
-    updateBlock.run(bDate.toISOString().split('T')[0], b.id);
+    updateBlock.run(toLocalYYYYMMDD(bDate), b.id);
   }
   res.json({ message: 'Schedule updated', delta_days: deltaDays });
 });
@@ -452,7 +489,7 @@ router.put('/steps/:stepId/complete', (req, res) => {
   const now = new Date();
   const offsetMs = now.getTimezoneOffset() * 60 * 1000;
   const localNow = new Date(now.getTime() - offsetMs);
-  const todayDateStr = localNow.toISOString().split('T')[0];
+  const todayDateStr = toLocalYYYYMMDD(localNow);
   const currentHM = `${String(localNow.getUTCHours()).padStart(2, '0')}:${String(localNow.getUTCMinutes()).padStart(2, '0')}`;
 
   if (stepInfo.scheduled_date === todayDateStr && currentHM > stepInfo.end_time) {
@@ -493,12 +530,12 @@ router.put('/steps/:stepId/complete', (req, res) => {
   `).get(req.params.stepId) as any;
 
   if (stepConfig && stepConfig.routine_name) {
-    const startStr = localNow.toISOString().split('T')[0];
+    const startStr = toLocalYYYYMMDD(localNow);
     let endStr = startStr;
     if (stepConfig.routine_duration_days) {
       const d = new Date(localNow.getTime());
       d.setDate(d.getDate() + (stepConfig.routine_duration_days - 1));
-      endStr = d.toISOString().split('T')[0];
+      endStr = toLocalYYYYMMDD(d);
     }
     
     // Prevent duplicates (same name, same start date)

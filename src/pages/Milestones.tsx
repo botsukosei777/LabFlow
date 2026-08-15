@@ -1,7 +1,8 @@
 import { useState, useEffect, useContext } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Target, Plus, Trash2, Edit, ChevronDown, ChevronUp, CheckCircle2, MinusCircle, Share2, Download } from 'lucide-react';
+import { Target, Plus, Trash2, Edit, ChevronDown, ChevronUp, CheckCircle2, MinusCircle, Share2, Download, RefreshCw, Unlink } from 'lucide-react';
 import { api } from '../api/client';
+import { supabasePost, supabaseDelete } from '../api/supabaseClient';
 import { ToastContext } from '../App';
 import type { Milestone, MilestoneItem } from '../types';
 import { ShareModal } from '../components/ShareModal';
@@ -74,6 +75,25 @@ export default function Milestones() {
       });
       fetchMilestones();
     } catch (e) { addToast('error', t('common.errorOccurred')); }
+  };
+
+  const syncSharedMilestone = async (id: number) => {
+    try {
+      await supabasePost(`/shared/milestones/${id}/sync`, {});
+      addToast('success', t('common.syncSuccess', { defaultValue: 'チームへ更新内容を送信しました' }));
+    } catch (error: any) {
+      addToast('error', error.message || t('common.errorOccurred'));
+    }
+  };
+
+  const unshareSharedMilestone = async (id: number) => {
+    if (!window.confirm(t('common.confirmUnshare', { defaultValue: 'すべてのチームから共有を解除しますか？' }))) return;
+    try {
+      await supabaseDelete(`/shared/milestones/local/${id}`);
+      addToast('success', t('common.unshareSuccess', { defaultValue: '共有を解除しました' }));
+    } catch (error: any) {
+      addToast('error', error.message || t('common.errorOccurred'));
+    }
   };
 
   const updateItemCount = async (item: MilestoneItem, newCount: number) => {
@@ -238,6 +258,8 @@ export default function Milestones() {
                       </button>
                     )}
 
+                    <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-primary)' }} onClick={() => syncSharedMilestone(ms.id)} title={t('milestones.syncToTeam', { defaultValue: 'チームへ更新内容を送信' })}><RefreshCw size={14} /></button>
+                    <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-warning)' }} onClick={() => unshareSharedMilestone(ms.id)} title={t('common.unshare', { defaultValue: 'チーム共有解除' })}><Unlink size={14} /></button>
                     <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-info)' }} onClick={() => setShareTarget({ id: ms.id, name: ms.name })} title={t('common.share', 'Share')}><Share2 size={14} /></button>
                     <button className="btn btn-ghost btn-icon btn-sm" onClick={() => { setEditingMs(ms); setMsForm({ name: ms.name, description: ms.description, deadline: ms.deadline || '' }); setShowModal(true); }}><Edit size={14} /></button>
                     <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-danger)' }} onClick={async () => {

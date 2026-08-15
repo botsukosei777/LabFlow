@@ -1,8 +1,9 @@
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { FlaskConical, Plus, Trash2, ChevronRight, Beaker, Share2, Download } from 'lucide-react';
+import { FlaskConical, Plus, Trash2, ChevronRight, Beaker, Share2, Download, RefreshCw, Unlink } from 'lucide-react';
 import { api } from '../api/client';
+import { supabasePost, supabaseDelete } from '../api/supabaseClient';
 import { ToastContext } from '../App';
 import type { ExperimentType } from '../types';
 import SubProtocols from './SubProtocols';
@@ -66,6 +67,25 @@ export default function ExperimentTypes() {
       fetchExperiments();
     } catch (error) {
       addToast('error', t('common.errorOccurred'));
+    }
+  };
+
+  const syncSharedExperimentType = async (id: number) => {
+    try {
+      await supabasePost(`/shared/experiment-types/${id}/sync`, {});
+      addToast('success', t('common.syncSuccess', { defaultValue: 'チームへ更新内容を送信しました' }));
+    } catch (error: any) {
+      addToast('error', error.message || t('common.errorOccurred'));
+    }
+  };
+
+  const unshareSharedExperimentType = async (id: number) => {
+    if (!window.confirm(t('common.confirmUnshare', { defaultValue: 'すべてのチームから共有を解除しますか？' }))) return;
+    try {
+      await supabaseDelete(`/shared/experiment-types/local/${id}`);
+      addToast('success', t('common.unshareSuccess', { defaultValue: '共有を解除しました' }));
+    } catch (error: any) {
+      addToast('error', error.message || t('common.errorOccurred'));
     }
   };
 
@@ -137,12 +157,28 @@ export default function ExperimentTypes() {
               style={{ cursor: 'pointer', animationDelay: `${index * 50}ms`, position: 'relative' }}
               onClick={() => navigate(`/experiments/${exp.id}`)}
             >
-              <div className="card-header">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
-                  <div className="color-dot" style={{ backgroundColor: exp.color, width: 16, height: 16 }} />
-                  <h3 className="card-title">{exp.name}</h3>
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', width: '100%', marginBottom: '12px' }}>
+                  <div className="color-dot" style={{ backgroundColor: exp.color, width: 16, height: 16, flexShrink: 0, borderRadius: '50%' }} />
+                  <h3 className="card-title" style={{ flex: 1, wordBreak: 'break-word', overflowWrap: 'break-word', whiteSpace: 'normal' }}>{exp.name}</h3>
                 </div>
-                <div style={{ display: 'flex', gap: 'var(--space-xs)' }}>
+                <div style={{ display: 'flex', gap: 'var(--space-xs)', flexWrap: 'wrap' }}>
+                  <button
+                    className="btn btn-ghost btn-icon btn-sm"
+                    onClick={(e) => { e.stopPropagation(); syncSharedExperimentType(exp.id); }}
+                    title={t('common.syncToTeam', { defaultValue: 'チームへ更新内容を送信' })}
+                    style={{ color: 'var(--color-primary)' }}
+                  >
+                    <RefreshCw size={14} />
+                  </button>
+                  <button
+                    className="btn btn-ghost btn-icon btn-sm"
+                    onClick={(e) => { e.stopPropagation(); unshareSharedExperimentType(exp.id); }}
+                    title={t('common.unshare', { defaultValue: 'チーム共有解除' })}
+                    style={{ color: 'var(--color-warning)' }}
+                  >
+                    <Unlink size={14} />
+                  </button>
                   <button
                     className="btn btn-ghost btn-icon btn-sm"
                     onClick={(e) => { e.stopPropagation(); setShareTarget({ id: exp.id, name: exp.name }); }}

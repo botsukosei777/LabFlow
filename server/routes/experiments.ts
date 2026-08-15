@@ -139,7 +139,7 @@ router.post('/:experimentId/steps/import', (req, res) => {
   const result = insertStep.run(
     req.params.experimentId,
     sourceStep.pattern_label,
-    sourceStep.name + ' (コピー)',
+    sourceStep.name + ' (繧ｳ繝斐・)',
     sourceStep.description,
     sourceStep.duration_minutes,
     sourceStep.is_overnight,
@@ -194,7 +194,7 @@ router.put('/blocks/:blockId', (req, res) => {
           const stepInfo = getStep.get(node.step_id) as any;
           // Overnight step is allowed only in the last stage
           if (stepInfo?.is_overnight === 1 && i !== step_nodes.length - 1) {
-            return res.status(400).json({ message: 'オーバーナイトのステップはブロックの最後にしか配置できません。' });
+            return res.status(400).json({ message: 'オーバーナイトステップはブロックの最後にしか配置できません' });
           }
           insertBlockStep.run(req.params.blockId, node.step_id, i, j, node.delay_minutes || 0);
         }
@@ -225,7 +225,7 @@ router.post('/blocks/:blockId/copy', (req, res) => {
 
   const newBlock = db.prepare(
     'INSERT INTO blocks (experiment_type_id, pattern_label, name, description, order_index) VALUES (?, ?, ?, ?, ?)'
-  ).run(block.experiment_type_id, block.pattern_label, `${block.name} - コピー`, block.description, block.order_index);
+  ).run(block.experiment_type_id, block.pattern_label, `${block.name} - 繧ｳ繝斐・`, block.description, block.order_index);
   
   const newBlockId = newBlock.lastInsertRowid;
   
@@ -277,7 +277,7 @@ router.post('/protocols/:protocolId/copy', (req, res) => {
 
   const newProtocol = db.prepare(
     'INSERT INTO protocols (experiment_type_id, name, description, color, user_id) VALUES (?, ?, ?, ?, ?)'
-  ).run(protocol.experiment_type_id, `${protocol.name} - コピー`, protocol.description, protocol.color, req.userId);
+  ).run(protocol.experiment_type_id, `${protocol.name} - 繧ｳ繝斐・`, protocol.description, protocol.color, req.userId);
   
   const newProtocolId = newProtocol.lastInsertRowid;
   
@@ -440,7 +440,7 @@ router.post('/:id/blocks', (req, res) => {
           const stepInfo = getStep.get(node.step_id) as any;
           if (stepInfo?.is_overnight === 1 && i !== step_nodes.length - 1) {
             db.prepare('DELETE FROM blocks WHERE id = ?').run(blockId); // Rollback
-            return res.status(400).json({ message: 'オーバーナイトのステップはブロックの最後にしか配置できません。' });
+            return res.status(400).json({ message: 'オーバーナイトステップはブロックの最後にしか配置できません' });
           }
           insertBlockStep.run(blockId, node.step_id, i, j, node.delay_minutes || 0);
         }

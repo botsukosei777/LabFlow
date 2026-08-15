@@ -78,7 +78,8 @@ function initDb() {
   try { dbInstance.exec("ALTER TABLE milestone_sub_items ADD COLUMN target_count INTEGER DEFAULT 1"); } catch(e) {}
   try { dbInstance.exec("ALTER TABLE milestone_sub_items ADD COLUMN current_count INTEGER DEFAULT 0"); } catch(e) {}
   try { dbInstance.exec("ALTER TABLE milestone_items ADD COLUMN unit TEXT DEFAULT ''"); } catch(e) {}
-  
+  try { dbInstance.exec("ALTER TABLE shared_reagents ADD COLUMN original_local_id INTEGER"); } catch(e) {} // Not needed locally but maybe keep it clean
+  try { dbInstance.exec("ALTER TABLE reagents ADD COLUMN shared_id TEXT"); } catch(e) {}  
   // Migration for branched parallel steps
   try { dbInstance.exec("ALTER TABLE block_steps ADD COLUMN branch_index INTEGER NOT NULL DEFAULT 0"); } catch(e) {}
   try { dbInstance.exec("ALTER TABLE milestone_sub_items ADD COLUMN unit TEXT DEFAULT ''"); } catch(e) {}

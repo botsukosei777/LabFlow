@@ -18,6 +18,8 @@ const Milestones = lazy(() => import('./pages/Milestones'));
 const Inventory = lazy(() => import('./pages/Inventory'));
 const Routines = lazy(() => import('./pages/Routines'));
 const Teams = lazy(() => import('./pages/Teams'));
+const Polls = lazy(() => import('./pages/Polls'));
+const PollDetail = lazy(() => import('./pages/PollDetail'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
@@ -85,6 +87,8 @@ export default function App() {
                     <Route path="/inventory" element={<Inventory />} />
                     <Route path="/routines" element={<Routines />} />
                     <Route path="/teams" element={<Teams />} />
+                    <Route path="/polls" element={<Polls />} />
+                    <Route path="/polls/:id" element={<PollDetail />} />
                     <Route path="/settings" element={<Settings />} />
                   </Route>
                 </Route>

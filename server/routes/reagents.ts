@@ -34,15 +34,15 @@ router.get('/alerts', (req, res) => {
 
 // POST create reagent
 router.post('/', (req, res) => {
-  const { name, description, category, quantity_trackable, current_quantity, min_quantity, unit, supplier, catalog_number } = req.body;
+  const { name, description, category, quantity_trackable, current_quantity, min_quantity, unit, supplier, catalog_number, location } = req.body;
   if (!name) return res.status(400).json({ message: 'Name is required' });
   
   const result = db.prepare(`
-    INSERT INTO reagents (user_id, name, description, category, quantity_trackable, current_quantity, min_quantity, unit, supplier, catalog_number)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO reagents (user_id, name, description, category, quantity_trackable, current_quantity, min_quantity, unit, supplier, catalog_number, location)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     req.userId, name, description || '', category || '', quantity_trackable ? 1 : 0,
-    current_quantity || 0, min_quantity || 0, unit || '', supplier || '', catalog_number || ''
+    current_quantity || 0, min_quantity || 0, unit || '', supplier || '', catalog_number || '', location || ''
   );
   const created = db.prepare('SELECT * FROM reagents WHERE id = ? AND user_id = ?').get(result.lastInsertRowid, req.userId);
   res.status(201).json(created);
@@ -50,15 +50,15 @@ router.post('/', (req, res) => {
 
 // PUT update reagent
 router.put('/:id', (req, res) => {
-  const { name, description, category, quantity_trackable, current_quantity, min_quantity, unit, is_depleted, supplier, catalog_number } = req.body;
+  const { name, description, category, quantity_trackable, current_quantity, min_quantity, unit, is_depleted, supplier, catalog_number, location } = req.body;
   db.prepare(`
     UPDATE reagents SET name = ?, description = ?, category = ?, quantity_trackable = ?,
-    current_quantity = ?, min_quantity = ?, unit = ?, is_depleted = ?, supplier = ?, catalog_number = ?,
+    current_quantity = ?, min_quantity = ?, unit = ?, is_depleted = ?, supplier = ?, catalog_number = ?, location = ?,
     updated_at = datetime('now', 'localtime')
     WHERE id = ? AND user_id = ?
   `).run(
     name, description, category, quantity_trackable ? 1 : 0,
-    current_quantity, min_quantity, unit, is_depleted ? 1 : 0, supplier, catalog_number,
+    current_quantity, min_quantity, unit, is_depleted ? 1 : 0, supplier, catalog_number, location || '',
     req.params.id, req.userId
   );
   const updated = db.prepare('SELECT * FROM reagents WHERE id = ? AND user_id = ?').get(req.params.id, req.userId);
@@ -71,7 +71,7 @@ router.post('/:id/deplete', (req, res) => {
   if (!reagent) return res.status(404).json({ message: 'Not found' });
   
   const newVal = reagent.is_depleted ? 0 : 1;
-  db.prepare('UPDATE reagents SET is_depleted = ?, updated_at = datetime("now", "localtime") WHERE id = ? AND user_id = ?').run(newVal, req.params.id, req.userId);
+  db.prepare(`UPDATE reagents SET is_depleted = ?, updated_at = datetime('now', 'localtime') WHERE id = ? AND user_id = ?`).run(newVal, req.params.id, req.userId);
   const updated = db.prepare('SELECT * FROM reagents WHERE id = ? AND user_id = ?').get(req.params.id, req.userId);
   res.json(updated);
 });

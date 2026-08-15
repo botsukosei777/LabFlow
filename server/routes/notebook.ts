@@ -66,20 +66,21 @@ router.get('/:id', (req, res) => {
 
 // POST new notebook
 router.post('/', (req, res) => {
-  const { title, content, date, scheduled_experiment_id } = req.body;
+  const { title, content, date, scheduled_experiment_id, tags } = req.body;
   if (!title || !date) {
     return res.status(400).json({ message: 'Title and date are required' });
   }
 
   const result = db.prepare(`
-    INSERT INTO notebooks (user_id, title, content, date, scheduled_experiment_id)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO notebooks (user_id, title, content, date, scheduled_experiment_id, tags)
+    VALUES (?, ?, ?, ?, ?, ?)
   `).run(
     req.userId,
     title,
     '', // We'll store it in file, but DB gets empty string or content
     date,
-    scheduled_experiment_id || null
+    scheduled_experiment_id || null,
+    JSON.stringify(tags || [])
   );
 
   const newId = result.lastInsertRowid;
@@ -96,7 +97,7 @@ router.post('/', (req, res) => {
 
 // PUT update notebook
 router.put('/:id', (req, res) => {
-  const { title, content, date, scheduled_experiment_id } = req.body;
+  const { title, content, date, scheduled_experiment_id, tags } = req.body;
   if (!title || !date) {
     return res.status(400).json({ message: 'Title and date are required' });
   }
@@ -114,7 +115,7 @@ router.put('/:id', (req, res) => {
 
   db.prepare(`
     UPDATE notebooks 
-    SET title = ?, content = ?, file_path = ?, date = ?, scheduled_experiment_id = ?, updated_at = datetime('now', 'localtime')
+    SET title = ?, content = ?, file_path = ?, date = ?, scheduled_experiment_id = ?, tags = ?, updated_at = datetime('now', 'localtime')
     WHERE id = ?
   `).run(
     title,
@@ -122,6 +123,7 @@ router.put('/:id', (req, res) => {
     fileName,
     date,
     scheduled_experiment_id || null,
+    JSON.stringify(tags || []),
     req.params.id
   );
 
