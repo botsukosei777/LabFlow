@@ -965,11 +965,38 @@ router.post('/milestones', async (req: Request, res: Response) => {
         order_index: item.order_index
       }));
       
-      const { error: itemsError } = await supabase
+      const { data: insertedItems, error: itemsError } = await supabase
         .from('shared_milestone_items')
-        .insert(itemInserts);
+        .insert(itemInserts)
+        .select();
         
       if (itemsError) throw itemsError;
+      
+      if (insertedItems) {
+        const subItemInserts = [];
+        for (const localItem of localItems) {
+          const insertedItem = insertedItems.find(i => i.name === localItem.name && i.order_index === localItem.order_index);
+          if (insertedItem) {
+            const localSubItems = db.prepare('SELECT * FROM milestone_sub_items WHERE milestone_item_id = ?').all(localItem.id) as any[];
+            for (const sub of localSubItems) {
+              subItemInserts.push({
+                milestone_item_id: insertedItem.id,
+                name: sub.name,
+                data_type: sub.data_type,
+                target_count: sub.target_count,
+                current_count: sub.current_count,
+                unit: sub.unit,
+                is_completed: sub.is_completed ? true : false,
+                order_index: sub.order_index
+              });
+            }
+          }
+        }
+        if (subItemInserts.length > 0) {
+          const { error: subItemsError } = await supabase.from('shared_milestone_sub_items').insert(subItemInserts);
+          if (subItemsError) throw subItemsError;
+        }
+      }
     }
     
     res.status(201).json(sharedMilestone);
@@ -1050,7 +1077,39 @@ router.post('/milestones/:id/sync', async (req: Request, res: Response) => {
           is_completed: item.is_completed ? true : false,
           order_index: item.order_index
         }));
-        await supabase.from('shared_milestone_items').insert(itemInserts);
+        
+        const { data: insertedItems, error: itemsError } = await supabase
+          .from('shared_milestone_items')
+          .insert(itemInserts)
+          .select();
+          
+        if (itemsError) throw itemsError;
+        
+        if (insertedItems) {
+          const subItemInserts = [];
+          for (const localItem of localItems) {
+            const insertedItem = insertedItems.find(i => i.name === localItem.name && i.order_index === localItem.order_index);
+            if (insertedItem) {
+              const localSubItems = db.prepare('SELECT * FROM milestone_sub_items WHERE milestone_item_id = ?').all(localItem.id) as any[];
+              for (const sub of localSubItems) {
+                subItemInserts.push({
+                  milestone_item_id: insertedItem.id,
+                  name: sub.name,
+                  data_type: sub.data_type,
+                  target_count: sub.target_count,
+                  current_count: sub.current_count,
+                  unit: sub.unit,
+                  is_completed: sub.is_completed ? true : false,
+                  order_index: sub.order_index
+                });
+              }
+            }
+          }
+          if (subItemInserts.length > 0) {
+            const { error: subItemsError } = await supabase.from('shared_milestone_sub_items').insert(subItemInserts);
+            if (subItemsError) throw subItemsError;
+          }
+        }
       }
     }
 
@@ -1068,7 +1127,7 @@ router.post('/milestones/:id/import', async (req: Request, res: Response) => {
     
     const { data: sharedMilestone, error } = await supabase
       .from('shared_milestones')
-      .select('*, items:shared_milestone_items(*)')
+      .select('*, items:shared_milestone_items(*, sub_items:shared_milestone_sub_items(*))')
       .eq('id', id)
       .single();
       
@@ -1087,8 +1146,19 @@ router.post('/milestones/:id/import', async (req: Request, res: Response) => {
           INSERT INTO milestone_items (milestone_id, name, data_type, target_count, current_count, unit, is_completed, order_index, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `);
+        const insertSubItem = db.prepare(`
+          INSERT INTO milestone_sub_items (milestone_item_id, name, data_type, target_count, current_count, unit, is_completed, order_index)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `);
         for (const item of sharedMilestone.items) {
-          insertItem.run(newMilestoneId, item.name, item.data_type, item.target_count, item.current_count, item.unit, item.is_completed ? 1 : 0, item.order_index);
+          const itemInfo = insertItem.run(newMilestoneId, item.name, item.data_type, item.target_count, item.current_count, item.unit, item.is_completed ? 1 : 0, item.order_index);
+          const newItemId = itemInfo.lastInsertRowid;
+          
+          if (item.sub_items && item.sub_items.length > 0) {
+            for (const sub of item.sub_items) {
+              insertSubItem.run(newItemId, sub.name, sub.data_type, sub.target_count, sub.current_count, sub.unit, sub.is_completed ? 1 : 0, sub.order_index);
+            }
+          }
         }
       }
       

@@ -8,8 +8,7 @@ import type { Poll } from '../types';
 import { ShareModal } from '../components/ShareModal';
 import { format, addDays, parseISO } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { supabasePost } from '../api/supabaseClient';
-
+import { supabasePost, supabaseGet } from '../api/supabaseClient';
 export default function Polls() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -46,16 +45,22 @@ export default function Polls() {
 
   const syncTeamPolls = async () => {
     try {
-      const teamIdStr = localStorage.getItem('labflow-active-team');
-      if (teamIdStr) {
-        const teamId = parseInt(teamIdStr, 10);
-        if (!isNaN(teamId)) {
-          const res = await supabasePost<{updatedCount: number}>('/shared/polls/sync-all', { team_id: teamId });
+      // Fetch all teams the user belongs to
+      const teams = await supabaseGet<any[]>('/teams').catch(() => []);
+      let totalUpdated = 0;
+      
+      for (const team of teams) {
+        if (team && team.id) {
+          const res = await supabasePost<{updatedCount: number}>('/shared/polls/sync-all', { team_id: team.id }).catch(() => null);
           if (res && res.updatedCount > 0) {
-            fetchPolls();
-            addToast('info', 'チームの新しい投票データを受信しました');
+            totalUpdated += res.updatedCount;
           }
         }
+      }
+
+      if (totalUpdated > 0) {
+        fetchPolls();
+        addToast('info', 'チームの新しい投票データを受信しました');
       }
     } catch (e) {
       console.error('Poll auto-sync error:', e);

@@ -46,7 +46,11 @@ export default function PollDetail() {
       const data = await api.get<Poll>(`/polls/${id}`);
       setPoll(data);
       
-      const existingVote = data.votes?.find(v => v.user_id === user?.id);
+      const existingVote = data.votes?.find((v: any) => 
+        v.user_id === user?.id || 
+        v.voter_name === (user as any)?.supabase_username || 
+        v.voter_name === user?.username
+      );
       if (existingVote) {
         setMyVote(existingVote.answers || {});
       }
@@ -59,17 +63,53 @@ export default function PollDetail() {
   };
 
   useEffect(() => {
-    if (id) fetchPoll();
-  }, [id]);
+    fetchPoll();
+    
+    // Auto-sync if this poll is shared
+    const triggerSync = async () => {
+      try {
+        const teams = await supabaseGet<any[]>('/teams').catch(() => []);
+        if (teams && teams.length > 0) {
+          for (const team of teams) {
+            await supabasePost('/shared/polls/sync-all', { team_id: team.id }).catch(() => null);
+          }
+          // Fetch again to get incoming votes
+          const pollData = await api.get<Poll>(`/polls/${id}`);
+          setPoll(pollData);
+          const existingVote = pollData.votes?.find((v: any) => 
+            v.user_id === user?.id || 
+            v.voter_name === (user as any)?.supabase_username || 
+            v.voter_name === user?.username
+          );
+          if (existingVote) setMyVote(existingVote.answers || {});
+        }
+      } catch (e) {}
+    };
+    
+    // Slight delay to not block UI render
+    setTimeout(triggerSync, 500);
+  }, [id, user?.id]);
 
   const handleVoteSubmit = async () => {
     if (!poll) return;
     try {
       await api.post(`/polls/${poll.id}/vote`, {
-        voter_name: user?.username || 'Unknown',
+        voter_name: (user as any)?.supabase_username || user?.username || 'Unknown',
         answers: myVote
       });
       addToast('success', '回答を送信しました');
+      
+      if (poll.shared_id) {
+        try {
+          const teams = await supabaseGet<any[]>('/teams').catch(() => []);
+          if (teams && teams.length > 0) {
+            for (const team of teams) {
+              await supabasePost('/shared/polls/sync-all', { team_id: team.id }).catch(() => null);
+            }
+          }
+        } catch(e) {}
+      }
+      
       fetchPoll();
     } catch (e) {
       addToast('error', 'Failed to submit vote');
@@ -90,13 +130,9 @@ export default function PollDetail() {
     }
   };
 
-  const isCreator = poll.user_id === user?.id;
+  const isCreator = poll.user_id === user?.id && !poll.settings?.is_imported;
 
-  const handleShare = () => {
-    navigator.clipboard.writeText(window.location.href)
-      .then(() => addToast('success', 'URLをクリップボードにコピーしました'))
-      .catch(() => addToast('error', 'URLのコピーに失敗しました'));
-  };
+
 
   return (
     <div className="poll-detail-page p-6 max-w-7xl mx-auto">
@@ -128,24 +164,18 @@ export default function PollDetail() {
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold">{poll.title}</h1>
           <div className="flex flex-wrap items-center gap-2 mt-3 md:mt-0">
-            <button 
-              onClick={() => {
-                fetchTeams();
-                setShowShareModal(true);
-              }}
-              className="text-sm font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 dark:text-indigo-400 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shrink-0"
-            >
-              <Users size={16} />
-              チームに共有
-            </button>
-            <button 
-              onClick={handleShare}
-              className="text-sm font-medium text-gray-600 bg-gray-100 hover:bg-indigo-50 hover:text-indigo-600 dark:text-gray-300 dark:bg-gray-700 dark:hover:bg-indigo-900/40 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shrink-0"
-              title="このページのURLをコピー"
-            >
-              <Share2 size={16} />
-              URLコピー
-            </button>
+            {isCreator && (
+              <button 
+                onClick={() => {
+                  fetchTeams();
+                  setShowShareModal(true);
+                }}
+                className="text-sm font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 dark:text-indigo-400 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shrink-0"
+              >
+                <Users size={16} />
+                チームに共有
+              </button>
+            )}
           </div>
         </div>
         {poll.description && (
@@ -798,6 +828,24 @@ function ScheduleMatrix({ poll, myVote, setMyVote, isCreator, onRefresh, viewMod
             </div>
           )}
         </h2>
+
+        {viewMode === 'results' && (
+          <div className="mt-4 flex gap-2 items-center text-sm">
+            <span className="font-medium text-gray-600 dark:text-gray-300">回答者 ({poll.votes?.length || 0}人):</span>
+            <div className="flex flex-wrap gap-1.5">
+              {poll.votes && poll.votes.length > 0 ? (
+                poll.votes.map((v: any, idx: number) => (
+                  <span key={idx} className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-md text-gray-600 dark:text-gray-300 text-xs flex items-center gap-1">
+                    {v.voter_name}
+                    {v.answers['_attendance'] === false && <span className="text-rose-500 text-[10px]">(不参加)</span>}
+                  </span>
+                ))
+              ) : (
+                <span className="text-gray-400 text-xs">まだ回答がありません</span>
+              )}
+            </div>
+          </div>
+        )}
 
         {showSettings && viewMode === 'vote' && (
           <form onSubmit={handleSaveSettings} className="mt-4 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700">

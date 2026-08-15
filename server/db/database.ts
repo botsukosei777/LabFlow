@@ -78,8 +78,11 @@ function initDb() {
   try { dbInstance.exec("ALTER TABLE milestone_sub_items ADD COLUMN target_count INTEGER DEFAULT 1"); } catch(e) {}
   try { dbInstance.exec("ALTER TABLE milestone_sub_items ADD COLUMN current_count INTEGER DEFAULT 0"); } catch(e) {}
   try { dbInstance.exec("ALTER TABLE milestone_items ADD COLUMN unit TEXT DEFAULT ''"); } catch(e) {}
+  try { dbInstance.exec("ALTER TABLE milestone_items ADD COLUMN updated_at TEXT"); } catch(e) {}
+  try { dbInstance.exec("ALTER TABLE milestone_sub_items ADD COLUMN updated_at TEXT"); } catch(e) {}
   try { dbInstance.exec("ALTER TABLE shared_reagents ADD COLUMN original_local_id INTEGER"); } catch(e) {} // Not needed locally but maybe keep it clean
   try { dbInstance.exec("ALTER TABLE reagents ADD COLUMN shared_id TEXT"); } catch(e) {}  
+  try { dbInstance.exec("ALTER TABLE reagents ADD COLUMN location TEXT DEFAULT ''"); } catch(e) {}
   // Migration for branched parallel steps
   try { dbInstance.exec("ALTER TABLE block_steps ADD COLUMN branch_index INTEGER NOT NULL DEFAULT 0"); } catch(e) {}
   try { dbInstance.exec("ALTER TABLE milestone_sub_items ADD COLUMN unit TEXT DEFAULT ''"); } catch(e) {}
@@ -96,6 +99,36 @@ function initDb() {
       )
     `);
   } catch(e) {}
+  
+  // Make poll_votes user_id nullable if it isn't
+  try {
+    const tableInfo = dbInstance.prepare("PRAGMA table_info(poll_votes)").all() as any[];
+    const userCol = tableInfo.find(c => c.name === 'user_id');
+    if (userCol && userCol.notnull === 1) {
+      dbInstance.transaction(() => {
+        dbInstance.exec(`
+          CREATE TABLE poll_votes_new (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              poll_id INTEGER NOT NULL,
+              user_id INTEGER,
+              voter_name TEXT NOT NULL,
+              answers TEXT DEFAULT '{}',
+              created_at TEXT DEFAULT (datetime('now', 'localtime')),
+              updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+              FOREIGN KEY (poll_id) REFERENCES polls(id) ON DELETE CASCADE,
+              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+              UNIQUE(poll_id, user_id)
+          );
+          INSERT INTO poll_votes_new SELECT * FROM poll_votes;
+          DROP TABLE poll_votes;
+          ALTER TABLE poll_votes_new RENAME TO poll_votes;
+        `);
+      })();
+    }
+  } catch (e) {
+    console.error("Migration error for poll_votes nullable user_id:", e);
+  }
+
   try { 
     dbInstance.exec(`
       CREATE TABLE IF NOT EXISTS quick_links (

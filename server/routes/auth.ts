@@ -2,6 +2,7 @@ import { Router } from 'express';
 import crypto from 'crypto';
 import db from '../db/database.js';
 import { requireAuth } from '../middleware/auth.js';
+import { getSupabaseAdmin } from '../db/supabase.js';
 
 const router = Router();
 
@@ -70,11 +71,30 @@ router.post('/logout', requireAuth, (req, res) => {
   res.status(204).send();
 });
 
-router.get('/me', requireAuth, (req, res) => {
-  const user = db.prepare('SELECT id, username, created_at FROM users WHERE id = ?').get(req.userId);
+router.get('/me', requireAuth, async (req, res) => {
+  const user = db.prepare('SELECT id, username, created_at, supabase_user_id FROM users WHERE id = ?').get(req.userId) as any;
   if (!user) {
     return res.status(404).json({ message: 'User not found' });
   }
+
+  // Fetch Supabase username if linked
+  if (user.supabase_user_id) {
+    try {
+      const adminClient = getSupabaseAdmin();
+      if (adminClient) {
+        const { data } = await adminClient.auth.admin.getUserById(user.supabase_user_id);
+        if (data?.user) {
+          user.supabase_username = data.user.user_metadata?.username || 
+                                   data.user.user_metadata?.full_name || 
+                                   data.user.user_metadata?.name || 
+                                   data.user.email?.split('@')[0];
+        }
+      }
+    } catch (e) {
+      console.error('Failed to fetch supabase username in /me', e);
+    }
+  }
+
   res.json(user);
 });
 

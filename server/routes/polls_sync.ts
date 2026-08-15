@@ -5,6 +5,7 @@ import { requireSupabase } from '../middleware/supabase.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
 
 const router = Router();
+router.use(requireSupabase);
 
 // Share a local poll to the team
 router.post('/:id/share', async (req: Request, res: Response) => {
@@ -75,10 +76,10 @@ router.post('/:id/share', async (req: Request, res: Response) => {
 // Two-way sync for ALL polls the user has access to in the team.
 router.post('/sync-all', async (req: Request, res: Response) => {
   try {
-    const { team_id } = req.body; // Client must provide active team_id
+    const { team_id } = req.body;
     if (!team_id) return res.status(400).json({ message: 'team_id required' });
-    
     const supabase = getSupabaseAdmin();
+    const teamIds = [team_id];
     
     // 1. Fetch all cloud polls for this team
     const { data: cloudPolls, error: pollsError } = await supabase
@@ -105,12 +106,18 @@ router.post('/sync-all', async (req: Request, res: Response) => {
           
           if (!local) {
             // Create local
+            const isCreator = cloud.created_by === (req as any).supabaseUserId;
+            const settings = cloud.settings || {};
+            if (!isCreator) {
+              settings.is_imported = true;
+            }
+            
             const info = db.prepare(`
               INSERT INTO polls (user_id, title, description, type, status, deadline, settings, shared_id, created_at, updated_at)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
               req.userId, cloud.title, cloud.description || '', cloud.type, cloud.status, cloud.deadline,
-              JSON.stringify(cloud.settings || {}), cloud.id, cloud.created_at, cloud.updated_at
+              JSON.stringify(settings), cloud.id, cloud.created_at, cloud.updated_at
             );
             localId = info.lastInsertRowid;
             updatedCount++;
@@ -128,12 +135,20 @@ router.post('/sync-all', async (req: Request, res: Response) => {
             const localUpdated = new Date(local.updated_at).getTime();
             const cloudUpdated = new Date(cloud.updated_at).getTime();
             
-            if (cloudUpdated > localUpdated) {
+            const isCreator = cloud.created_by === (req as any).supabaseUserId;
+            const settings = cloud.settings || {};
+            if (!isCreator) {
+              settings.is_imported = true;
+            }
+
+            const isMissingImportedFlag = !isCreator && !(local.settings ? JSON.parse(local.settings).is_imported : false);
+            
+            if (cloudUpdated > localUpdated || isMissingImportedFlag) {
               db.prepare(`
                 UPDATE polls SET title = ?, description = ?, status = ?, deadline = ?, settings = ?, updated_at = ? WHERE id = ?
               `).run(
                 cloud.title, cloud.description || '', cloud.status, cloud.deadline,
-                JSON.stringify(cloud.settings || {}), cloud.updated_at, localId
+                JSON.stringify(settings), cloudUpdated > localUpdated ? cloud.updated_at : local.updated_at, localId
               );
               updatedCount++;
             }
@@ -146,18 +161,25 @@ router.post('/sync-all', async (req: Request, res: Response) => {
           for (const cv of cVotes) {
             // Match by Supabase user_id or voter_name
             const existingLocalVote = localVotes.find(lv => lv.voter_name === cv.voter_name);
+            const isMyVote = cv.user_id === (req as any).supabaseUserId;
+            const localUserIdForVote = isMyVote ? req.userId : null;
             if (!existingLocalVote) {
                db.prepare(`
                  INSERT INTO poll_votes (poll_id, user_id, voter_name, answers, created_at, updated_at)
                  VALUES (?, ?, ?, ?, ?, ?)
-               `).run(localId, req.userId, cv.voter_name, JSON.stringify(cv.answers || {}), cv.created_at, cv.updated_at);
+               `).run(localId, localUserIdForVote, cv.voter_name, JSON.stringify(cv.answers || {}), cv.created_at, cv.updated_at);
                updatedCount++;
             } else {
                const lvu = new Date(existingLocalVote.updated_at).getTime();
                const cvu = new Date(cv.updated_at).getTime();
-               if (cvu > lvu) {
-                 db.prepare(`UPDATE poll_votes SET answers = ?, updated_at = ? WHERE id = ?`).run(
-                   JSON.stringify(cv.answers || {}), cv.updated_at, existingLocalVote.id
+               
+               // Also correct user_id if it was wrongly assigned due to previous bug
+               const needsUserCorrect = existingLocalVote.user_id === req.userId && !isMyVote;
+               
+               if (cvu > lvu || needsUserCorrect) {
+                 const updatedUserId = isMyVote ? req.userId : null;
+                 db.prepare(`UPDATE poll_votes SET answers = ?, updated_at = ?, user_id = ? WHERE id = ?`).run(
+                   JSON.stringify(cv.answers || {}), cv.updated_at, updatedUserId, existingLocalVote.id
                  );
                  updatedCount++;
                }
