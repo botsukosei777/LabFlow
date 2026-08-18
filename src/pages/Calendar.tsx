@@ -59,6 +59,7 @@ export default function Calendar() {
 
   const [protocols, setProtocols] = useState<any[]>([]);
   const [scheduleForm, setScheduleForm] = useState({
+    sample_count: 1,
     protocol_id: '',
     start_date: format(new Date(), 'yyyy-MM-dd'),
     mode: 'management',
@@ -247,7 +248,7 @@ export default function Calendar() {
       }
       
       setShowScheduleModal(false);
-      setScheduleForm({ ...scheduleForm, protocol_id: '', label: '', notes: '', color: '#3B82F6' });
+      setScheduleForm({ ...scheduleForm, protocol_id: '', label: '', notes: '', color: '#3B82F6', sample_count: 1 });
       setBlockStartTimes({});
       fetchData();
     } catch (e) {
@@ -546,6 +547,13 @@ export default function Calendar() {
                   />
                 </div>
               </div>
+              
+              {selectedProtocol?.has_sample_dependent_steps && (
+                <div className="form-group">
+                  <label className="form-label">サンプル数 (Sample Count)</label>
+                  <input type="number" min="1" className="form-input" value={scheduleForm.sample_count} onChange={(e) => setScheduleForm({...scheduleForm, sample_count: parseInt(e.target.value) || 1})} />
+                </div>
+              )}
               
               {selectedProtocol && selectedProtocol.blocks && selectedProtocol.blocks.length > 0 && (
                 <div style={{ marginTop: 'var(--space-sm)', padding: 'var(--space-md)', background: 'var(--color-surface)', borderRadius: 'var(--border-radius-md)' }}>

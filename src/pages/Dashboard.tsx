@@ -290,7 +290,7 @@ export default function Dashboard() {
                               {step.status === 'completed' && <CheckCircle2 size={12} />}
                             </button>
                             <span className="checklist-text" style={{ fontSize: 'var(--font-size-xs)', flex: 1 }}>
-                              {step.start_time} - {step.end_time} : {step.step_name} ({step.is_overnight === 1 ? 'Overnight' : `${step.duration_minutes}min`})
+                              {step.start_time} - {step.end_time} : {step.step_name} ({step.is_overnight === 1 ? 'Overnight' : `${(step.is_sample_dependent ? step.duration_minutes * Math.ceil((block.sample_count || 1) / (step.samples_per_batch || 1)) : step.duration_minutes)}min`})
                             </span>
                             {step.status !== 'completed' && (
                               <button className="btn btn-ghost btn-sm" style={{ padding: '2px 6px', fontSize: '10px' }} onClick={(e) => {

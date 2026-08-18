@@ -8,7 +8,7 @@ import type { Poll } from '../types';
 import { ShareModal } from '../components/ShareModal';
 import { format, addDays, parseISO } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { supabasePost, supabaseGet } from '../api/supabaseClient';
+import { supabasePost, supabaseGet, supabaseDelete } from '../api/supabaseClient';
 export default function Polls() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -103,7 +103,7 @@ export default function Polls() {
         title: form.title,
         description: form.description,
         type: form.type,
-        deadline: form.deadline,
+        deadline: form.deadline ? new Date(form.deadline).toISOString() : '',
         settings,
         options
       });
@@ -118,6 +118,16 @@ export default function Polls() {
   const handleDelete = async (id: number) => {
     if (!window.confirm(t('common.confirmDelete', { defaultValue: '本当に削除しますか？' }))) return;
     try {
+      const poll = polls.find(p => p.id === id);
+      if (poll?.shared_id) {
+        try {
+          // 共有済みの場合、クラウドからも削除（作成者のみ成功する）
+          await supabaseDelete(`/shared/polls/local/${id}`);
+        } catch (e) {
+          // 作成者でない場合はエラーになるが、ローカル削除は続行する
+          console.warn('Failed to delete from cloud', e);
+        }
+      }
       await api.delete(`/polls/${id}`);
       setPolls(polls.filter(p => p.id !== id));
       addToast('success', t('common.deletedSuccessfully'));

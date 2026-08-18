@@ -1,7 +1,7 @@
 import { useState, useEffect, useContext, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { CheckSquare, CalendarDays, ArrowLeft, Save, Plus, Trash2, Users, Share2 } from 'lucide-react';
+import { CheckSquare, CalendarDays, ArrowLeft, Save, Plus, Trash2, Users, Share2, Download, Loader2 } from 'lucide-react';
 import { api } from '../api/client';
 import { supabaseGet, supabasePost } from '../api/supabaseClient';
 import { ToastContext } from '../App';
@@ -29,6 +29,7 @@ export default function PollDetail() {
   const [teams, setTeams] = useState<any[]>([]);
   const [shareTeamId, setShareTeamId] = useState<string>('');
   const [teamFetchError, setTeamFetchError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   const fetchTeams = async () => {
     setTeamFetchError(null);
@@ -62,32 +63,35 @@ export default function PollDetail() {
     }
   };
 
+  const handleImportVotes = async () => {
+    setSyncing(true);
+    try {
+      const teamsList = await supabaseGet<any[]>('/teams').catch(() => []);
+      if (teamsList && teamsList.length > 0) {
+        for (const team of teamsList) {
+          await supabasePost('/shared/polls/sync-all', { team_id: team.id }).catch(() => null);
+        }
+        const pollData = await api.get<Poll>(`/polls/${id}`);
+        setPoll(pollData);
+        const existingVote = pollData.votes?.find((v: any) => 
+          v.user_id === user?.id || 
+          v.voter_name === (user as any)?.supabase_username || 
+          v.voter_name === user?.username
+        );
+        if (existingVote) setMyVote(existingVote.answers || {});
+        addToast('success', '回答をインポートしました');
+      } else {
+        addToast('error', 'チームが見つかりません');
+      }
+    } catch (e) {
+      addToast('error', 'インポートに失敗しました');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   useEffect(() => {
     fetchPoll();
-    
-    // Auto-sync if this poll is shared
-    const triggerSync = async () => {
-      try {
-        const teams = await supabaseGet<any[]>('/teams').catch(() => []);
-        if (teams && teams.length > 0) {
-          for (const team of teams) {
-            await supabasePost('/shared/polls/sync-all', { team_id: team.id }).catch(() => null);
-          }
-          // Fetch again to get incoming votes
-          const pollData = await api.get<Poll>(`/polls/${id}`);
-          setPoll(pollData);
-          const existingVote = pollData.votes?.find((v: any) => 
-            v.user_id === user?.id || 
-            v.voter_name === (user as any)?.supabase_username || 
-            v.voter_name === user?.username
-          );
-          if (existingVote) setMyVote(existingVote.answers || {});
-        }
-      } catch (e) {}
-    };
-    
-    // Slight delay to not block UI render
-    setTimeout(triggerSync, 500);
   }, [id, user?.id]);
 
   const handleVoteSubmit = async () => {
@@ -164,6 +168,16 @@ export default function PollDetail() {
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold">{poll.title}</h1>
           <div className="flex flex-wrap items-center gap-2 mt-3 md:mt-0">
+            {poll.shared_id && (
+              <button 
+                onClick={handleImportVotes}
+                disabled={syncing}
+                className="text-sm font-medium text-emerald-600 bg-emerald-50 hover:bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shrink-0 disabled:opacity-50"
+              >
+                {syncing ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+                {syncing ? '同期中...' : '回答をインポート'}
+              </button>
+            )}
             {isCreator && (
               <button 
                 onClick={() => {

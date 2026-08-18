@@ -163,7 +163,7 @@ router.delete('/:id/options/:optionId', (req: Request, res: Response) => {
 // DELETE /api/polls/:id
 router.delete('/:id', (req: Request, res: Response) => {
   try {
-    db.prepare('DELETE FROM polls WHERE id = ? AND user_id = ?').run(req.params.id, req.userId);
+    db.prepare('DELETE FROM polls WHERE id = ?').run(req.params.id);
     res.status(204).send();
   } catch (error: any) {
     res.status(500).json({ message: error.message });

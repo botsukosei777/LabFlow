@@ -18,6 +18,9 @@ export interface Step {
   name: string;
   description: string;
   duration_minutes: number;
+  time_per_sample_minutes?: number;
+  is_sample_dependent?: number;
+  samples_per_batch?: number;
   is_overnight?: number;
   sub_protocol?: string;
   sub_protocol_id?: number | null;
@@ -68,6 +71,7 @@ export interface Protocol {
   created_at: string;
   updated_at: string;
   blocks?: ProtocolBlock[];
+  has_sample_dependent_steps?: boolean;
   experiment_type?: ExperimentType;
 }
 
@@ -89,6 +93,7 @@ export interface ScheduledExperiment {
   mode: 'management' | 'silent';
   status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
   notes: string;
+  sample_count?: number;
   created_at: string;
   updated_at: string;
   protocol?: Protocol;

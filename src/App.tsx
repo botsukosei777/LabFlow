@@ -14,6 +14,7 @@ const ExperimentTypes = lazy(() => import('./pages/ExperimentTypes'));
 const ExperimentDetail = lazy(() => import('./pages/ExperimentDetail'));
 const SubProtocols = lazy(() => import('./pages/SubProtocols'));
 const Notebook = lazy(() => import('./pages/Notebook'));
+const Analysis = lazy(() => import('./pages/Analysis'));
 const Milestones = lazy(() => import('./pages/Milestones'));
 const Inventory = lazy(() => import('./pages/Inventory'));
 const Routines = lazy(() => import('./pages/Routines'));
@@ -83,6 +84,7 @@ export default function App() {
                     <Route path="/experiments" element={<ExperimentTypes />} />
                     <Route path="/experiments/:id" element={<ExperimentDetail />} />
                     <Route path="/notebook" element={<Notebook />} />
+                    <Route path="/analysis" element={<Analysis />} />
                     <Route path="/milestones" element={<Milestones />} />
                     <Route path="/inventory" element={<Inventory />} />
                     <Route path="/routines" element={<Routines />} />

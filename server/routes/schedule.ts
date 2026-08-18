@@ -18,7 +18,7 @@ router.get('/overdue', (req, res) => {
   const today = getLocalTodayStr();
   const blocks = db.prepare(`
     SELECT sb.*, se.label, se.mode, se.status as experiment_status,
-           p.name as protocol_name, e.name as experiment_type_name, COALESCE(se.color, p.color, e.color) as color,
+           p.name as protocol_name, e.name as experiment_type_name, COALESCE(se.color, p.color, e.color) as color, se.sample_count,
            b.name as block_name, b.description as block_description
     FROM scheduled_blocks sb
     JOIN scheduled_experiments se ON sb.scheduled_experiment_id = se.id
@@ -34,7 +34,7 @@ router.get('/overdue', (req, res) => {
     if (block.mode === 'management') {
       block.steps = db.prepare(`
         SELECT ss.*, bs.order_index, s.name as step_name, s.description as step_description, 
-               s.duration_minutes, s.is_overnight, s.sub_protocol
+               s.duration_minutes, s.is_sample_dependent, s.samples_per_batch, s.is_overnight, s.sub_protocol
         FROM scheduled_steps ss
         JOIN block_steps bs ON ss.block_step_id = bs.id
         JOIN steps s ON bs.step_id = s.id
@@ -53,7 +53,7 @@ router.get('/overdue', (req, res) => {
 router.get('/', (req, res) => {
   const { start, end } = req.query;
   let query = `
-    SELECT se.*, p.name as protocol_name, e.name as experiment_type_name, COALESCE(se.color, p.color, e.color) as color
+    SELECT se.*, p.name as protocol_name, e.name as experiment_type_name, COALESCE(se.color, p.color, e.color) as color, se.sample_count
     FROM scheduled_experiments se
     JOIN protocols p ON se.protocol_id = p.id
     JOIN experiment_types e ON p.experiment_type_id = e.id
@@ -88,7 +88,7 @@ router.get('/today', (req, res) => {
   const today = getLocalTodayStr();
   const blocks = db.prepare(`
     SELECT sb.*, se.label, se.mode, se.status as experiment_status,
-           p.name as protocol_name, e.name as experiment_type_name, COALESCE(se.color, p.color, e.color) as color,
+           p.name as protocol_name, e.name as experiment_type_name, COALESCE(se.color, p.color, e.color) as color, se.sample_count,
            b.name as block_name, b.description as block_description
     FROM scheduled_blocks sb
     JOIN scheduled_experiments se ON sb.scheduled_experiment_id = se.id
@@ -104,7 +104,7 @@ router.get('/today', (req, res) => {
     if (block.mode === 'management') {
       block.steps = db.prepare(`
         SELECT ss.*, bs.order_index, s.name as step_name, s.description as step_description, 
-               s.duration_minutes, s.is_overnight, s.sub_protocol
+               s.duration_minutes, s.is_sample_dependent, s.samples_per_batch, s.is_overnight, s.sub_protocol
         FROM scheduled_steps ss
         JOIN block_steps bs ON ss.block_step_id = bs.id
         JOIN steps s ON bs.step_id = s.id
@@ -128,9 +128,9 @@ router.get('/today', (req, res) => {
 // GET all scheduled blocks for calendar
 router.get('/blocks', (req, res) => {
   const blocks = db.prepare(`
-    SELECT sb.*, se.label, se.mode, se.status as experiment_status, se.start_time as start_time,
+    SELECT sb.*, se.label, se.mode, se.status as experiment_status, se.start_time as experiment_start_time,
            p.name as protocol_name, e.name as experiment_type_name, 
-           COALESCE(se.color, p.color, e.color) as color,
+           COALESCE(se.color, p.color, e.color) as color, se.sample_count,
            b.name as block_name
     FROM scheduled_blocks sb
     JOIN scheduled_experiments se ON sb.scheduled_experiment_id = se.id
@@ -144,7 +144,7 @@ router.get('/blocks', (req, res) => {
 
   const getSteps = db.prepare(`
     SELECT ss.*, bs.order_index, s.name as step_name, s.description as step_description,
-           s.duration_minutes, s.is_overnight
+           s.duration_minutes, s.is_sample_dependent, s.samples_per_batch, s.is_overnight
     FROM scheduled_steps ss
     JOIN block_steps bs ON ss.block_step_id = bs.id
     JOIN steps s ON bs.step_id = s.id
@@ -163,7 +163,7 @@ router.get('/blocks', (req, res) => {
 
 // POST schedule an experiment
 router.post('/', (req, res) => {
-  const { protocol_id, start_date, block_start_times, mode, label, notes, color } = req.body;
+  const { protocol_id, start_date, block_start_times, mode, label, notes, color, sample_count } = req.body;
   if (!protocol_id || !start_date) {
     return res.status(400).json({ message: 'protocol_id and start_date are required' });
   }
@@ -184,7 +184,7 @@ router.post('/', (req, res) => {
   const initialStartTime = block_start_times && Object.values(block_start_times).length > 0 ? Object.values(block_start_times)[0] : '09:00';
   
   const insertExp = db.prepare(
-    'INSERT INTO scheduled_experiments (protocol_id, label, start_date, start_time, mode, notes, user_id, color) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO scheduled_experiments (protocol_id, label, start_date, start_time, mode, notes, user_id, color, sample_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
   );
   const experimentId = insertExp.run(
     protocol_id, 
@@ -194,7 +194,8 @@ router.post('/', (req, res) => {
     mode || 'management', 
     notes || '', 
     req.userId,
-    color || null
+    color || null,
+    sample_count || 1
   ).lastInsertRowid;
   
   const startDateObj = new Date(start_date + 'T00:00:00');
@@ -222,7 +223,7 @@ router.post('/', (req, res) => {
     
     if ((mode || 'management') === 'management') {
       const blockSteps = db.prepare(
-        'SELECT bs.id, bs.step_id, s.duration_minutes, s.is_overnight FROM block_steps bs JOIN steps s ON bs.step_id = s.id WHERE bs.block_id = ? ORDER BY bs.order_index'
+        'SELECT bs.id, bs.step_id, s.duration_minutes, s.is_sample_dependent, s.samples_per_batch, s.is_overnight FROM block_steps bs JOIN steps s ON bs.step_id = s.id WHERE bs.block_id = ? ORDER BY bs.order_index'
       ).all(pb.block_id) as any[];
       
       const insertPrep = db.prepare('INSERT INTO scheduled_step_preparations (scheduled_step_id, step_preparation_id) VALUES (?, ?)');
@@ -330,7 +331,7 @@ router.post('/:id/postpone', (req, res) => {
   if (!stepInfo) return res.status(404).json({ message: 'Step not found' });
   
   const stepsToMove = db.prepare(`
-    SELECT ss.id, s.duration_minutes, bs.id as block_step_id, s.is_overnight
+    SELECT ss.id, s.duration_minutes, s.is_sample_dependent, s.samples_per_batch, bs.id as block_step_id, s.is_overnight
     FROM scheduled_steps ss
     JOIN block_steps bs ON ss.block_step_id = bs.id
     JOIN steps s ON bs.step_id = s.id
@@ -350,7 +351,7 @@ router.post('/:id/postpone', (req, res) => {
   
   if (targetBlock) {
     const targetSteps = db.prepare(`
-      SELECT s.duration_minutes, s.is_overnight
+      SELECT s.duration_minutes, s.is_sample_dependent, s.samples_per_batch, s.is_overnight
       FROM scheduled_steps ss
       JOIN block_steps bs ON ss.block_step_id = bs.id
       JOIN steps s ON bs.step_id = s.id
@@ -393,7 +394,7 @@ router.post('/:id/postpone', (req, res) => {
   
   // Recalculate times for target block
   const allTargetSteps = db.prepare(`
-    SELECT ss.id, s.duration_minutes, s.is_overnight
+    SELECT ss.id, s.duration_minutes, s.is_sample_dependent, s.samples_per_batch, s.is_overnight
     FROM scheduled_steps ss
     JOIN block_steps bs ON ss.block_step_id = bs.id
     JOIN steps s ON bs.step_id = s.id
@@ -405,7 +406,7 @@ router.post('/:id/postpone', (req, res) => {
   const updateTime = db.prepare('UPDATE scheduled_steps SET start_time = ?, end_time = ? WHERE id = ?');
   for (const s of allTargetSteps) {
     const sStart = currentStartTime;
-    const sEnd = s.is_overnight === 1 ? '23:59' : addMinutes(currentStartTime, s.duration_minutes);
+    const sEnd = s.is_overnight === 1 ? '23:59' : addMinutes(currentStartTime, s.duration_minutes, s.is_sample_dependent, s.samples_per_batch);
     updateTime.run(sStart, sEnd, s.id);
     currentStartTime = sEnd;
   }
@@ -496,7 +497,7 @@ router.put('/steps/:stepId/complete', (req, res) => {
     const setting = db.prepare('SELECT value FROM settings WHERE key = ? AND user_id = ?').get('auto_postpone_steps', req.userId) as any;
     if (setting && setting.value === 'true') {
       const subsequentSteps = db.prepare(`
-        SELECT ss.id, ss.start_time, ss.end_time, s.duration_minutes, s.is_overnight
+        SELECT ss.id, ss.start_time, ss.end_time, s.duration_minutes, s.is_sample_dependent, s.samples_per_batch, s.is_overnight
         FROM scheduled_steps ss
         JOIN block_steps bs ON ss.block_step_id = bs.id
         JOIN steps s ON bs.step_id = s.id
@@ -577,7 +578,7 @@ router.put('/steps/:stepId/incomplete', (req, res) => {
   const setting = db.prepare('SELECT value FROM settings WHERE key = ? AND user_id = ?').get('auto_postpone_steps', req.userId) as any;
   if (setting && setting.value === 'true') {
     const subsequentSteps = db.prepare(`
-      SELECT ss.id, ss.start_time, ss.end_time, s.duration_minutes, s.is_overnight
+      SELECT ss.id, ss.start_time, ss.end_time, s.duration_minutes, s.is_sample_dependent, s.samples_per_batch, s.is_overnight
       FROM scheduled_steps ss
       JOIN block_steps bs ON ss.block_step_id = bs.id
       JOIN steps s ON bs.step_id = s.id

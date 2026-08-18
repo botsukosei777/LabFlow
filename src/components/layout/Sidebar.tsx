@@ -16,6 +16,7 @@ import {
   User,
   Users,
   Book,
+  BarChart2,
   FileText,
   CheckSquare,
 } from 'lucide-react';
@@ -30,6 +31,7 @@ const navItems = [
   { path: '/calendar', icon: CalendarDays, labelKey: 'nav.calendar' },
   { path: '/experiments', icon: FlaskConical, labelKey: 'nav.experiments' },
   { path: '/notebook', icon: Book, labelKey: 'nav.notebook' },
+  { path: '/analysis', icon: BarChart2, labelKey: 'nav.analysis', fallbackLabel: '分析' },
   { path: '/milestones', icon: Target, labelKey: 'nav.milestones' },
   { path: '/inventory', icon: Package, labelKey: 'nav.inventory' },
   { path: '/routines', icon: RotateCcw, labelKey: 'nav.routines' },

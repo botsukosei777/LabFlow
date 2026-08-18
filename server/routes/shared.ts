@@ -164,6 +164,8 @@ router.post('/experiment-types', async (req: Request, res: Response) => {
         name: s.name,
         description: s.description,
         duration_minutes: s.duration_minutes,
+        is_sample_dependent: s.is_sample_dependent ? true : false,
+        samples_per_batch: s.samples_per_batch || 1,
         order_index: s.order_index,
         is_overnight: s.is_overnight ? true : false,
         sub_protocol: s.sub_protocol || '',
@@ -419,7 +421,9 @@ router.post('/experiment-types/:id/sync', async (req: Request, res: Response) =>
           name: s.name,
           description: s.description,
           duration_minutes: s.duration_minutes,
-          order_index: s.order_index,
+        is_sample_dependent: s.is_sample_dependent ? true : false,
+        samples_per_batch: s.samples_per_batch || 1,
+        order_index: s.order_index,
           is_overnight: s.is_overnight ? true : false,
           sub_protocol: s.sub_protocol || '',
           sub_protocol_id: s.sub_protocol_id ? subProtocolMap.get(s.sub_protocol_id) || null : null,
@@ -571,13 +575,14 @@ router.post('/experiment-types/:id/import', async (req: Request, res: Response) 
       const stepIdMap = new Map();
       if (sharedExp.steps && sharedExp.steps.length > 0) {
         const insertStep = db.prepare(`
-          INSERT INTO steps (experiment_type_id, pattern_label, name, description, duration_minutes, is_overnight, sub_protocol, sub_protocol_id, order_index, routine_name, routine_duration_days, routine_recurrence, routine_recurrence_days, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          INSERT INTO steps (experiment_type_id, pattern_label, name, description, duration_minutes, is_sample_dependent, samples_per_batch, is_overnight, sub_protocol, sub_protocol_id, order_index, routine_name, routine_duration_days, routine_recurrence, routine_recurrence_days, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         `);
         for (const step of sharedExp.steps) {
           const mappedSpId = step.sub_protocol_id ? subProtocolIdMap.get(step.sub_protocol_id) || null : null;
           const sInfo = insertStep.run(
             newExpId, step.pattern_label, step.name, step.description, step.duration_minutes, 
+            step.is_sample_dependent ? 1 : 0, step.samples_per_batch || 1, 
             step.is_overnight ? 1 : 0, mappedSpId, step.order_index,
             step.routine_name || null, step.routine_duration_days || null, step.routine_recurrence || null, step.routine_recurrence_days || null
           );

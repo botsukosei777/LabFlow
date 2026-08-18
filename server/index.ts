@@ -11,6 +11,7 @@ import { backupDatabase } from './db/database.js';
 import { startScheduler } from './services/scheduler.js';
 import experimentRoutes from './routes/experiments.js';
 import scheduleRoutes from './routes/schedule.js';
+import analysisRoutes from './routes/analysis.js';
 import milestoneRoutes from './routes/milestones.js';
 import reagentRoutes from './routes/reagents.js';
 import routineRoutes from './routes/routines.js';
@@ -54,9 +55,10 @@ app.use('/api/mini_memos', requireAuth, miniMemosRoutes);
 app.use('/api/quick_links', requireAuth, quickLinksRoutes);
 app.use('/api/teams', requireAuth, teamsRoutes);
 app.use('/api/supabase-auth', requireAuth, supabaseAuthRoutes);
-app.use('/api/shared', requireAuth, sharedRoutes);
 app.use('/api/shared/polls', requireAuth, pollsSyncRoutes);
+app.use('/api/shared', requireAuth, sharedRoutes);
 app.use('/api/polls', requireAuth, pollsRoutes);
+app.use('/api/analysis', requireAuth, analysisRoutes);
 
 // Backup endpoint
 app.get('/api/backup', requireAuth, async (req, res) => {

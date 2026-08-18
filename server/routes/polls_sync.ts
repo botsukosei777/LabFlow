@@ -159,13 +159,14 @@ router.post('/sync-all', async (req: Request, res: Response) => {
           const localVotes = db.prepare('SELECT * FROM poll_votes WHERE poll_id = ?').all(localId) as any[];
           
           for (const cv of cVotes) {
-            // Match by Supabase user_id or voter_name
+            // Match by voter_name (the reliable key across instances)
             const existingLocalVote = localVotes.find(lv => lv.voter_name === cv.voter_name);
             const isMyVote = cv.user_id === (req as any).supabaseUserId;
             const localUserIdForVote = isMyVote ? req.userId : null;
             if (!existingLocalVote) {
+               // Use INSERT OR IGNORE to avoid UNIQUE constraint crashes
                db.prepare(`
-                 INSERT INTO poll_votes (poll_id, user_id, voter_name, answers, created_at, updated_at)
+                 INSERT OR IGNORE INTO poll_votes (poll_id, user_id, voter_name, answers, created_at, updated_at)
                  VALUES (?, ?, ?, ?, ?, ?)
                `).run(localId, localUserIdForVote, cv.voter_name, JSON.stringify(cv.answers || {}), cv.created_at, cv.updated_at);
                updatedCount++;
@@ -173,13 +174,9 @@ router.post('/sync-all', async (req: Request, res: Response) => {
                const lvu = new Date(existingLocalVote.updated_at).getTime();
                const cvu = new Date(cv.updated_at).getTime();
                
-               // Also correct user_id if it was wrongly assigned due to previous bug
-               const needsUserCorrect = existingLocalVote.user_id === req.userId && !isMyVote;
-               
-               if (cvu > lvu || needsUserCorrect) {
-                 const updatedUserId = isMyVote ? req.userId : null;
-                 db.prepare(`UPDATE poll_votes SET answers = ?, updated_at = ?, user_id = ? WHERE id = ?`).run(
-                   JSON.stringify(cv.answers || {}), cv.updated_at, updatedUserId, existingLocalVote.id
+               if (cvu > lvu) {
+                 db.prepare(`UPDATE poll_votes SET answers = ?, updated_at = ? WHERE id = ?`).run(
+                   JSON.stringify(cv.answers || {}), cv.updated_at, existingLocalVote.id
                  );
                  updatedCount++;
                }
@@ -243,11 +240,16 @@ router.delete('/local/:id', async (req: Request, res: Response) => {
     const localId = req.params.id;
     const supabase = getSupabaseAdmin();
     
-    const local = db.prepare('SELECT shared_id FROM polls WHERE id = ? AND user_id = ?').get(localId, req.userId) as any;
+    const local = db.prepare('SELECT shared_id FROM polls WHERE id = ?').get(localId) as any;
     if (!local || !local.shared_id) return res.status(400).json({ message: 'Not shared' });
     
-    // Attempt delete from cloud
-    await supabase.from('shared_polls').delete().eq('id', local.shared_id).eq('created_by', (req as any).supabaseUserId);
+    // Get the supabase user ID of the current user to verify ownership in the cloud
+    const user = db.prepare('SELECT supabase_user_id FROM users WHERE id = ?').get(req.userId) as any;
+    
+    if (user?.supabase_user_id) {
+      // Attempt delete from cloud
+      await supabase.from('shared_polls').delete().eq('id', local.shared_id).eq('created_by', user.supabase_user_id);
+    }
     
     // Unlink locally
     db.prepare('UPDATE polls SET shared_id = NULL WHERE id = ?').run(localId);

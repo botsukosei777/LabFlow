@@ -37,6 +37,15 @@ router.get('/all/protocols', (req, res) => {
       WHERE pb.protocol_id = ?
       ORDER BY pb.day_offset
     `).all(protocol.id);
+    
+    const hasSampleDep = db.prepare(`
+      SELECT COUNT(*) as cnt
+      FROM protocol_blocks pb
+      JOIN block_steps bs ON pb.block_id = bs.block_id
+      JOIN steps s ON bs.step_id = s.id
+      WHERE pb.protocol_id = ? AND s.is_sample_dependent = 1
+    `).get(protocol.id) as any;
+    protocol.has_sample_dependent_steps = hasSampleDep.cnt > 0;
   }
   
   res.json(protocols);
@@ -81,10 +90,10 @@ router.put('/steps/:stepId', (req, res) => {
   `).get(req.params.stepId) as any;
   if (!step || step.user_id !== req.userId) return res.status(403).json({ message: 'Forbidden' });
 
-  const { name, description, duration_minutes, is_overnight, pattern_label, order_index, sub_protocol_id, preparations, routine_name, routine_duration_days, routine_recurrence, routine_recurrence_days } = req.body;
+  const { name, description, duration_minutes, time_per_sample_minutes, is_overnight, pattern_label, order_index, sub_protocol_id, preparations, routine_name, routine_duration_days, routine_recurrence, routine_recurrence_days } = req.body;
   db.prepare(
-    'UPDATE steps SET name = ?, description = ?, duration_minutes = ?, is_overnight = ?, pattern_label = ?, order_index = ?, sub_protocol_id = ?, routine_name = ?, routine_duration_days = ?, routine_recurrence = ?, routine_recurrence_days = ? WHERE id = ?'
-  ).run(name, description, duration_minutes, is_overnight ? 1 : 0, pattern_label, order_index, sub_protocol_id || null, routine_name || null, routine_duration_days || null, routine_recurrence || null, routine_recurrence_days || null, req.params.stepId);
+    'UPDATE steps SET name = ?, description = ?, duration_minutes = ?, is_sample_dependent = ?, samples_per_batch = ?, is_overnight = ?, pattern_label = ?, order_index = ?, sub_protocol_id = ?, routine_name = ?, routine_duration_days = ?, routine_recurrence = ?, routine_recurrence_days = ? WHERE id = ?'
+  ).run(name, description, duration_minutes, req.body.is_sample_dependent ? 1 : 0, req.body.samples_per_batch || 1, is_overnight ? 1 : 0, pattern_label, order_index, sub_protocol_id || null, routine_name || null, routine_duration_days || null, routine_recurrence || null, routine_recurrence_days || null, req.params.stepId);
   
   if (preparations && Array.isArray(preparations)) {
     db.prepare('DELETE FROM step_preparations WHERE step_id = ?').run(req.params.stepId);
@@ -362,8 +371,8 @@ router.post('/:id/steps', (req, res) => {
   }
 
   const result = db.prepare(
-    'INSERT INTO steps (experiment_type_id, name, description, duration_minutes, is_overnight, pattern_label, order_index, sub_protocol_id, routine_name, routine_duration_days, routine_recurrence, routine_recurrence_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(req.params.id, name, description || '', duration_minutes || 0, is_overnight ? 1 : 0, pattern_label || 'default', idx, sub_protocol_id || null, routine_name || null, routine_duration_days || null, routine_recurrence || null, routine_recurrence_days || null);
+    'INSERT INTO steps (experiment_type_id, name, description, duration_minutes, time_per_sample_minutes, is_sample_dependent, samples_per_batch, is_overnight, pattern_label, order_index, sub_protocol_id, routine_name, routine_duration_days, routine_recurrence, routine_recurrence_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(req.params.id, name, description || '', duration_minutes || 0, req.body.time_per_sample_minutes || 0, req.body.is_sample_dependent ? 1 : 0, req.body.samples_per_batch || 1, is_overnight ? 1 : 0, pattern_label || 'default', idx, sub_protocol_id || null, routine_name || null, routine_duration_days || null, routine_recurrence || null, routine_recurrence_days || null);
   
   const stepId = result.lastInsertRowid;
   

@@ -18,10 +18,13 @@ export function recalculateBlockSchedule(
   // Get steps for the scheduled block
   const steps = db.prepare(`
     SELECT ss.id, ss.start_time, ss.end_time, ss.status, bs.order_index, bs.branch_index, bs.delay_minutes,
-           s.name as step_name, s.duration_minutes, s.is_overnight
+           s.name as step_name, s.duration_minutes, s.is_sample_dependent, s.samples_per_batch, s.is_overnight,
+           se.sample_count
     FROM scheduled_steps ss
     JOIN block_steps bs ON ss.block_step_id = bs.id
     JOIN steps s ON bs.step_id = s.id
+    JOIN scheduled_blocks sb ON ss.scheduled_block_id = sb.id
+    JOIN scheduled_experiments se ON sb.scheduled_experiment_id = se.id
     WHERE ss.scheduled_block_id = ?
     ORDER BY bs.order_index
   `).all(blockId) as any[];
@@ -66,8 +69,9 @@ export function recalculateBlockSchedule(
           const [eh, em] = (step.end_time || '00:00').split(':').map(Number);
           const endMins = eh * 60 + em;
           let cDays = branchCumulativeDays;
+          let effectiveDuration = step.is_sample_dependent ? step.duration_minutes * Math.ceil((step.sample_count || 1) / (step.samples_per_batch || 1)) : step.duration_minutes;
           if (step.is_overnight === 1) cDays += 1;
-          else cDays += Math.floor(step.duration_minutes / 1440);
+          else cDays += Math.floor(effectiveDuration / 1440);
           
           branchCurrentMins = endMins;
           branchCumulativeDays = cDays;
@@ -89,7 +93,8 @@ export function recalculateBlockSchedule(
           sStartMins = sStartMins % 1440;
         }
 
-        let stepDuration = step.is_overnight === 1 ? (24 * 60 - sStartMins - 1) : step.duration_minutes;
+        let effectiveDuration = step.is_sample_dependent ? step.duration_minutes * Math.ceil((step.sample_count || 1) / (step.samples_per_batch || 1)) : step.duration_minutes;
+        let stepDuration = step.is_overnight === 1 ? (24 * 60 - sStartMins - 1) : effectiveDuration;
         let sEndMins = sStartMins + stepDuration;
 
         let hasOverlap = true;
