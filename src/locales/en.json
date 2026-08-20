@@ -14,7 +14,9 @@
     "teams": "Teams",
     "settings": "Settings",
     "notebook": "Notebook",
-    "polls": "Polls"
+    "polls": "Polls",
+    "literature": "Literature",
+    "analysis": "Analysis"
   },
   "common": {
     "save": "Save",
@@ -364,5 +366,52 @@
     "placeholder": "Write your experiment records and notes in Markdown...",
     "selectPrompt": "Select a note from the left list or create a new one.",
     "emptyContent": "*No content*"
+  },
+  "literature": {
+    "title": "Literature",
+    "subtitle": "Paper database, reading progress tracking, and reference file integration (BibTeX/RIS)",
+    "add": "Add Paper",
+    "edit": "Edit Paper",
+    "importZotero": "Import from Reference Tool",
+    "doiLookup": "DOI Lookup & Auto-fill",
+    "readAbstract": "Read Abstract",
+    "readBody": "Read Body",
+    "paperType": "Paper Type",
+    "projectName": "Project Name",
+    "authors": "Authors",
+    "labName": "Lab / Affiliation",
+    "journal": "Journal",
+    "volIssuePageYear": "Vol / Issue / Page / Year",
+    "doi": "DOI",
+    "abstract": "Abstract",
+    "notes": "Notes & Impressions",
+    "keywords": "Keywords (Tags)",
+    "attachments": "Attachments",
+    "pdf": "Main PDF / Capture",
+    "supplemental": "Supplementary Data",
+    "uploadFile": "Upload File",
+    "downloadFile": "Download",
+    "previewPdf": "Preview",
+    "noLiterature": "No literature records found. Click 'Add Paper' or 'Import from Reference Tool'.",
+    "totalCount": "Total Papers",
+    "readAbstractCount": "Abstract Read",
+    "readBodyCount": "Body Read",
+    "unreadCount": "Unread",
+    "types": {
+      "original": "Original Article",
+      "review": "Review",
+      "letter": "Letter / Communication",
+      "conference": "Conference Paper",
+      "preprint": "Preprint",
+      "book_chapter": "Book Chapter",
+      "other": "Other"
+    }
+  },
+  "analysis": {
+    "title": "Analysis",
+    "subtitle": "Analyze experiment duration variance and trends.",
+    "imageSubtitle": "Circle targets on images, label and quantify with point counts.",
+    "tabDuration": "Duration Analysis",
+    "tabImage": "Image Processing Tool"
   }
 }

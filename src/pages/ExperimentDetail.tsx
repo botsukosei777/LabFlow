@@ -25,11 +25,7 @@ export default function ExperimentDetail() {
   // Step form
   const [showStepModal, setShowStepModal] = useState(false);
   const [editingStep, setEditingStep] = useState<Step | null>(null);
-  const [stepForm, setStepForm] = useState({ name: '', description: '', duration_minutes: 0, is_sample_dependent: false, samples_per_batch: 1, is_overnight: false, pattern_label: 'default', sub_protocol_id: null as number | null, preparations: [] as any[], routine_name: '', routine_duration_days: 0, routine_recurrence: 'daily' as any });
-
-  // ... (some lines omitted, use replace_file_content smartly)
-  
-  // Actually, I'll do this in multiple steps. I'll just use a sed-like approach or run a node script to replace all setStepForm({ name: ... }) with the added field.
+  const [stepForm, setStepForm] = useState({ name: '', description: '', duration_minutes: 0, is_sample_dependent: false, samples_per_batch: 1, extra_duration_minutes: 0, is_overnight: false, pattern_label: 'default', sub_protocol_id: null as number | null, preparations: [] as any[], routine_name: '', routine_duration_days: 0, routine_recurrence: 'daily' as any });
 
   // Block form
   const [showBlockModal, setShowBlockModal] = useState(false);
@@ -49,7 +45,10 @@ export default function ExperimentDetail() {
   const [editingProtocol, setEditingProtocol] = useState<any>(null);
   const [protocolForm, setProtocolForm] = useState({ name: '', description: '', color: '', blocks: [] as { block_id: number; day_offset: number }[] });
 
-
+  // SubProtocol form
+  const [showSubProtocolModal, setShowSubProtocolModal] = useState(false);
+  const [editingSubProtocol, setEditingSubProtocol] = useState<any>(null);
+  const [subProtocolForm, setSubProtocolForm] = useState({ name: '', content: '' });
 
   // Pattern filter
   const [selectedPattern, setSelectedPattern] = useState<string>('all');
@@ -79,13 +78,33 @@ export default function ExperimentDetail() {
   useEffect(() => { fetchData(); }, [id]);
 
   // Get unique pattern labels
-  const stepPatterns = [...new Set(steps.map(s => s.pattern_label))];
-  const blockPatterns = [...new Set(blocks.map(b => b.pattern_label))];
+  const stepPatterns = [...new Set((steps || []).map(s => s.pattern_label))];
+  const blockPatterns = [...new Set((blocks || []).map(b => b.pattern_label))];
   const currentPatterns = activeTab === 'steps' ? stepPatterns : activeTab === 'blocks' ? blockPatterns : [];
 
   // Filtered items
-  const filteredSteps = selectedPattern === 'all' ? steps : steps.filter(s => s.pattern_label === selectedPattern);
-  const filteredBlocks = selectedPattern === 'all' ? blocks : blocks.filter(b => b.pattern_label === selectedPattern);
+  const filteredSteps = selectedPattern === 'all' ? (steps || []) : (steps || []).filter(s => s.pattern_label === selectedPattern);
+  const filteredBlocks = selectedPattern === 'all' ? (blocks || []) : (blocks || []).filter(b => b.pattern_label === selectedPattern);
+
+  const openAddStep = () => {
+    setEditingStep(null);
+    setStepForm({ name: '', description: '', duration_minutes: 0, is_sample_dependent: false, samples_per_batch: 1, extra_duration_minutes: 0, is_overnight: false, pattern_label: selectedPattern !== 'all' ? selectedPattern : 'default', sub_protocol_id: null, preparations: [], routine_name: '', routine_duration_days: 0, routine_recurrence: 'daily' });
+    setShowStepModal(true);
+  };
+
+  // Keyboard shortcut: Press '1' on Steps tab to open Add Step modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) return;
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+      if (e.key === '1' && activeTab === 'steps' && !showStepModal && !showBlockModal && !showProtocolModal && !showImportModal && !showSubProtocolModal) {
+        e.preventDefault();
+        openAddStep();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeTab, showStepModal, showBlockModal, showProtocolModal, showImportModal, showSubProtocolModal, selectedPattern]);
 
   // Step CRUD
   const handleStepSubmit = async () => {
@@ -99,7 +118,7 @@ export default function ExperimentDetail() {
       addToast('success', t('common.savedSuccessfully'));
       setShowStepModal(false);
       setEditingStep(null);
-      setStepForm({ name: '', description: '', duration_minutes: 0, is_sample_dependent: false, samples_per_batch: 1, is_overnight: false, pattern_label: 'default', sub_protocol_id: null, preparations: [], routine_name: '', routine_duration_days: 0, routine_recurrence: 'daily' });
+      setStepForm({ name: '', description: '', duration_minutes: 0, is_sample_dependent: false, samples_per_batch: 1, extra_duration_minutes: 0, is_overnight: false, pattern_label: 'default', sub_protocol_id: null, preparations: [], routine_name: '', routine_duration_days: 0, routine_recurrence: 'daily' });
       fetchData();
     } catch (error) {
       addToast('error', t('common.errorOccurred'));
@@ -266,9 +285,12 @@ export default function ExperimentDetail() {
   };
 
   const formatDuration = (minutes: number) => {
-    if (minutes < 60) return `${minutes}${t('common.minutes')}`;
+    if (minutes < 60) {
+      const rounded = Number(minutes.toFixed(2));
+      return `${rounded}${t('common.minutes')}`;
+    }
     const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
+    const m = Number((minutes % 60).toFixed(2));
     return m > 0 ? `${h}${t('common.hours')}${m}${t('common.minutes')}` : `${h}${t('common.hours')}`;
   };
 
@@ -296,13 +318,13 @@ export default function ExperimentDetail() {
       {/* Tabs */}
       <div className="tabs">
         <button className={`tab ${activeTab === 'steps' ? 'active' : ''}`} onClick={() => { setActiveTab('steps'); setSelectedPattern('all'); }}>
-          {t('experiments.steps')} ({steps.length})
+          {t('experiments.steps')} ({(steps || []).length})
         </button>
         <button className={`tab ${activeTab === 'blocks' ? 'active' : ''}`} onClick={() => { setActiveTab('blocks'); setSelectedPattern('all'); }}>
-          {t('experiments.blocks')} ({blocks.length})
+          {t('experiments.blocks')} ({(blocks || []).length})
         </button>
         <button className={`tab ${activeTab === 'protocols' ? 'active' : ''}`} onClick={() => { setActiveTab('protocols'); setSelectedPattern('all'); }}>
-          {t('experiments.protocols')} ({protocols.length})
+          {t('experiments.protocols')} ({(protocols || []).length})
         </button>
       </div>
 
@@ -327,12 +349,18 @@ export default function ExperimentDetail() {
             <button className="btn btn-secondary btn-sm" onClick={openImportModal}>
               <Edit size={14} /> インポート
             </button>
-            <button className="btn btn-primary btn-sm" onClick={() => {
-              setEditingStep(null);
-              setStepForm({ name: '', description: '', duration_minutes: 0, is_sample_dependent: false, samples_per_batch: 1, is_overnight: false, pattern_label: selectedPattern !== 'all' ? selectedPattern : 'default', sub_protocol_id: null, preparations: [], routine_name: '', routine_duration_days: 0, routine_recurrence: 'daily' });
-              setShowStepModal(true);
-            }}>
-              <Plus size={14} /> {t('experiments.addStep')}
+            <button className="btn btn-primary btn-sm" onClick={openAddStep} title="ショートカット: [ 1 ]">
+              <Plus size={14} />
+              <span>{t('experiments.addStep')}</span>
+              <kbd style={{
+                background: 'rgba(255, 255, 255, 0.2)',
+                borderRadius: 'var(--border-radius-sm)',
+                padding: '1px 5px',
+                fontSize: '10px',
+                marginLeft: 4,
+                fontWeight: 'bold',
+                fontFamily: 'monospace'
+              }}>1</kbd>
             </button>
           </div>
           {filteredSteps.length === 0 ? (
@@ -352,7 +380,7 @@ export default function ExperimentDetail() {
                     <span className="badge badge-info"><Clock size={12} /> {step.is_overnight ? 'Overnight' : formatDuration(step.duration_minutes)}</span>
                     <button className="btn btn-ghost btn-icon btn-sm" onClick={() => {
                       setEditingStep(step);
-                      setStepForm({ name: step.name, description: step.description || '', duration_minutes: step.duration_minutes, is_sample_dependent: !!step.is_sample_dependent, samples_per_batch: step.samples_per_batch || 1, is_overnight: !!step.is_overnight, pattern_label: step.pattern_label, sub_protocol_id: step.sub_protocol_id || null, preparations: step.preparations || [], routine_name: step.routine_name || '', routine_duration_days: step.routine_duration_days || 0, routine_recurrence: step.routine_recurrence || 'daily' });
+                      setStepForm({ name: step.name, description: step.description || '', duration_minutes: step.duration_minutes, is_sample_dependent: !!step.is_sample_dependent, samples_per_batch: step.samples_per_batch || 1, extra_duration_minutes: step.extra_duration_minutes || 0, is_overnight: !!step.is_overnight, pattern_label: step.pattern_label, sub_protocol_id: step.sub_protocol_id || null, preparations: step.preparations || [], routine_name: step.routine_name || '', routine_duration_days: step.routine_duration_days || 0, routine_recurrence: step.routine_recurrence || 'daily' });
                       setShowStepModal(true);
                     }}><Edit size={14} /></button>
                     <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-danger)' }} onClick={() => deleteStep(step.id)}><Trash2 size={14} /></button>
@@ -521,15 +549,21 @@ export default function ExperimentDetail() {
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">{t('experiments.durationMinutes')}</label>
-                  <input className="form-input" type="number" min="0" value={stepForm.duration_minutes} onChange={e => setStepForm({ ...stepForm, duration_minutes: parseInt(e.target.value) || 0 })} disabled={stepForm.is_overnight} />
+                  <input className="form-input" type="number" min="0" step="any" value={stepForm.duration_minutes} onChange={e => setStepForm({ ...stepForm, duration_minutes: parseFloat(e.target.value) || 0 })} disabled={stepForm.is_overnight} />
                   <label className="form-label mt-2" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <input type="checkbox" checked={stepForm.is_sample_dependent} onChange={e => setStepForm({ ...stepForm, is_sample_dependent: e.target.checked })} />
                     サンプル数依存にする
                   </label>
                   {stepForm.is_sample_dependent && (
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '8px' }}>
-                      <input className="form-input" type="number" min="1" value={stepForm.samples_per_batch} onChange={e => setStepForm({ ...stepForm, samples_per_batch: parseInt(e.target.value) || 1 })} style={{ width: '80px' }} />
-                      <span>サンプルごとに所要時間を加算</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px', padding: '8px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: 'var(--border-radius-sm)', border: '1px dashed var(--border-default)' }}>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <input className="form-input" type="number" min="1" step="any" value={stepForm.samples_per_batch} onChange={e => setStepForm({ ...stepForm, samples_per_batch: parseFloat(e.target.value) || 1 })} style={{ width: '80px' }} />
+                        <span style={{ fontSize: 'var(--font-size-xs)' }}>サンプルごとに所要時間を加算</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <input className="form-input" type="number" min="0" step="any" value={stepForm.extra_duration_minutes} onChange={e => setStepForm({ ...stepForm, extra_duration_minutes: parseFloat(e.target.value) || 0 })} style={{ width: '80px' }} />
+                        <span style={{ fontSize: 'var(--font-size-xs)' }}>サンプル数に依存しない固定追加時間 (分)</span>
+                      </div>
                     </div>
                   )}
                   <label className="form-checkbox" style={{ marginTop: 'var(--space-xs)' }}>
@@ -606,7 +640,7 @@ export default function ExperimentDetail() {
                       </select>
                       {prep.timing_type === 'before_experiment' && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}>
-                          <input type="number" className="form-input" style={{ width: 80 }} value={prep.timing_offset_minutes} onChange={e => { const newPreps = [...stepForm.preparations]; newPreps[index].timing_offset_minutes = parseInt(e.target.value) || 0; setStepForm({ ...stepForm, preparations: newPreps }); }} />
+                          <input type="number" step="any" className="form-input" style={{ width: 80 }} value={prep.timing_offset_minutes} onChange={e => { const newPreps = [...stepForm.preparations]; newPreps[index].timing_offset_minutes = parseFloat(e.target.value) || 0; setStepForm({ ...stepForm, preparations: newPreps }); }} />
                           <span style={{ fontSize: 'var(--font-size-sm)' }}>分前</span>
                         </div>
                       )}
@@ -723,9 +757,10 @@ export default function ExperimentDetail() {
                                         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                           開始: +<input 
                                             type="number" 
+                                            step="any"
                                             value={node.delay_minutes} 
                                             onChange={e => {
-                                              const val = Math.max(0, parseInt(e.target.value) || 0);
+                                              const val = Math.max(0, parseFloat(e.target.value) || 0);
                                               const newNodes = [...blockForm.step_nodes];
                                               newNodes[stageIndex][branchIndex][nodeIndex].delay_minutes = val;
                                               let currentDelay = val;

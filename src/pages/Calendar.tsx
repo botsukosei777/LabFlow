@@ -52,8 +52,10 @@ export default function Calendar() {
     title: '',
     description: '',
     date: format(new Date(), 'yyyy-MM-dd'),
+    end_date: format(new Date(), 'yyyy-MM-dd'),
     start_time: '',
     end_time: '',
+    is_all_day: false,
     color: '#3B82F6'
   });
 
@@ -151,15 +153,17 @@ export default function Calendar() {
 
       msData.forEach((m: any) => {
         if (!m.deadline) return;
-        const msEnd = new Date(m.deadline + 'T00:00:00');
+        const deadlineDateStr = m.deadline.includes('T') ? m.deadline.split('T')[0] : m.deadline;
+        const msEnd = new Date(deadlineDateStr + 'T00:00:00');
         msEnd.setDate(msEnd.getDate() + 1);
         newEvents.push({
           id: `ms-${m.id}`,
-          title: m.name,
-          start: new Date(m.deadline + 'T00:00:00'),
+          title: `🎯 ${m.name}`,
+          start: new Date(deadlineDateStr + 'T00:00:00'),
           end: msEnd,
           allDay: true,
-          type: 'milestone'
+          type: 'milestone',
+          resource: m
         });
       });
 
@@ -181,14 +185,18 @@ export default function Calendar() {
       userEvents.forEach((ev: any) => {
         if (!ev.date) return;
         
-        let eStart, eEnd;
-        if (ev.is_all_day === 1) {
-          eStart = new Date(ev.date + 'T00:00:00');
-          eEnd = new Date(ev.date + 'T00:00:00');
-          eEnd.setDate(eEnd.getDate() + 1); // Exclusive end for allDay
+        const startDateStr = ev.date;
+        const endDateStr = ev.end_date || ev.date;
+        const isAllDay = ev.is_all_day === 1 || ev.is_all_day === true || (!ev.start_time && !ev.end_time);
+
+        let eStart: Date, eEnd: Date;
+        if (isAllDay) {
+          eStart = new Date(`${startDateStr}T00:00:00`);
+          eEnd = new Date(`${endDateStr}T00:00:00`);
+          eEnd.setDate(eEnd.getDate() + 1); // Exclusive end date for BigCalendar allDay
         } else {
-          eStart = new Date(`${ev.date}T${ev.start_time || '09:00'}:00`);
-          eEnd = new Date(`${ev.date}T${ev.end_time || '10:00'}:00`);
+          eStart = new Date(`${startDateStr}T${ev.start_time || '09:00'}:00`);
+          eEnd = new Date(`${endDateStr}T${ev.end_time || '10:00'}:00`);
         }
 
         newEvents.push({
@@ -196,10 +204,11 @@ export default function Calendar() {
           title: ev.title,
           start: eStart,
           end: eEnd,
-          allDay: ev.is_all_day === 1,
+          _allDayEnd: isAllDay ? eEnd : undefined,
+          allDay: isAllDay,
           type: 'event',
           resource: ev,
-          color: ev.color || 'var(--color-primary)'
+          color: ev.color || '#3B82F6'
         });
       });
 
@@ -298,18 +307,25 @@ export default function Calendar() {
       setPostponeTime(event.resource.start_time);
       setShowStepModal(true);
     } else if (event.type === 'event') {
-      setEditingEvent(event.resource);
+      const res = event.resource || {};
+      const dateVal = res.date || (event.start ? format(new Date(event.start), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'));
+      const endDateVal = res.end_date || dateVal;
+      setEditingEvent(res.id ? res : { ...res, id: String(event.id).replace('event-', '') });
       setEventForm({
-        title: event.resource.title,
-        description: event.resource.description || '',
-        date: event.resource.date,
-        start_time: event.resource.start_time || '',
-        end_time: event.resource.end_time || '',
-        color: event.resource.color || '#3B82F6'
+        title: res.title || event.title || '',
+        description: res.description || '',
+        date: dateVal,
+        end_date: endDateVal,
+        start_time: res.start_time || '',
+        end_time: res.end_time || '',
+        is_all_day: res.is_all_day === 1 || res.is_all_day === true || (!res.start_time && !res.end_time),
+        color: res.color || event.color || '#3B82F6'
       });
       setShowEventModal(true);
+    } else if (event.type === 'milestone') {
+      navigate('/milestones');
     } else if (event.type === 'note') {
-      navigate('/notebook?id=' + event.resource.id);
+      navigate('/notebook?id=' + event.resource?.id);
     } else if (event.type === 'holiday') {
       if (window.confirm(t('common.confirmDelete', '削除しますか？'))) {
         // Id prefix is 'hol-123'
@@ -328,6 +344,12 @@ export default function Calendar() {
 
   const handleSelectSlot = async (slotInfo: any) => {
     const dateStr = format(slotInfo.start, 'yyyy-MM-dd');
+    // If range selected on month/week/day view
+    const endDateRaw = slotInfo.end ? new Date(slotInfo.end) : new Date(slotInfo.start);
+    if (slotInfo.slots && slotInfo.slots.length > 1 && slotInfo.action === 'select') {
+      endDateRaw.setDate(endDateRaw.getDate() - 1);
+    }
+    const endDateStr = format(endDateRaw, 'yyyy-MM-dd');
     
     // Add simple choice via prompt/confirm
     const action = window.prompt(t('calendar.slotAction', 'この日に追加する項目を選んでください:\n1: 休日\n2: イベント\n3: 実験ノート\n(1〜3を入力)'), '2');
@@ -349,8 +371,10 @@ export default function Calendar() {
         title: '',
         description: '',
         date: dateStr,
+        end_date: endDateStr >= dateStr ? endDateStr : dateStr,
         start_time: '',
         end_time: '',
+        is_all_day: true,
         color: '#3B82F6'
       });
       setShowEventModal(true);
@@ -450,6 +474,14 @@ export default function Calendar() {
           };
         }
       }
+      if (e.type === 'event') {
+        if (currentView === 'month' && e.allDay && e._allDayEnd) {
+          return {
+            ...e,
+            end: e._allDayEnd
+          };
+        }
+      }
       return e;
     });
   }, [events, currentView]);
@@ -464,7 +496,7 @@ export default function Calendar() {
         <div className="page-actions" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
           <button className="btn btn-secondary" onClick={() => {
             setEditingEvent(null);
-            setEventForm({ title: '', description: '', date: format(new Date(), 'yyyy-MM-dd'), start_time: '', end_time: '', color: '#3B82F6' });
+            setEventForm({ title: '', description: '', date: format(new Date(), 'yyyy-MM-dd'), end_date: format(new Date(), 'yyyy-MM-dd'), start_time: '', end_time: '', is_all_day: true, color: '#3B82F6' });
             setShowEventModal(true);
           }}>
             <Plus size={18} />
@@ -800,38 +832,83 @@ export default function Calendar() {
             <div style={{ padding: 'var(--space-md)' }}>
               <form onSubmit={handleEventSubmit}>
                 <div style={{ marginBottom: 'var(--space-md)' }}>
-                  <label className="form-label">タイトル</label>
-                  <input type="text" className="form-input" required value={eventForm.title} onChange={e => setEventForm({ ...eventForm, title: e.target.value })} />
-                </div>
-                <div style={{ marginBottom: 'var(--space-md)' }}>
-                  <label className="form-label">日付</label>
-                  <input type="date" className="form-input" required value={eventForm.date} onChange={e => setEventForm({ ...eventForm, date: e.target.value })} />
-                </div>
-                <div style={{ display: 'flex', gap: 'var(--space-md)', marginBottom: 'var(--space-md)' }}>
-                  <div style={{ flex: 1 }}>
-                    <label className="form-label">開始時刻 (任意)</label>
-                    <input type="time" className="form-input" value={eventForm.start_time} onChange={e => setEventForm({ ...eventForm, start_time: e.target.value })} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <label className="form-label">終了時刻 (任意)</label>
-                    <input type="time" className="form-input" value={eventForm.end_time} onChange={e => setEventForm({ ...eventForm, end_time: e.target.value })} />
-                  </div>
-                </div>
-                <div style={{ marginBottom: 'var(--space-md)' }}>
-                  <label className="form-label">メモ</label>
-                  <textarea className="form-input" value={eventForm.description} onChange={e => setEventForm({ ...eventForm, description: e.target.value })} />
-                </div>
-                <div style={{ marginBottom: 'var(--space-lg)' }}>
-                  <label className="form-label">カラー</label>
-                  <input type="color" value={eventForm.color} onChange={e => setEventForm({ ...eventForm, color: e.target.value })} style={{ width: '100%', height: 40, padding: 0, border: 'none', borderRadius: 4 }} />
+                  <label className="form-label">タイトル *</label>
+                  <input type="text" className="form-input" required value={eventForm.title} onChange={e => setEventForm({ ...eventForm, title: e.target.value })} placeholder="例: 学会発表、セミナー、出張" autoFocus />
                 </div>
                 
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                {/* Date range */}
+                <div style={{ display: 'flex', gap: 'var(--space-md)', marginBottom: 'var(--space-md)' }}>
+                  <div style={{ flex: 1 }}>
+                    <label className="form-label">開始日 *</label>
+                    <input
+                      type="date"
+                      className="form-input"
+                      required
+                      value={eventForm.date}
+                      onChange={e => {
+                        const newStart = e.target.value;
+                        setEventForm(prev => ({
+                          ...prev,
+                          date: newStart,
+                          end_date: prev.end_date < newStart ? newStart : prev.end_date
+                        }));
+                      }}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label className="form-label">終了日 (連日イベント)</label>
+                    <input
+                      type="date"
+                      className="form-input"
+                      min={eventForm.date}
+                      value={eventForm.end_date || eventForm.date}
+                      onChange={e => setEventForm({ ...eventForm, end_date: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: 'var(--space-md)' }}>
+                  <label className="form-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={eventForm.is_all_day}
+                      onChange={e => setEventForm({ ...eventForm, is_all_day: e.target.checked })}
+                    />
+                    <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>終日イベント（または複数日）</span>
+                  </label>
+                </div>
+
+                {!eventForm.is_all_day && (
+                  <div style={{ display: 'flex', gap: 'var(--space-md)', marginBottom: 'var(--space-md)' }}>
+                    <div style={{ flex: 1 }}>
+                      <label className="form-label">開始時刻</label>
+                      <input type="time" className="form-input" value={eventForm.start_time} onChange={e => setEventForm({ ...eventForm, start_time: e.target.value })} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label className="form-label">終了時刻</label>
+                      <input type="time" className="form-input" value={eventForm.end_time} onChange={e => setEventForm({ ...eventForm, end_time: e.target.value })} />
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ marginBottom: 'var(--space-md)' }}>
+                  <label className="form-label">メモ (任意)</label>
+                  <textarea className="form-input" rows={2} value={eventForm.description} onChange={e => setEventForm({ ...eventForm, description: e.target.value })} placeholder="場所や持ち物など" />
+                </div>
+                <div style={{ marginBottom: 'var(--space-lg)' }}>
+                  <label className="form-label">表示カラー</label>
+                  <div style={{ display: 'flex', gap: 'var(--space-sm)', alignItems: 'center' }}>
+                    <input type="color" value={eventForm.color} onChange={e => setEventForm({ ...eventForm, color: e.target.value })} style={{ width: 44, height: 36, padding: 0, border: 'none', borderRadius: 4, cursor: 'pointer' }} />
+                    <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)' }}>カレンダー上の帯の色</span>
+                  </div>
+                </div>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   {editingEvent ? (
                     <button type="button" className="btn btn-ghost" style={{ color: 'var(--color-danger)' }} onClick={handleDeleteEvent}>
-                      削除
+                      <Trash2 size={16} style={{ marginRight: 4 }} /> 削除
                     </button>
-                  ) : <div></div>}
+                  ) : <div />}
                   <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
                     <button type="button" className="btn btn-ghost" onClick={() => setShowEventModal(false)}>キャンセル</button>
                     <button type="submit" className="btn btn-primary">保存</button>

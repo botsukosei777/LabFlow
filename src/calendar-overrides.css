@@ -42,6 +42,12 @@
 
 .rbc-event {
   padding: 2px 5px;
+  cursor: pointer !important;
+  pointer-events: auto !important;
+}
+
+.rbc-event-content {
+  pointer-events: none;
 }
 
 /* Scrollable Month View */

@@ -98,7 +98,8 @@ export default function Milestones() {
 
   const updateItemCount = async (item: MilestoneItem, newCount: number) => {
     try {
-      await api.put(`/milestones/items/${item.id}`, { ...item, current_count: newCount });
+      const isCompleted = item.target_count > 0 ? newCount >= item.target_count : item.is_completed;
+      await api.put(`/milestones/items/${item.id}`, { ...item, current_count: newCount, is_completed: isCompleted });
       fetchMilestones();
     } catch (e) { addToast('error', t('common.errorOccurred')); }
   };
@@ -136,7 +137,8 @@ export default function Milestones() {
 
   const updateSubItemCount = async (sub: MilestoneSubItem, newCount: number) => {
     try {
-      await api.put(`/milestones/subitems/${sub.id}`, { ...sub, current_count: newCount });
+      const isCompleted = sub.target_count > 0 ? newCount >= sub.target_count : sub.is_completed;
+      await api.put(`/milestones/subitems/${sub.id}`, { ...sub, current_count: newCount, is_completed: isCompleted });
       fetchMilestones();
     } catch (e) { addToast('error', t('common.errorOccurred')); }
   };
@@ -150,10 +152,33 @@ export default function Milestones() {
     }
   };
 
+  const getItemProgressRate = (item: MilestoneItem): number => {
+    // If the item has sub_items, average the sub_items progress
+    if (item.sub_items && item.sub_items.length > 0) {
+      const subRates = item.sub_items.map((sub: any) => {
+        if (sub.data_type === 'quantitative') {
+          const target = sub.target_count || 1;
+          const current = sub.current_count || 0;
+          return Math.min(1, Math.max(0, current / target));
+        }
+        return sub.is_completed ? 1 : 0;
+      });
+      const subAvg = subRates.reduce((a: number, b: number) => a + b, 0) / subRates.length;
+      return subAvg;
+    }
+
+    if (item.data_type === 'quantitative') {
+      const target = item.target_count || 1;
+      const current = item.current_count || 0;
+      return Math.min(1, Math.max(0, current / target));
+    }
+    return item.is_completed ? 1 : 0;
+  };
+
   const getProgress = (ms: Milestone) => {
     if (!ms.items || ms.items.length === 0) return 0;
-    const completed = ms.items.filter(i => i.is_completed).length;
-    return Math.round((completed / ms.items.length) * 100);
+    const totalRate = ms.items.reduce((sum, item) => sum + getItemProgressRate(item), 0);
+    return Math.round((totalRate / ms.items.length) * 100);
   };
 
   const getDaysLeft = (d: string | null) => {
@@ -298,9 +323,39 @@ export default function Milestones() {
                             ) : (
                               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                 <button className="btn btn-ghost btn-icon btn-sm" onClick={() => updateItemCount(item, Math.max(0, item.current_count - 1))} disabled={item.current_count <= 0}><MinusCircle size={16} /></button>
-                                <span style={{ fontWeight: 600, minWidth: 50, textAlign: 'center' }}>
-                                  {item.current_count}/{item.target_count} {item.unit && <span style={{ fontSize: 'var(--font-size-xs)', fontWeight: 'normal', color: 'var(--text-secondary)' }}>{item.unit}</span>}
-                                </span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 2, fontWeight: 600 }}>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    className="form-input"
+                                    style={{
+                                      width: 52,
+                                      height: 28,
+                                      padding: '2px 4px',
+                                      textAlign: 'center',
+                                      fontSize: 'var(--font-size-sm)',
+                                      fontWeight: 'bold',
+                                      borderRadius: 'var(--border-radius-sm)'
+                                    }}
+                                    defaultValue={item.current_count}
+                                    key={`item-count-${item.id}-${item.current_count}`}
+                                    onBlur={(e) => {
+                                      const val = parseInt(e.target.value, 10);
+                                      if (!isNaN(val) && val >= 0 && val !== item.current_count) {
+                                        updateItemCount(item, val);
+                                      } else {
+                                        e.target.value = String(item.current_count);
+                                      }
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        (e.target as HTMLInputElement).blur();
+                                      }
+                                    }}
+                                  />
+                                  <span style={{ color: 'var(--text-secondary)' }}>/{item.target_count}</span>
+                                  {item.unit && <span style={{ fontSize: 'var(--font-size-xs)', fontWeight: 'normal', color: 'var(--text-secondary)', marginLeft: 2 }}>{item.unit}</span>}
+                                </div>
                                 <button className="btn btn-ghost btn-icon btn-sm" onClick={() => updateItemCount(item, item.current_count + 1)}><Plus size={16} /></button>
                               </div>
                             )}
@@ -343,9 +398,39 @@ export default function Milestones() {
                                     ) : (
                                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                         <button className="btn btn-ghost btn-icon btn-sm" onClick={() => updateSubItemCount(sub, Math.max(0, sub.current_count - 1))} disabled={sub.current_count <= 0}><MinusCircle size={14} /></button>
-                                        <span style={{ fontWeight: 600, minWidth: 40, textAlign: 'center', fontSize: 'var(--font-size-xs)' }}>
-                                          {sub.current_count}/{sub.target_count} {sub.unit && <span style={{ fontWeight: 'normal', color: 'var(--text-secondary)' }}>{sub.unit}</span>}
-                                        </span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 2, fontWeight: 600, fontSize: 'var(--font-size-xs)' }}>
+                                          <input
+                                            type="number"
+                                            min={0}
+                                            className="form-input"
+                                            style={{
+                                              width: 46,
+                                              height: 24,
+                                              padding: '1px 3px',
+                                              textAlign: 'center',
+                                              fontSize: 'var(--font-size-xs)',
+                                              fontWeight: 'bold',
+                                              borderRadius: 'var(--border-radius-sm)'
+                                            }}
+                                            defaultValue={sub.current_count}
+                                            key={`subitem-count-${sub.id}-${sub.current_count}`}
+                                            onBlur={(e) => {
+                                              const val = parseInt(e.target.value, 10);
+                                              if (!isNaN(val) && val >= 0 && val !== sub.current_count) {
+                                                updateSubItemCount(sub, val);
+                                              } else {
+                                                e.target.value = String(sub.current_count);
+                                              }
+                                            }}
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter') {
+                                                (e.target as HTMLInputElement).blur();
+                                              }
+                                            }}
+                                          />
+                                          <span style={{ color: 'var(--text-secondary)' }}>/{sub.target_count}</span>
+                                          {sub.unit && <span style={{ fontWeight: 'normal', color: 'var(--text-secondary)', marginLeft: 2 }}>{sub.unit}</span>}
+                                        </div>
                                         <button className="btn btn-ghost btn-icon btn-sm" onClick={() => updateSubItemCount(sub, sub.current_count + 1)}><Plus size={14} /></button>
                                       </div>
                                     )}

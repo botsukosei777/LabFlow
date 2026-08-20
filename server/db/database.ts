@@ -89,7 +89,10 @@ function initDb() {
   try { dbInstance.exec("ALTER TABLE steps ADD COLUMN time_per_sample_minutes INTEGER NOT NULL DEFAULT 0"); } catch(e) {}
   try { dbInstance.exec("ALTER TABLE steps ADD COLUMN is_sample_dependent INTEGER NOT NULL DEFAULT 0"); } catch(e) {}
   try { dbInstance.exec("ALTER TABLE steps ADD COLUMN samples_per_batch INTEGER NOT NULL DEFAULT 1"); } catch(e) {}
+  try { dbInstance.exec("ALTER TABLE steps ADD COLUMN extra_duration_minutes REAL NOT NULL DEFAULT 0"); } catch(e) {}
   try { dbInstance.exec("ALTER TABLE scheduled_experiments ADD COLUMN sample_count INTEGER NOT NULL DEFAULT 1"); } catch(e) {}
+  try { dbInstance.exec("ALTER TABLE events ADD COLUMN end_date TEXT"); } catch(e) {}
+  try { dbInstance.exec("ALTER TABLE events ADD COLUMN is_all_day INTEGER NOT NULL DEFAULT 0"); } catch(e) {}
   
   try { 
     dbInstance.exec(`
@@ -148,6 +151,41 @@ function initDb() {
       )
     `);
   } catch(e) {}
+
+  try { 
+    dbInstance.exec(`
+      CREATE TABLE IF NOT EXISTS literature (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          title TEXT NOT NULL,
+          authors TEXT DEFAULT '',
+          lab_name TEXT DEFAULT '',
+          journal TEXT DEFAULT '',
+          volume TEXT DEFAULT '',
+          issue TEXT DEFAULT '',
+          pages TEXT DEFAULT '',
+          year INTEGER,
+          doi TEXT DEFAULT '',
+          paper_type TEXT DEFAULT 'original',
+          project_name TEXT DEFAULT '',
+          abstract TEXT DEFAULT '',
+          notes TEXT DEFAULT '',
+          keywords TEXT DEFAULT '[]',
+          read_abstract INTEGER NOT NULL DEFAULT 0,
+          read_body INTEGER NOT NULL DEFAULT 0,
+          pdf_filename TEXT DEFAULT '',
+          pdf_path TEXT DEFAULT '',
+          supplemental_filename TEXT DEFAULT '',
+          supplemental_path TEXT DEFAULT '',
+          created_at TEXT DEFAULT (datetime('now', 'localtime')),
+          updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_literature_user_id ON literature(user_id);
+      CREATE INDEX IF NOT EXISTS idx_literature_project ON literature(project_name);
+    `);
+  } catch(e) {}
+
 
   // Sub-protocols migration: make it user-scoped instead of experiment-scoped
   const subProtocolTableInfo = dbInstance.prepare("PRAGMA table_info(sub_protocols)").all() as any[];

@@ -21,6 +21,7 @@ export interface Step {
   time_per_sample_minutes?: number;
   is_sample_dependent?: number;
   samples_per_batch?: number;
+  extra_duration_minutes?: number;
   is_overnight?: number;
   sub_protocol?: string;
   sub_protocol_id?: number | null;
@@ -313,3 +314,34 @@ export interface Poll {
   options?: PollOption[];
   votes?: PollVote[];
 }
+
+// Literature
+export type PaperType = 'original' | 'review' | 'letter' | 'conference' | 'preprint' | 'book_chapter' | 'other';
+
+export interface LiteratureItem {
+  id: number;
+  user_id: number;
+  title: string;
+  authors: string;
+  lab_name: string;
+  journal: string;
+  volume: string;
+  issue: string;
+  pages: string;
+  year?: number | null;
+  doi: string;
+  paper_type: PaperType;
+  project_name: string;
+  abstract: string;
+  notes: string;
+  keywords: string[]; // parsed from JSON string or stored as array
+  read_abstract: boolean | number;
+  read_body: boolean | number;
+  pdf_filename?: string;
+  pdf_path?: string;
+  supplemental_filename?: string;
+  supplemental_path?: string;
+  created_at: string;
+  updated_at: string;
+}
+

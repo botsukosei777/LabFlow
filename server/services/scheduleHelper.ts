@@ -18,7 +18,7 @@ export function recalculateBlockSchedule(
   // Get steps for the scheduled block
   const steps = db.prepare(`
     SELECT ss.id, ss.start_time, ss.end_time, ss.status, bs.order_index, bs.branch_index, bs.delay_minutes,
-           s.name as step_name, s.duration_minutes, s.is_sample_dependent, s.samples_per_batch, s.is_overnight,
+           s.name as step_name, s.duration_minutes, s.extra_duration_minutes, s.is_sample_dependent, s.samples_per_batch, s.is_overnight,
            se.sample_count
     FROM scheduled_steps ss
     JOIN block_steps bs ON ss.block_step_id = bs.id
@@ -65,11 +65,14 @@ export function recalculateBlockSchedule(
       let branchCumulativeDays = cumulativeDays;
 
       for (const step of branch) {
+        const extraMins = Number(step.extra_duration_minutes) || 0;
         if (step.status === 'completed') {
           const [eh, em] = (step.end_time || '00:00').split(':').map(Number);
           const endMins = eh * 60 + em;
           let cDays = branchCumulativeDays;
-          let effectiveDuration = step.is_sample_dependent ? step.duration_minutes * Math.ceil((step.sample_count || 1) / (step.samples_per_batch || 1)) : step.duration_minutes;
+          let effectiveDuration = step.is_sample_dependent 
+            ? (step.duration_minutes * Math.ceil((step.sample_count || 1) / (step.samples_per_batch || 1)) + extraMins) 
+            : step.duration_minutes;
           if (step.is_overnight === 1) cDays += 1;
           else cDays += Math.floor(effectiveDuration / 1440);
           
@@ -93,7 +96,9 @@ export function recalculateBlockSchedule(
           sStartMins = sStartMins % 1440;
         }
 
-        let effectiveDuration = step.is_sample_dependent ? step.duration_minutes * Math.ceil((step.sample_count || 1) / (step.samples_per_batch || 1)) : step.duration_minutes;
+        let effectiveDuration = step.is_sample_dependent 
+          ? (step.duration_minutes * Math.ceil((step.sample_count || 1) / (step.samples_per_batch || 1)) + extraMins) 
+          : step.duration_minutes;
         let stepDuration = step.is_overnight === 1 ? (24 * 60 - sStartMins - 1) : effectiveDuration;
         let sEndMins = sStartMins + stepDuration;
 

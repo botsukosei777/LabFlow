@@ -90,10 +90,10 @@ router.put('/steps/:stepId', (req, res) => {
   `).get(req.params.stepId) as any;
   if (!step || step.user_id !== req.userId) return res.status(403).json({ message: 'Forbidden' });
 
-  const { name, description, duration_minutes, time_per_sample_minutes, is_overnight, pattern_label, order_index, sub_protocol_id, preparations, routine_name, routine_duration_days, routine_recurrence, routine_recurrence_days } = req.body;
+  const { name, description, duration_minutes, extra_duration_minutes, time_per_sample_minutes, is_overnight, pattern_label, order_index, sub_protocol_id, preparations, routine_name, routine_duration_days, routine_recurrence, routine_recurrence_days } = req.body;
   db.prepare(
-    'UPDATE steps SET name = ?, description = ?, duration_minutes = ?, is_sample_dependent = ?, samples_per_batch = ?, is_overnight = ?, pattern_label = ?, order_index = ?, sub_protocol_id = ?, routine_name = ?, routine_duration_days = ?, routine_recurrence = ?, routine_recurrence_days = ? WHERE id = ?'
-  ).run(name, description, duration_minutes, req.body.is_sample_dependent ? 1 : 0, req.body.samples_per_batch || 1, is_overnight ? 1 : 0, pattern_label, order_index, sub_protocol_id || null, routine_name || null, routine_duration_days || null, routine_recurrence || null, routine_recurrence_days || null, req.params.stepId);
+    'UPDATE steps SET name = ?, description = ?, duration_minutes = ?, is_sample_dependent = ?, samples_per_batch = ?, extra_duration_minutes = ?, is_overnight = ?, pattern_label = ?, order_index = ?, sub_protocol_id = ?, routine_name = ?, routine_duration_days = ?, routine_recurrence = ?, routine_recurrence_days = ? WHERE id = ?'
+  ).run(name, description, duration_minutes, req.body.is_sample_dependent ? 1 : 0, req.body.samples_per_batch || 1, extra_duration_minutes || 0, is_overnight ? 1 : 0, pattern_label, order_index, sub_protocol_id || null, routine_name || null, routine_duration_days || null, routine_recurrence || null, routine_recurrence_days || null, req.params.stepId);
   
   if (preparations && Array.isArray(preparations)) {
     db.prepare('DELETE FROM step_preparations WHERE step_id = ?').run(req.params.stepId);
@@ -137,8 +137,8 @@ router.post('/:experimentId/steps/import', (req, res) => {
   
   // Copy step
   const insertStep = db.prepare(`
-    INSERT INTO steps (experiment_type_id, pattern_label, name, description, duration_minutes, is_overnight, order_index, sub_protocol_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO steps (experiment_type_id, pattern_label, name, description, duration_minutes, is_sample_dependent, samples_per_batch, extra_duration_minutes, is_overnight, order_index, sub_protocol_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   
   // Put it at the end of the current experiment's steps
@@ -148,10 +148,13 @@ router.post('/:experimentId/steps/import', (req, res) => {
   const result = insertStep.run(
     req.params.experimentId,
     sourceStep.pattern_label,
-    sourceStep.name + ' (繧ｳ繝斐・)',
+    sourceStep.name + ' (コピー)',
     sourceStep.description,
     sourceStep.duration_minutes,
-    sourceStep.is_overnight,
+    sourceStep.is_sample_dependent || 0,
+    sourceStep.samples_per_batch || 1,
+    sourceStep.extra_duration_minutes || 0,
+    sourceStep.is_overnight || 0,
     newOrderIndex,
     sourceStep.sub_protocol_id
   );
@@ -163,8 +166,6 @@ router.post('/:experimentId/steps/import', (req, res) => {
   if (sourcePreps.length > 0) {
     const insertPrep = db.prepare('INSERT INTO step_preparations (step_id, message, timing_type, timing_step_id, timing_offset_minutes, requires_check) VALUES (?, ?, ?, ?, ?, ?)');
     for (const p of sourcePreps) {
-      // Note: timing_step_id points to a step in the old experiment type. 
-      // It might be broken in the new experiment, but we copy it as null to be safe if timing_type == 'after_step'.
       const newTimingStepId = p.timing_type === 'after_step' ? null : p.timing_step_id;
       insertPrep.run(newStepId, p.message, p.timing_type, newTimingStepId, p.timing_offset_minutes, p.requires_check);
     }
@@ -234,7 +235,7 @@ router.post('/blocks/:blockId/copy', (req, res) => {
 
   const newBlock = db.prepare(
     'INSERT INTO blocks (experiment_type_id, pattern_label, name, description, order_index) VALUES (?, ?, ?, ?, ?)'
-  ).run(block.experiment_type_id, block.pattern_label, `${block.name} - 繧ｳ繝斐・`, block.description, block.order_index);
+  ).run(block.experiment_type_id, block.pattern_label, `${block.name} - コピー`, block.description, block.order_index);
   
   const newBlockId = newBlock.lastInsertRowid;
   
@@ -286,7 +287,7 @@ router.post('/protocols/:protocolId/copy', (req, res) => {
 
   const newProtocol = db.prepare(
     'INSERT INTO protocols (experiment_type_id, name, description, color, user_id) VALUES (?, ?, ?, ?, ?)'
-  ).run(protocol.experiment_type_id, `${protocol.name} - 繧ｳ繝斐・`, protocol.description, protocol.color, req.userId);
+  ).run(protocol.experiment_type_id, `${protocol.name} - コピー`, protocol.description, protocol.color, req.userId);
   
   const newProtocolId = newProtocol.lastInsertRowid;
   
@@ -359,7 +360,7 @@ router.post('/:id/steps', (req, res) => {
   const expType = db.prepare('SELECT id FROM experiment_types WHERE id = ? AND user_id = ?').get(req.params.id, req.userId);
   if (!expType) return res.status(403).json({ message: 'Forbidden' });
 
-  const { name, description, duration_minutes, is_overnight, pattern_label, order_index, sub_protocol_id, preparations, routine_name, routine_duration_days, routine_recurrence, routine_recurrence_days } = req.body;
+  const { name, description, duration_minutes, extra_duration_minutes, is_overnight, pattern_label, order_index, sub_protocol_id, preparations, routine_name, routine_duration_days, routine_recurrence, routine_recurrence_days } = req.body;
   if (!name) return res.status(400).json({ message: 'Name is required' });
   
   let idx = order_index;
@@ -371,8 +372,8 @@ router.post('/:id/steps', (req, res) => {
   }
 
   const result = db.prepare(
-    'INSERT INTO steps (experiment_type_id, name, description, duration_minutes, time_per_sample_minutes, is_sample_dependent, samples_per_batch, is_overnight, pattern_label, order_index, sub_protocol_id, routine_name, routine_duration_days, routine_recurrence, routine_recurrence_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(req.params.id, name, description || '', duration_minutes || 0, req.body.time_per_sample_minutes || 0, req.body.is_sample_dependent ? 1 : 0, req.body.samples_per_batch || 1, is_overnight ? 1 : 0, pattern_label || 'default', idx, sub_protocol_id || null, routine_name || null, routine_duration_days || null, routine_recurrence || null, routine_recurrence_days || null);
+    'INSERT INTO steps (experiment_type_id, name, description, duration_minutes, time_per_sample_minutes, is_sample_dependent, samples_per_batch, extra_duration_minutes, is_overnight, pattern_label, order_index, sub_protocol_id, routine_name, routine_duration_days, routine_recurrence, routine_recurrence_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(req.params.id, name, description || '', duration_minutes || 0, req.body.time_per_sample_minutes || 0, req.body.is_sample_dependent ? 1 : 0, req.body.samples_per_batch || 1, extra_duration_minutes || 0, is_overnight ? 1 : 0, pattern_label || 'default', idx, sub_protocol_id || null, routine_name || null, routine_duration_days || null, routine_recurrence || null, routine_recurrence_days || null);
   
   const stepId = result.lastInsertRowid;
   
@@ -401,7 +402,7 @@ router.get('/:id/blocks', (req, res) => {
   
   for (const block of blocks) {
     block.steps = db.prepare(`
-      SELECT bs.*, s.name as step_name, s.description as step_description, s.duration_minutes, s.pattern_label as step_pattern
+      SELECT bs.*, s.name as step_name, s.description as step_description, s.duration_minutes, s.extra_duration_minutes, s.is_sample_dependent, s.samples_per_batch, s.pattern_label as step_pattern
       FROM block_steps bs
       JOIN steps s ON bs.step_id = s.id
       WHERE bs.block_id = ?
@@ -511,6 +512,5 @@ router.post('/:id/protocols', (req, res) => {
   const created = db.prepare('SELECT * FROM protocols WHERE id = ?').get(protocolId);
   res.status(201).json(created);
 });
-
 
 export default router;

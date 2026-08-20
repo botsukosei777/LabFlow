@@ -20,13 +20,15 @@ import eventRoutes from './routes/events.js';
 import notebookRoutes from './routes/notebook.js';
 import miniMemosRoutes from './routes/miniMemos.js';
 import quickLinksRoutes from './routes/quickLinks.js';
+import literatureRoutes from './routes/literature.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware - allow both dev (Vite proxy) and production (same-origin) access
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 import { requireAuth } from './middleware/auth.js';
 import authRoutes from './routes/auth.js';
@@ -59,6 +61,7 @@ app.use('/api/shared/polls', requireAuth, pollsSyncRoutes);
 app.use('/api/shared', requireAuth, sharedRoutes);
 app.use('/api/polls', requireAuth, pollsRoutes);
 app.use('/api/analysis', requireAuth, analysisRoutes);
+app.use('/api/literature', requireAuth, literatureRoutes);
 
 // Backup endpoint
 app.get('/api/backup', requireAuth, async (req, res) => {

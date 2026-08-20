@@ -13,7 +13,9 @@
     "routines": "ルーティン",
     "teams": "チーム",
     "settings": "設定",
-    "polls": "投票"
+    "polls": "投票",
+    "literature": "文献管理",
+    "analysis": "分析"
   },
   "common": {
     "save": "保存",
@@ -369,5 +371,52 @@
     "placeholder": "実験の記録やメモをMarkdown形式で記述してください...",
     "selectPrompt": "左のリストからノートを選択するか、新しく作成してください。",
     "emptyContent": "*内容はありません*"
+  },
+  "literature": {
+    "title": "文献管理",
+    "subtitle": "研究論文・総説のデータベース管理、読了状態のトラッキング、文献ファイル連携 (BibTeX/RIS)",
+    "add": "文献を追加",
+    "edit": "文献を編集",
+    "importZotero": "文献管理ツールからインポート",
+    "doiLookup": "DOI検索・自動補完",
+    "readAbstract": "Abstract読了",
+    "readBody": "本文読了",
+    "paperType": "論文種別",
+    "projectName": "関連プロジェクト",
+    "authors": "著者",
+    "labName": "研究室・所属",
+    "journal": "ジャーナル",
+    "volIssuePageYear": "巻 / 号 / ページ / 出版年",
+    "doi": "DOI",
+    "abstract": "Abstract",
+    "notes": "メモ・所感",
+    "keywords": "キーワード (タグ)",
+    "attachments": "添付ファイル",
+    "pdf": "本文PDF / キャプチャ",
+    "supplemental": "サプルメンタルデータ",
+    "uploadFile": "ファイルをアップロード",
+    "downloadFile": "ダウンロード",
+    "previewPdf": "プレビュー",
+    "noLiterature": "文献が登録されていません。「文献を追加」または「文献管理ツールからインポート」してください。",
+    "totalCount": "登録文献数",
+    "readAbstractCount": "Abstract読了",
+    "readBodyCount": "本文読了",
+    "unreadCount": "未読",
+    "types": {
+      "original": "原著論文",
+      "review": "総説",
+      "letter": "速報",
+      "conference": "学会発表",
+      "preprint": "プレプリント",
+      "book_chapter": "書籍・分担",
+      "other": "その他"
+    }
+  },
+  "analysis": {
+    "title": "分析",
+    "subtitle": "実験の所要時間の予実差や傾向を分析します。",
+    "imageSubtitle": "画像上の対象を囲み、ラベリング・定量分析を行います。",
+    "tabDuration": "実験時間分析",
+    "tabImage": "画像処理ツール"
   }
 }

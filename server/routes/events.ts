@@ -16,15 +16,18 @@ router.get('/', (req, res) => {
 
 // POST create an event
 router.post('/', (req, res) => {
-  const { title, description, date, start_time, end_time, color } = req.body;
+  const { title, description, date, end_date, start_time, end_time, is_all_day, color } = req.body;
   if (!title || !date) {
     return res.status(400).json({ message: 'Title and date are required' });
   }
 
+  const finalEndDate = end_date || date;
+  const isAllDayVal = is_all_day === true || is_all_day === 1 || (!start_time && !end_time) ? 1 : 0;
+
   const result = db.prepare(`
-    INSERT INTO events (user_id, title, description, date, start_time, end_time, color)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(req.userId, title, description || '', date, start_time || null, end_time || null, color || '#3B82F6');
+    INSERT INTO events (user_id, title, description, date, end_date, start_time, end_time, is_all_day, color)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(req.userId, title, description || '', date, finalEndDate, start_time || null, end_time || null, isAllDayVal, color || '#3B82F6');
 
   const created = db.prepare('SELECT * FROM events WHERE id = ?').get(result.lastInsertRowid);
   
@@ -46,16 +49,18 @@ router.post('/', (req, res) => {
 // PUT update an event
 router.put('/:id', (req, res) => {
   const eventId = req.params.id;
-  const event = db.prepare('SELECT user_id FROM events WHERE id = ?').get(eventId) as any;
+  const event = db.prepare('SELECT user_id, date, end_date FROM events WHERE id = ?').get(eventId) as any;
   if (!event || event.user_id !== req.userId) return res.status(403).json({ message: 'Forbidden' });
 
-  const { title, description, date, start_time, end_time, color } = req.body;
+  const { title, description, date, end_date, start_time, end_time, is_all_day, color } = req.body;
+  const finalEndDate = end_date || date;
+  const isAllDayVal = is_all_day === true || is_all_day === 1 || (!start_time && !end_time) ? 1 : 0;
   
   db.prepare(`
     UPDATE events
-    SET title = ?, description = ?, date = ?, start_time = ?, end_time = ?, color = ?
+    SET title = ?, description = ?, date = ?, end_date = ?, start_time = ?, end_time = ?, is_all_day = ?, color = ?
     WHERE id = ?
-  `).run(title, description || '', date, start_time || null, end_time || null, color || '#3B82F6', eventId);
+  `).run(title, description || '', date, finalEndDate, start_time || null, end_time || null, isAllDayVal, color || '#3B82F6', eventId);
 
   const updated = db.prepare('SELECT * FROM events WHERE id = ?').get(eventId);
 

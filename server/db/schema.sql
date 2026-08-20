@@ -49,7 +49,11 @@ CREATE TABLE IF NOT EXISTS steps (
     pattern_label TEXT NOT NULL DEFAULT 'default',
     name TEXT NOT NULL,
     description TEXT DEFAULT '',
-    duration_minutes INTEGER NOT NULL DEFAULT 0,
+    duration_minutes REAL NOT NULL DEFAULT 0,
+    time_per_sample_minutes REAL NOT NULL DEFAULT 0,
+    is_sample_dependent INTEGER NOT NULL DEFAULT 0,
+    samples_per_batch REAL NOT NULL DEFAULT 1,
+    extra_duration_minutes REAL NOT NULL DEFAULT 0,
     is_overnight INTEGER NOT NULL DEFAULT 0,
     sub_protocol TEXT DEFAULT '',
     sub_protocol_id INTEGER,
@@ -344,15 +348,17 @@ CREATE TABLE IF NOT EXISTS holidays (
     UNIQUE(user_id, date)
 );
 
--- イベント (セミナー等)
+-- イベント (セミナー、学会、連日出張等)
 CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     title TEXT NOT NULL,
     description TEXT DEFAULT '',
     date TEXT NOT NULL,
+    end_date TEXT,
     start_time TEXT,
     end_time TEXT,
+    is_all_day INTEGER NOT NULL DEFAULT 0,
     color TEXT DEFAULT '#3B82F6',
     created_at TEXT DEFAULT (datetime('now', 'localtime')),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -395,3 +401,36 @@ CREATE TABLE IF NOT EXISTS poll_votes (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     UNIQUE(poll_id, user_id)
 );
+
+-- 文献管理 (Literature)
+CREATE TABLE IF NOT EXISTS literature (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    authors TEXT DEFAULT '',
+    lab_name TEXT DEFAULT '',
+    journal TEXT DEFAULT '',
+    volume TEXT DEFAULT '',
+    issue TEXT DEFAULT '',
+    pages TEXT DEFAULT '',
+    year INTEGER,
+    doi TEXT DEFAULT '',
+    paper_type TEXT DEFAULT 'original',
+    project_name TEXT DEFAULT '',
+    abstract TEXT DEFAULT '',
+    notes TEXT DEFAULT '',
+    keywords TEXT DEFAULT '[]',
+    read_abstract INTEGER NOT NULL DEFAULT 0,
+    read_body INTEGER NOT NULL DEFAULT 0,
+    pdf_filename TEXT DEFAULT '',
+    pdf_path TEXT DEFAULT '',
+    supplemental_filename TEXT DEFAULT '',
+    supplemental_path TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_literature_user_id ON literature(user_id);
+CREATE INDEX IF NOT EXISTS idx_literature_project ON literature(project_name);
+

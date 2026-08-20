@@ -1,10 +1,21 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
-import { Activity, AlertCircle } from 'lucide-react';
+import { Activity, AlertCircle, Clock, Microscope } from 'lucide-react';
+
+const ImageProcessor = lazy(() => import('../components/analysis/ImageProcessor'));
+
+type AnalysisTab = 'duration' | 'image';
 
 export default function Analysis() {
   const { t } = useTranslation();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const isImageTab = location.pathname.includes('/image_analysis') || location.pathname.includes('/image');
+  const activeTab: AnalysisTab = isImageTab ? 'image' : 'duration';
+
   const [protocols, setProtocols] = useState<any[]>([]);
   const [selectedProtocol, setSelectedProtocol] = useState<string>('');
   const [experiments, setExperiments] = useState<any[]>([]);
@@ -147,66 +158,133 @@ export default function Analysis() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-xl)' }}>
         <div>
           <h1 style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 'var(--font-weight-bold)', color: 'var(--text-primary)', marginBottom: 'var(--space-xs)' }}>
-            {t('analysis.title', '分析 (Analysis)')}
+            {t('analysis.title', '分析')}
           </h1>
-          <p style={{ color: 'var(--text-secondary)' }}>{t('analysis.subtitle', '実験の所要時間の予実差や傾向を分析します。')}</p>
+          <p style={{ color: 'var(--text-secondary)' }}>
+            {activeTab === 'duration'
+              ? t('analysis.subtitle', '実験の所要時間の予実差や傾向を分析します。')
+              : t('analysis.imageSubtitle', '画像上の対象を囲み、ラベリング・定量分析を行います。')}
+          </p>
         </div>
       </div>
 
-      <div className="card" style={{ marginBottom: 'var(--space-xl)' }}>
-        <div className="card-body">
-          <label className="form-label">{t('analysis.selectProtocol', 'プロトコルを選択')}</label>
-          <select 
-            className="form-input" 
-            style={{ maxWidth: 500 }}
-            value={selectedProtocol}
-            onChange={(e) => setSelectedProtocol(e.target.value)}
-          >
-            {protocols.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.experiment_type_name}({p.protocol_name})
-              </option>
-            ))}
-          </select>
-        </div>
+      {/* Tab Navigation */}
+      <div style={{
+        display: 'flex',
+        gap: 0,
+        marginBottom: 'var(--space-xl)',
+        borderBottom: '2px solid var(--border-default)'
+      }}>
+        <button
+          onClick={() => navigate('/analysis/experiment_time')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-xs)',
+            padding: 'var(--space-sm) var(--space-lg)',
+            border: 'none',
+            borderBottom: activeTab === 'duration' ? '2px solid var(--color-primary)' : '2px solid transparent',
+            marginBottom: '-2px',
+            background: 'none',
+            color: activeTab === 'duration' ? 'var(--color-primary)' : 'var(--text-secondary)',
+            fontWeight: activeTab === 'duration' ? 'var(--font-weight-semibold)' : 'var(--font-weight-normal)',
+            fontSize: 'var(--font-size-sm)',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <Clock size={16} />
+          <span>{t('analysis.tabDuration', '実験時間分析')}</span>
+        </button>
+        <button
+          onClick={() => navigate('/analysis/image_analysis')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-xs)',
+            padding: 'var(--space-sm) var(--space-lg)',
+            border: 'none',
+            borderBottom: activeTab === 'image' ? '2px solid var(--color-primary)' : '2px solid transparent',
+            marginBottom: '-2px',
+            background: 'none',
+            color: activeTab === 'image' ? 'var(--color-primary)' : 'var(--text-secondary)',
+            fontWeight: activeTab === 'image' ? 'var(--font-weight-semibold)' : 'var(--font-weight-normal)',
+            fontSize: 'var(--font-size-sm)',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <Microscope size={16} />
+          <span>{t('analysis.tabImage', '画像処理ツール')}</span>
+        </button>
       </div>
 
-      {loading && <p>Loading...</p>}
-
-      {!loading && analysisData && Object.keys(analysisData).length === 0 && (
-        <div className="card" style={{ padding: 'var(--space-xl)', textAlign: 'center', color: 'var(--text-secondary)' }}>
-          <Activity size={48} style={{ margin: '0 auto var(--space-md)', opacity: 0.2 }} />
-          <p>{t('analysis.noData', '完了した実験データがありません。')}</p>
-        </div>
-      )}
-
-      {!loading && analysisData && Object.keys(analysisData).length > 0 && (
+      {/* Duration Analysis Tab */}
+      {activeTab === 'duration' && (
         <>
-          {/* Block filter checkboxes */}
-          <div className="card" style={{ marginBottom: 'var(--space-md)' }}>
-            <div className="card-body" style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-md)', alignItems: 'center' }}>
-              <span style={{ fontWeight: 'var(--font-weight-semibold)', fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)', marginRight: 'var(--space-sm)' }}>
-                {t('analysis.showBlocks', '表示するブロック:')}
-              </span>
-              {Object.values(analysisData).map(block => (
-                <label key={block.blockKey} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'var(--font-size-sm)', cursor: 'pointer' }}>
-                  <input 
-                    type="checkbox" 
-                    checked={visibleBlocks[block.blockKey] !== false}
-                    onChange={() => toggleBlock(block.blockKey)}
-                  />
-                  {block.name}
-                </label>
-              ))}
+          <div className="card" style={{ marginBottom: 'var(--space-xl)' }}>
+            <div className="card-body">
+              <label className="form-label">{t('analysis.selectProtocol', 'プロトコルを選択')}</label>
+              <select 
+                className="form-input" 
+                style={{ maxWidth: 500 }}
+                value={selectedProtocol}
+                onChange={(e) => setSelectedProtocol(e.target.value)}
+              >
+                {protocols.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.experiment_type_name}({p.protocol_name})
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
-          <div className="grid grid-2">
-            {Object.values(analysisData)
-              .filter(block => visibleBlocks[block.blockKey] !== false)
-              .map(block => <BlockChart key={block.blockKey} block={block} colors={colors} chartHeight={CHART_HEIGHT} barWidth={BAR_WIDTH} colWidth={COL_WIDTH} t={t} />)}
-          </div>
+          {loading && <p>Loading...</p>}
+
+          {!loading && analysisData && Object.keys(analysisData).length === 0 && (
+            <div className="card" style={{ padding: 'var(--space-xl)', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              <Activity size={48} style={{ margin: '0 auto var(--space-md)', opacity: 0.2 }} />
+              <p>{t('analysis.noData', '完了した実験データがありません。')}</p>
+            </div>
+          )}
+
+          {!loading && analysisData && Object.keys(analysisData).length > 0 && (
+            <>
+              {/* Block filter checkboxes */}
+              <div className="card" style={{ marginBottom: 'var(--space-md)' }}>
+                <div className="card-body" style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-md)', alignItems: 'center' }}>
+                  <span style={{ fontWeight: 'var(--font-weight-semibold)', fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)', marginRight: 'var(--space-sm)' }}>
+                    {t('analysis.showBlocks', '表示するブロック:')}
+                  </span>
+                  {Object.values(analysisData).map(block => (
+                    <label key={block.blockKey} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'var(--font-size-sm)', cursor: 'pointer' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={visibleBlocks[block.blockKey] !== false}
+                        onChange={() => toggleBlock(block.blockKey)}
+                      />
+                      {block.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-2">
+                {Object.values(analysisData)
+                  .filter(block => visibleBlocks[block.blockKey] !== false)
+                  .map(block => <BlockChart key={block.blockKey} block={block} colors={colors} chartHeight={CHART_HEIGHT} barWidth={BAR_WIDTH} colWidth={COL_WIDTH} t={t} />)}
+              </div>
+            </>
+          )}
         </>
+      )}
+
+      {/* Image Processing Tab */}
+      {activeTab === 'image' && (
+        <Suspense fallback={<div className="card" style={{ padding: 'var(--space-xl)', textAlign: 'center' }}>読み込み中...</div>}>
+          <ImageProcessor />
+        </Suspense>
       )}
     </div>
   );

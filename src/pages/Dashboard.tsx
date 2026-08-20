@@ -203,8 +203,26 @@ export default function Dashboard() {
 
   const getMilestoneProgress = (ms: any) => {
     if (!ms.items || ms.items.length === 0) return 0;
-    const completed = ms.items.filter((i: any) => i.is_completed).length;
-    return Math.round((completed / ms.items.length) * 100);
+    const totalRate = ms.items.reduce((sum: number, item: any) => {
+      if (item.sub_items && item.sub_items.length > 0) {
+        const subRates = item.sub_items.map((sub: any) => {
+          if (sub.data_type === 'quantitative') {
+            const target = sub.target_count || 1;
+            const current = sub.current_count || 0;
+            return Math.min(1, Math.max(0, current / target));
+          }
+          return sub.is_completed ? 1 : 0;
+        });
+        return sum + (subRates.reduce((a: number, b: number) => a + b, 0) / subRates.length);
+      }
+      if (item.data_type === 'quantitative') {
+        const target = item.target_count || 1;
+        const current = item.current_count || 0;
+        return sum + Math.min(1, Math.max(0, current / target));
+      }
+      return sum + (item.is_completed ? 1 : 0);
+    }, 0);
+    return Math.round((totalRate / ms.items.length) * 100);
   };
 
   const getDaysRemaining = (deadline: string | null) => {

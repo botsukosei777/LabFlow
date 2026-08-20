@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Suspense, lazy, createContext, useState, useCallback, useEffect } from 'react';
 import Layout from './components/layout/Layout';
 import { AuthProvider } from './contexts/AuthContext';
@@ -15,6 +15,7 @@ const ExperimentDetail = lazy(() => import('./pages/ExperimentDetail'));
 const SubProtocols = lazy(() => import('./pages/SubProtocols'));
 const Notebook = lazy(() => import('./pages/Notebook'));
 const Analysis = lazy(() => import('./pages/Analysis'));
+const Literature = lazy(() => import('./pages/Literature'));
 const Milestones = lazy(() => import('./pages/Milestones'));
 const Inventory = lazy(() => import('./pages/Inventory'));
 const Routines = lazy(() => import('./pages/Routines'));
@@ -84,7 +85,11 @@ export default function App() {
                     <Route path="/experiments" element={<ExperimentTypes />} />
                     <Route path="/experiments/:id" element={<ExperimentDetail />} />
                     <Route path="/notebook" element={<Notebook />} />
-                    <Route path="/analysis" element={<Analysis />} />
+                    <Route path="/analysis" element={<Navigate to="/analysis/experiment_time" replace />} />
+                    <Route path="/analysis/experiment_time" element={<Analysis />} />
+                    <Route path="/analysis/image_analysis" element={<Analysis />} />
+                    <Route path="/analysis/:tab" element={<Analysis />} />
+                    <Route path="/literature" element={<Literature />} />
                     <Route path="/milestones" element={<Milestones />} />
                     <Route path="/inventory" element={<Inventory />} />
                     <Route path="/routines" element={<Routines />} />
