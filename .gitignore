@@ -7,13 +7,43 @@ release/
 *.zip
 *.tar.gz
 
-# Data (contains user database, notebooks, and backups)
-data/*.db
-data/*.db-shm
-data/*.db-wal
-data/*.sqlite
+# Data & Database (contains user database, notebooks, and backups)
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
 data/notebooks/
 data/labflow-backup-*
+!data/.gitkeep
+
+# Temporary patch, migration & fix scripts
+fix*.cjs
+fix*.js
+fix*.ts
+patch*.cjs
+patch*.js
+patch*.ts
+add_*.cjs
+add_*.js
+add_*.ts
+migrate*.js
+migrate*.ts
+migrate_*.ts
+diagnose_*.cjs
+trigger_*.cjs
+verify_*.cjs
+check_*.ts
+check_*.js
+update_*.cjs
+
+# Test scripts & test artifacts
+test*
+test_*
+scripts/test_*
+server/routes/test_*
+scratch/
+test_extract/
+test_xcopy_src/
 
 # OS files
 .DS_Store
