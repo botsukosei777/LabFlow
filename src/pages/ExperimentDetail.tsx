@@ -5,9 +5,6 @@ import { ArrowLeft, Plus, Trash2, Edit, Clock, GripVertical, Check, FileText, Ar
 import { api } from '../api/client';
 import { ToastContext } from '../App';
 import type { ExperimentType, Step, Block, Protocol, SubProtocol } from '../types';
-import MDEditor from '@uiw/react-md-editor';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 
 export default function ExperimentDetail() {
   const { t } = useTranslation();

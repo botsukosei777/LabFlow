@@ -15,7 +15,9 @@ export async function supabaseFetch<T>(url: string, options?: RequestInit): Prom
   
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'Request failed' }));
-    throw new Error(error.message);
+    const detailMsg = error.details || error.hint || '';
+    const fullMsg = detailMsg ? `${error.message || 'Request failed'}: ${detailMsg}` : (error.message || 'Request failed');
+    throw new Error(fullMsg);
   }
   
   if (response.status === 204) return undefined as T;

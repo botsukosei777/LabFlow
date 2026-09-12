@@ -10,6 +10,7 @@ import { format, subDays, isSameDay } from 'date-fns';
 import { CustomDatabaseManager } from '../components/notebook/CustomDatabaseManager';
 import { DocumentManager } from '../components/notebook/DocumentManager';
 import { PrintNotesModal } from '../components/notebook/PrintNotesModal';
+import { mdPreviewOptions, mdRemarkPlugins, mdRehypePlugins, getCustomMdCommands } from '../utils/markdownConfig';
 
 interface Note {
   id: number;
@@ -48,11 +49,12 @@ const parseTags = (tagsStr?: string) => {
 };
 
 const TagInput = ({ value, onChange, allTags }: { value: string[], onChange: (tags: string[]) => void, allTags: string[] }) => {
+  const { t } = useTranslation();
   const [inputValue, setInputValue] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const filtered = allTags.filter(t => t.toLowerCase().includes(inputValue.toLowerCase()) && !value.includes(t));
+  const filtered = allTags.filter(tag => tag.toLowerCase().includes(inputValue.toLowerCase()) && !value.includes(tag));
 
   const addTag = (tag: string) => {
     if (!value.includes(tag)) onChange([...value, tag]);
@@ -62,7 +64,7 @@ const TagInput = ({ value, onChange, allTags }: { value: string[], onChange: (ta
   };
 
   const removeTag = (tag: string) => {
-    onChange(value.filter(t => t !== tag));
+    onChange(value.filter(v => v !== tag));
   };
 
   return (
@@ -130,6 +132,9 @@ const TagInput = ({ value, onChange, allTags }: { value: string[], onChange: (ta
 export default function Notebook() {
   const { t } = useTranslation();
   const location = useLocation();
+  const customCommands = useMemo(() => {
+    return getCustomMdCommands(t('notebook.mathInline', '数式 (インライン): $...$'), t('notebook.mathBlock', '数式ブロック: $$...$$'));
+  }, [t]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [scheduledExperiments, setScheduledExperiments] = useState<any[]>([]);
   
@@ -453,6 +458,8 @@ export default function Notebook() {
                 height={200}
                 preview="edit"
                 hideToolbar={false}
+                commands={customCommands}
+                previewOptions={mdPreviewOptions}
                 textareaProps={{
                   placeholder: t('notebook.contentPlaceholder', '内容 (Markdown)...')
                 }}
@@ -705,6 +712,8 @@ export default function Notebook() {
                   height="100%"
                   preview="live"
                   hideToolbar={false}
+                  commands={customCommands}
+                  previewOptions={mdPreviewOptions}
                   textareaProps={{
                     placeholder: t('notebook.placeholder', '実験の記録やメモをMarkdown形式で記述してください...')
                   }}
@@ -756,7 +765,12 @@ export default function Notebook() {
             <div className="h-px bg-white/10 w-full" />
             
             <div className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-[#0d1117]" data-color-mode="dark">
-              <MDEditor.Markdown source={selectedNote.content || t('notebook.emptyContent', '*本文はありません*')} style={{ backgroundColor: 'transparent' }} />
+              <MDEditor.Markdown
+                source={selectedNote.content || t('notebook.emptyContent', '*本文はありません*')}
+                style={{ backgroundColor: 'transparent' }}
+                remarkPlugins={mdRemarkPlugins}
+                rehypePlugins={mdRehypePlugins}
+              />
             </div>
           </div>
         ) : (

@@ -499,6 +499,8 @@
     "deleteFailed": "削除に失敗しました",
     "print": "印刷",
     "printWithRange": "期間を指定して印刷",
+    "mathInline": "数式 (インライン): $...$",
+    "mathBlock": "数式ブロック: $$...$$",
     "templates": {
       "standard": "標準実験記録",
       "meeting": "ミーティング議事録",

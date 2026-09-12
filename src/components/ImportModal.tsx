@@ -7,7 +7,7 @@ import { ToastContext } from '../App';
 interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  itemType: 'experiment-types' | 'protocols' | 'milestones' | 'sub-protocols' | 'reagents';
+  itemType: 'experiment-types' | 'protocols' | 'milestones' | 'sub-protocols' | 'reagents' | 'literature' | 'documents';
   onSuccess: () => void;
 }
 

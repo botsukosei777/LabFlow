@@ -1521,6 +1521,8 @@ router.delete('/:type/local/:id', async (req: Request, res: Response) => {
     else if (type === 'sub-protocols') tableName = 'shared_sub_protocols';
     else if (type === 'milestones') tableName = 'shared_milestones';
     else if (type === 'reagents') tableName = 'shared_reagents';
+    else if (type === 'literature') tableName = 'shared_literature';
+    else if (type === 'documents') tableName = 'shared_documents';
     else return res.status(400).json({ message: 'Invalid type' });
 
     let localName = '';
@@ -1538,6 +1540,12 @@ router.delete('/:type/local/:id', async (req: Request, res: Response) => {
       if (item) localName = item.name;
     } else if (type === 'reagents') {
       const item = db.prepare('SELECT name FROM reagents WHERE id = ? AND user_id = ?').get(id, req.userId) as any;
+      if (item) localName = item.name;
+    } else if (type === 'literature') {
+      const item = db.prepare('SELECT title as name FROM literature WHERE id = ? AND user_id = ?').get(id, req.userId) as any;
+      if (item) localName = item.name;
+    } else if (type === 'documents') {
+      const item = db.prepare('SELECT title as name FROM documents WHERE id = ? AND user_id = ?').get(id, req.userId) as any;
       if (item) localName = item.name;
     }
 
@@ -1733,6 +1741,1042 @@ router.post('/sub-protocols/:id/import', async (req: Request, res: Response) => 
   } catch (error: any) {
     console.error('Error importing sub-protocol:', error);
     res.status(500).json({ message: 'Failed to import sub-protocol', details: error.message });
+  }
+});
+
+router.delete('/sub-protocols/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from('shared_sub_protocols')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+    res.json({ message: 'Deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting shared sub-protocol:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// --- Shared Literature ---
+router.get('/literature', async (req: Request, res: Response) => {
+  try {
+    const { team_id } = req.query;
+    const supabase = getSupabaseAdmin();
+    if (!supabase) return res.status(500).json({ message: 'Supabase client not available' });
+
+    const { data, error } = await supabase
+      .from('shared_literature')
+      .select('*')
+      .eq('team_id', team_id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const enrichedData = (data || []).map((item: any) => ({
+      ...item,
+      name: item.title,
+      description: [item.authors, item.year ? `(${item.year})` : '', item.journal].filter(Boolean).join(' '),
+      can_delete: item.shared_by === (req as any).supabaseUserId
+    }));
+    res.json(enrichedData);
+  } catch (error: any) {
+    console.error('Error fetching shared literature:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.post('/literature', async (req: Request, res: Response) => {
+  try {
+    const { team_id, local_literature_id } = req.body;
+    const supabase = getSupabaseAdmin();
+    if (!supabase) return res.status(500).json({ message: 'Supabase client not available' });
+
+    const localLit = db.prepare('SELECT * FROM literature WHERE id = ? AND user_id = ?').get(local_literature_id, req.userId) as any;
+    if (!localLit) return res.status(404).json({ message: 'Literature item not found' });
+
+    let keywords: any = [];
+    try {
+      keywords = typeof localLit.keywords === 'string' ? JSON.parse(localLit.keywords) : (localLit.keywords || []);
+    } catch {
+      keywords = [];
+    }
+
+    const payload = {
+      team_id,
+      title: localLit.title,
+      authors: localLit.authors || '',
+      lab_name: localLit.lab_name || '',
+      journal: localLit.journal || '',
+      volume: localLit.volume || '',
+      issue: localLit.issue || '',
+      pages: localLit.pages || '',
+      year: localLit.year ? Number(localLit.year) : null,
+      doi: localLit.doi || '',
+      pmid: localLit.pmid || '',
+      url: localLit.url || '',
+      paper_type: localLit.paper_type || 'original',
+      project_name: localLit.project_name || '',
+      abstract: localLit.abstract || '',
+      notes: localLit.notes || '',
+      keywords: Array.isArray(keywords) ? keywords : [],
+      rating: localLit.rating ? Number(localLit.rating) : 0,
+      original_local_id: local_literature_id,
+      shared_by: (req as any).supabaseUserId,
+      updated_at: new Date().toISOString()
+    };
+
+    let { data: existingShared } = await supabase
+      .from('shared_literature')
+      .select('id')
+      .eq('team_id', team_id)
+      .eq('original_local_id', local_literature_id)
+      .eq('shared_by', (req as any).supabaseUserId)
+      .maybeSingle();
+
+    if (existingShared) {
+      const { data, error } = await supabase
+        .from('shared_literature')
+        .update(payload)
+        .eq('id', existingShared.id)
+        .select()
+        .single();
+      if (error) throw error;
+      return res.status(200).json({ id: data.id });
+    } else {
+      const { data, error } = await supabase
+        .from('shared_literature')
+        .insert([payload])
+        .select()
+        .single();
+      if (error) throw error;
+      return res.status(201).json({ id: data.id });
+    }
+  } catch (error: any) {
+    console.error('Error sharing literature:', error);
+    res.status(500).json({ message: 'Failed to share literature', details: error.message });
+  }
+});
+
+router.post('/literature/:id/sync', async (req: Request, res: Response) => {
+  try {
+    const local_literature_id = req.params.id;
+    const supabase = getSupabaseAdmin();
+    if (!supabase) return res.status(500).json({ message: 'Supabase client not available' });
+
+    const localLit = db.prepare('SELECT * FROM literature WHERE id = ? AND user_id = ?').get(local_literature_id, req.userId) as any;
+    if (!localLit) return res.status(404).json({ message: 'Literature item not found locally' });
+
+    const { data: sharedInstances, error: findError } = await supabase
+      .from('shared_literature')
+      .select('id, team_id')
+      .eq('original_local_id', local_literature_id)
+      .eq('shared_by', (req as any).supabaseUserId);
+
+    if (findError) throw findError;
+    if (!sharedInstances || sharedInstances.length === 0) {
+      return res.status(400).json({ message: 'Literature has not been shared to any team yet' });
+    }
+
+    let keywords: any = [];
+    try {
+      keywords = typeof localLit.keywords === 'string' ? JSON.parse(localLit.keywords) : (localLit.keywords || []);
+    } catch {
+      keywords = [];
+    }
+
+    const payload = {
+      title: localLit.title,
+      authors: localLit.authors || '',
+      lab_name: localLit.lab_name || '',
+      journal: localLit.journal || '',
+      volume: localLit.volume || '',
+      issue: localLit.issue || '',
+      pages: localLit.pages || '',
+      year: localLit.year ? Number(localLit.year) : null,
+      doi: localLit.doi || '',
+      pmid: localLit.pmid || '',
+      url: localLit.url || '',
+      paper_type: localLit.paper_type || 'original',
+      project_name: localLit.project_name || '',
+      abstract: localLit.abstract || '',
+      notes: localLit.notes || '',
+      keywords: Array.isArray(keywords) ? keywords : [],
+      rating: localLit.rating ? Number(localLit.rating) : 0,
+      updated_at: new Date().toISOString()
+    };
+
+    for (const shared of sharedInstances) {
+      const { error: updateError } = await supabase
+        .from('shared_literature')
+        .update(payload)
+        .eq('id', shared.id);
+      if (updateError) throw updateError;
+    }
+
+    res.json({ message: 'Synced successfully' });
+  } catch (error: any) {
+    console.error('Error syncing literature:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.post('/literature/:id/import', async (req: Request, res: Response) => {
+  try {
+    const shared_id = req.params.id;
+    const supabase = getSupabaseAdmin();
+    if (!supabase) return res.status(500).json({ message: 'Supabase client not available' });
+
+    const { data: item, error: fetchError } = await supabase
+      .from('shared_literature')
+      .select('*')
+      .eq('id', shared_id)
+      .single();
+
+    if (fetchError) throw fetchError;
+    if (!item) return res.status(404).json({ message: 'Shared literature not found' });
+
+    const keywordsStr = JSON.stringify(Array.isArray(item.keywords) ? item.keywords : []);
+
+    const insertLit = db.prepare(`
+      INSERT INTO literature (
+        user_id, title, authors, lab_name, journal, volume, issue, pages, year, doi, pmid, url,
+        paper_type, project_name, abstract, notes, keywords, read_abstract, read_body, rating
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?)
+    `);
+
+    const result = insertLit.run(
+      req.userId,
+      item.title,
+      item.authors || '',
+      item.lab_name || '',
+      item.journal || '',
+      item.volume || '',
+      item.issue || '',
+      item.pages || '',
+      item.year || null,
+      item.doi || '',
+      item.pmid || '',
+      item.url || '',
+      item.paper_type || 'original',
+      item.project_name || '',
+      item.abstract || '',
+      item.notes || '',
+      keywordsStr,
+      item.rating || 0
+    );
+
+    res.status(201).json({ id: Number(result.lastInsertRowid) });
+  } catch (error: any) {
+    console.error('Error importing literature:', error);
+    res.status(500).json({ message: 'Failed to import literature', details: error.message });
+  }
+});
+
+router.delete('/literature/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from('shared_literature')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+    res.json({ message: 'Deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting shared literature:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// --- Helper functions for Document Linked Resources (Auto-Share & Auto-Import) ---
+
+async function autoShareExperimentType(
+  supabase: any,
+  team_id: string,
+  local_exp_id: number,
+  supabaseUserId: string,
+  reqUserId: number
+): Promise<string | null> {
+  try {
+    const localExpType = db.prepare('SELECT * FROM experiment_types WHERE id = ? AND user_id = ?').get(local_exp_id, reqUserId) as any;
+    if (!localExpType) return null;
+
+    const { data: existingShared } = await supabase
+      .from('shared_experiment_types')
+      .select('id')
+      .eq('team_id', team_id)
+      .eq('original_local_id', local_exp_id)
+      .eq('shared_by', supabaseUserId)
+      .maybeSingle();
+
+    if (existingShared) {
+      return existingShared.id;
+    }
+
+    const { data: legacyShared } = await supabase
+      .from('shared_experiment_types')
+      .select('id')
+      .eq('team_id', team_id)
+      .eq('name', localExpType.name)
+      .eq('shared_by', supabaseUserId)
+      .is('original_local_id', null)
+      .maybeSingle();
+
+    if (legacyShared) {
+      return legacyShared.id;
+    }
+
+    // Insert new shared experiment type
+    const { data: sharedExp, error } = await supabase
+      .from('shared_experiment_types')
+      .insert([{
+        team_id,
+        name: localExpType.name,
+        description: localExpType.description,
+        color: localExpType.color,
+        original_local_id: local_exp_id,
+        shared_by: supabaseUserId
+      }])
+      .select()
+      .single();
+
+    if (error || !sharedExp) return null;
+    const sharedExpId = sharedExp.id;
+
+    // Steps & blocks
+    const localSteps = db.prepare('SELECT * FROM steps WHERE experiment_type_id = ?').all(local_exp_id) as any[];
+    const localBlocks = db.prepare('SELECT * FROM blocks WHERE experiment_type_id = ?').all(local_exp_id) as any[];
+    const blockIds = localBlocks.map(b => b.id);
+    let localBlockSteps: any[] = [];
+    if (blockIds.length > 0) {
+      const placeholders = blockIds.map(() => '?').join(',');
+      localBlockSteps = db.prepare(`SELECT * FROM block_steps WHERE block_id IN (${placeholders})`).all(...blockIds) as any[];
+    }
+
+    // Sub protocols
+    const localSubProtocolIds = Array.from(new Set(localSteps.map(s => s.sub_protocol_id).filter(id => id !== null)));
+    const subProtocolMap = new Map();
+    for (const spId of localSubProtocolIds) {
+      const localSp = db.prepare('SELECT * FROM sub_protocols WHERE id = ?').get(spId) as any;
+      if (localSp) {
+        const { data: existingSp } = await supabase
+          .from('shared_sub_protocols')
+          .select('id')
+          .eq('team_id', team_id)
+          .eq('original_local_id', spId)
+          .eq('shared_by', supabaseUserId)
+          .maybeSingle();
+
+        if (existingSp) {
+          subProtocolMap.set(spId, existingSp.id);
+        } else {
+          const { data: newSp } = await supabase
+            .from('shared_sub_protocols')
+            .insert([{
+              team_id,
+              name: localSp.name,
+              content: localSp.content,
+              original_local_id: spId,
+              shared_by: supabaseUserId
+            }])
+            .select()
+            .single();
+          if (newSp) subProtocolMap.set(spId, newSp.id);
+        }
+      }
+    }
+
+    const stepIdMap = new Map();
+    if (localSteps.length > 0) {
+      const stepInserts = localSteps.map(s => ({
+        experiment_type_id: sharedExpId,
+        pattern_label: s.pattern_label,
+        name: s.name,
+        description: s.description,
+        duration_minutes: s.duration_minutes,
+        is_sample_dependent: s.is_sample_dependent ? true : false,
+        samples_per_batch: s.samples_per_batch || 1,
+        extra_duration_minutes: s.extra_duration_minutes || 0,
+        order_index: s.order_index,
+        is_overnight: s.is_overnight ? true : false,
+        sub_protocol: s.sub_protocol || '',
+        sub_protocol_id: s.sub_protocol_id ? subProtocolMap.get(s.sub_protocol_id) || null : null,
+        routine_name: s.routine_name || null,
+        routine_duration_days: s.routine_duration_days || null,
+        routine_recurrence: s.routine_recurrence || null,
+        routine_recurrence_days: s.routine_recurrence_days || null
+      }));
+
+      const { data: sharedSteps } = await supabase
+        .from('shared_steps')
+        .insert(stepInserts)
+        .select();
+
+      if (sharedSteps) {
+        localSteps.forEach((ls, i) => {
+          stepIdMap.set(ls.id, sharedSteps[i].id);
+        });
+      }
+    }
+
+    const blockIdMap = new Map();
+    if (localBlocks.length > 0) {
+      const blockInserts = localBlocks.map(b => ({
+        experiment_type_id: sharedExpId,
+        pattern_label: b.pattern_label,
+        name: b.name,
+        description: b.description,
+        order_index: b.order_index
+      }));
+
+      const { data: sharedBlocks } = await supabase
+        .from('shared_blocks')
+        .insert(blockInserts)
+        .select();
+
+      if (sharedBlocks) {
+        localBlocks.forEach((lb, i) => {
+          blockIdMap.set(lb.id, sharedBlocks[i].id);
+        });
+
+        if (localBlockSteps.length > 0) {
+          const blockStepInserts = localBlockSteps.map(bs => ({
+            block_id: blockIdMap.get(bs.block_id),
+            step_id: stepIdMap.get(bs.step_id),
+            order_index: bs.order_index,
+            branch_index: bs.branch_index
+          })).filter(bs => bs.block_id && bs.step_id);
+
+          if (blockStepInserts.length > 0) {
+            await supabase.from('shared_block_steps').insert(blockStepInserts);
+          }
+        }
+      }
+    }
+
+    // Protocols
+    const localProtocols = db.prepare('SELECT * FROM protocols WHERE experiment_type_id = ?').all(local_exp_id) as any[];
+    for (const lp of localProtocols) {
+      const { data: sharedProto } = await supabase
+        .from('shared_protocols')
+        .insert([{
+          team_id,
+          experiment_type_id: sharedExpId,
+          name: lp.name,
+          description: lp.description,
+          shared_by: supabaseUserId
+        }])
+        .select()
+        .single();
+
+      if (sharedProto) {
+        const localProtocolBlocks = db.prepare('SELECT * FROM protocol_blocks WHERE protocol_id = ?').all(lp.id) as any[];
+        const pbInserts = localProtocolBlocks.map(pb => ({
+          protocol_id: sharedProto.id,
+          block_id: blockIdMap.get(pb.block_id),
+          day_offset: pb.day_offset,
+          order_index: pb.order_index
+        })).filter(pb => pb.block_id);
+
+        if (pbInserts.length > 0) {
+          await supabase.from('shared_protocol_blocks').insert(pbInserts);
+        }
+      }
+    }
+
+    return sharedExpId;
+  } catch (err) {
+    console.error('autoShareExperimentType error:', err);
+    return null;
+  }
+}
+
+async function autoImportExperimentType(
+  supabase: any,
+  shared_exp_id: string,
+  reqUserId: number
+): Promise<number | null> {
+  try {
+    const { data: sharedExp, error } = await supabase
+      .from('shared_experiment_types')
+      .select(`
+        *,
+        steps:shared_steps(
+          *,
+          step_preparations:shared_step_preparations!step_id(*),
+          shared_sub_protocol:shared_sub_protocols(*)
+        ),
+        blocks:shared_blocks(*, block_steps:shared_block_steps(*)),
+        protocols:shared_protocols(*, protocol_blocks:shared_protocol_blocks(*))
+      `)
+      .eq('id', shared_exp_id)
+      .single();
+
+    if (error || !sharedExp) return null;
+
+    // Check if matching local experiment type already exists
+    const existingExp = db.prepare('SELECT id FROM experiment_types WHERE name = ? AND user_id = ?').get(sharedExp.name, reqUserId) as any;
+    if (existingExp) {
+      return Number(existingExp.id);
+    }
+
+    const tx = db.transaction(() => {
+      const info = db.prepare(`
+        INSERT INTO experiment_types (user_id, name, description, color, created_at, updated_at) 
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `).run(reqUserId, sharedExp.name, sharedExp.description, sharedExp.color);
+
+      const newExpId = Number(info.lastInsertRowid);
+
+      const subProtocolIdMap = new Map();
+      if (sharedExp.steps) {
+        const insertSp = db.prepare(`
+          INSERT INTO sub_protocols (user_id, name, content, created_at, updated_at)
+          VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `);
+        for (const step of sharedExp.steps) {
+          if (step.shared_sub_protocol && !subProtocolIdMap.has(step.shared_sub_protocol.id)) {
+            const existingSp = db.prepare('SELECT id FROM sub_protocols WHERE name = ? AND user_id = ?').get(step.shared_sub_protocol.name, reqUserId) as any;
+            if (existingSp) {
+              subProtocolIdMap.set(step.shared_sub_protocol.id, existingSp.id);
+            } else {
+              const spInfo = insertSp.run(reqUserId, step.shared_sub_protocol.name, step.shared_sub_protocol.content);
+              subProtocolIdMap.set(step.shared_sub_protocol.id, spInfo.lastInsertRowid);
+            }
+          }
+        }
+      }
+
+      const stepIdMap = new Map();
+      if (sharedExp.steps && sharedExp.steps.length > 0) {
+        const insertStep = db.prepare(`
+          INSERT INTO steps (
+            experiment_type_id, pattern_label, name, description, duration_minutes,
+            is_sample_dependent, samples_per_batch, extra_duration_minutes, order_index,
+            is_overnight, sub_protocol, sub_protocol_id, routine_name, routine_duration_days,
+            routine_recurrence, routine_recurrence_days, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `);
+
+        for (const step of sharedExp.steps) {
+          const mappedSpId = step.sub_protocol_id ? subProtocolIdMap.get(step.sub_protocol_id) || null : null;
+          const stepInfo = insertStep.run(
+            newExpId,
+            step.pattern_label,
+            step.name,
+            step.description,
+            step.duration_minutes,
+            step.is_sample_dependent ? 1 : 0,
+            step.samples_per_batch,
+            step.extra_duration_minutes,
+            step.order_index,
+            step.is_overnight ? 1 : 0,
+            step.sub_protocol,
+            mappedSpId,
+            step.routine_name || null,
+            step.routine_duration_days || null,
+            step.routine_recurrence || null,
+            step.routine_recurrence_days || null
+          );
+          stepIdMap.set(step.id, stepInfo.lastInsertRowid);
+        }
+      }
+
+      const blockIdMap = new Map();
+      if (sharedExp.blocks && sharedExp.blocks.length > 0) {
+        const insertBlock = db.prepare(`
+          INSERT INTO blocks (experiment_type_id, pattern_label, name, description, order_index, created_at)
+          VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `);
+
+        for (const block of sharedExp.blocks) {
+          const blockInfo = insertBlock.run(
+            newExpId,
+            block.pattern_label,
+            block.name,
+            block.description,
+            block.order_index
+          );
+          blockIdMap.set(block.id, blockInfo.lastInsertRowid);
+        }
+
+        const insertBlockStep = db.prepare(`
+          INSERT INTO block_steps (block_id, step_id, order_index, branch_index, delay_minutes)
+          VALUES (?, ?, ?, ?, 0)
+        `);
+        for (const block of sharedExp.blocks) {
+          if (block.block_steps && block.block_steps.length > 0) {
+            for (const bs of block.block_steps) {
+              const bId = blockIdMap.get(block.id);
+              const sId = stepIdMap.get(bs.step_id);
+              if (bId && sId) {
+                insertBlockStep.run(bId, sId, bs.order_index, bs.branch_index);
+              }
+            }
+          }
+        }
+      }
+
+      if (sharedExp.protocols && sharedExp.protocols.length > 0) {
+        const protocolIdMap = new Map();
+        const insertProtocol = db.prepare(`
+          INSERT INTO protocols (user_id, experiment_type_id, name, description, color, created_at, updated_at)
+          VALUES (?, ?, ?, ?, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `);
+        for (const protocol of sharedExp.protocols) {
+          const pInfo = insertProtocol.run(reqUserId, newExpId, protocol.name, protocol.description);
+          protocolIdMap.set(protocol.id, pInfo.lastInsertRowid);
+        }
+
+        const insertProtocolBlock = db.prepare(`
+          INSERT INTO protocol_blocks (protocol_id, block_id, day_offset, order_index)
+          VALUES (?, ?, ?, ?)
+        `);
+        for (const protocol of sharedExp.protocols) {
+          if (protocol.protocol_blocks && protocol.protocol_blocks.length > 0) {
+            for (const pb of protocol.protocol_blocks) {
+              const mappedBlockId = blockIdMap.get(pb.block_id);
+              const mappedProtoId = protocolIdMap.get(protocol.id);
+              if (mappedBlockId && mappedProtoId) {
+                insertProtocolBlock.run(mappedProtoId, mappedBlockId, pb.day_offset, pb.order_index);
+              }
+            }
+          }
+        }
+      }
+
+      return newExpId;
+    });
+
+    return Number(tx());
+  } catch (err) {
+    console.error('autoImportExperimentType error:', err);
+    return null;
+  }
+}
+
+async function autoShareLiterature(
+  supabase: any,
+  team_id: string,
+  local_lit_id: number,
+  supabaseUserId: string,
+  reqUserId: number
+): Promise<string | null> {
+  try {
+    const localLit = db.prepare('SELECT * FROM literature WHERE id = ? AND user_id = ?').get(local_lit_id, reqUserId) as any;
+    if (!localLit) return null;
+
+    const { data: existingShared } = await supabase
+      .from('shared_literature')
+      .select('id')
+      .eq('team_id', team_id)
+      .eq('original_local_id', local_lit_id)
+      .eq('shared_by', supabaseUserId)
+      .maybeSingle();
+
+    if (existingShared) {
+      return existingShared.id;
+    }
+
+    let keywords: any = [];
+    try {
+      keywords = typeof localLit.keywords === 'string' ? JSON.parse(localLit.keywords) : (localLit.keywords || []);
+    } catch {
+      keywords = [];
+    }
+
+    const payload = {
+      team_id,
+      title: localLit.title,
+      authors: localLit.authors || '',
+      lab_name: localLit.lab_name || '',
+      journal: localLit.journal || '',
+      volume: localLit.volume || '',
+      issue: localLit.issue || '',
+      pages: localLit.pages || '',
+      year: localLit.year ? Number(localLit.year) : null,
+      doi: localLit.doi || '',
+      pmid: localLit.pmid || '',
+      url: localLit.url || '',
+      paper_type: localLit.paper_type || 'original',
+      project_name: localLit.project_name || '',
+      abstract: localLit.abstract || '',
+      notes: localLit.notes || '',
+      keywords: Array.isArray(keywords) ? keywords : [],
+      rating: localLit.rating ? Number(localLit.rating) : 0,
+      original_local_id: local_lit_id,
+      shared_by: supabaseUserId,
+      updated_at: new Date().toISOString()
+    };
+
+    const { data, error } = await supabase
+      .from('shared_literature')
+      .insert([payload])
+      .select()
+      .single();
+
+    if (error || !data) return null;
+    return data.id;
+  } catch (err) {
+    console.error('autoShareLiterature error:', err);
+    return null;
+  }
+}
+
+async function autoImportLiterature(
+  supabase: any,
+  shared_lit_id: string,
+  reqUserId: number
+): Promise<number | null> {
+  try {
+    const { data: item, error: fetchError } = await supabase
+      .from('shared_literature')
+      .select('*')
+      .eq('id', shared_lit_id)
+      .single();
+
+    if (fetchError || !item) return null;
+
+    // Check if literature item already exists by DOI or title
+    let existing: any = null;
+    if (item.doi && item.doi.trim()) {
+      existing = db.prepare('SELECT id FROM literature WHERE doi = ? AND user_id = ?').get(item.doi.trim(), reqUserId) as any;
+    }
+    if (!existing && item.title) {
+      existing = db.prepare('SELECT id FROM literature WHERE title = ? AND user_id = ?').get(item.title.trim(), reqUserId) as any;
+    }
+
+    if (existing) {
+      return Number(existing.id);
+    }
+
+    const keywordsStr = JSON.stringify(Array.isArray(item.keywords) ? item.keywords : []);
+    const insertLit = db.prepare(`
+      INSERT INTO literature (
+        user_id, title, authors, lab_name, journal, volume, issue, pages, year, doi, pmid, url,
+        paper_type, project_name, abstract, notes, keywords, read_abstract, read_body, rating
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?)
+    `);
+
+    const result = insertLit.run(
+      reqUserId,
+      item.title,
+      item.authors || '',
+      item.lab_name || '',
+      item.journal || '',
+      item.volume || '',
+      item.issue || '',
+      item.pages || '',
+      item.year || null,
+      item.doi || '',
+      item.pmid || '',
+      item.url || '',
+      item.paper_type || 'original',
+      item.project_name || '',
+      item.abstract || '',
+      item.notes || '',
+      keywordsStr,
+      item.rating || 0
+    );
+
+    return Number(result.lastInsertRowid);
+  } catch (err) {
+    console.error('autoImportLiterature error:', err);
+    return null;
+  }
+}
+
+// --- Shared Documents ---
+router.get('/documents', async (req: Request, res: Response) => {
+  try {
+    const { team_id } = req.query;
+    const supabase = getSupabaseAdmin();
+    if (!supabase) return res.status(500).json({ message: 'Supabase client not available' });
+
+    const { data, error } = await supabase
+      .from('shared_documents')
+      .select('*')
+      .eq('team_id', team_id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const enrichedData = (data || []).map((item: any) => {
+      const expCount = Array.isArray(item.linked_shared_experiment_type_ids) ? item.linked_shared_experiment_type_ids.length : 0;
+      const litCount = Array.isArray(item.linked_shared_literature_ids) ? item.linked_shared_literature_ids.length : 0;
+      const metaBadges: string[] = [];
+      if (expCount > 0) metaBadges.push(`${expCount} 実験種`);
+      if (litCount > 0) metaBadges.push(`${litCount} 文献`);
+      const metaText = metaBadges.length > 0 ? ` [${metaBadges.join(', ')}]` : '';
+
+      return {
+        ...item,
+        name: item.title + metaText,
+        description: typeof item.content === 'string' ? (item.content.replace(/[#*`\n]/g, ' ').trim().slice(0, 100) + (item.content.length > 100 ? '...' : '')) : '',
+        can_delete: item.shared_by === (req as any).supabaseUserId
+      };
+    });
+    res.json(enrichedData);
+  } catch (error: any) {
+    console.error('Error fetching shared documents:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.post('/documents', async (req: Request, res: Response) => {
+  try {
+    const { team_id, local_document_id } = req.body;
+    const supabase = getSupabaseAdmin();
+    if (!supabase) return res.status(500).json({ message: 'Supabase client not available' });
+
+    const localDoc = db.prepare('SELECT * FROM documents WHERE id = ? AND user_id = ?').get(local_document_id, req.userId) as any;
+    if (!localDoc) return res.status(404).json({ message: 'Document not found' });
+
+    let tags: any = [];
+    try {
+      tags = typeof localDoc.tags === 'string' ? JSON.parse(localDoc.tags) : (localDoc.tags || []);
+    } catch {
+      tags = [];
+    }
+
+    let linkedExpTypeIds: number[] = [];
+    try {
+      linkedExpTypeIds = typeof localDoc.linked_experiment_type_ids === 'string'
+        ? JSON.parse(localDoc.linked_experiment_type_ids)
+        : (localDoc.linked_experiment_type_ids || []);
+    } catch {
+      linkedExpTypeIds = [];
+    }
+
+    let linkedLitIds: number[] = [];
+    try {
+      linkedLitIds = typeof localDoc.linked_literature_ids === 'string'
+        ? JSON.parse(localDoc.linked_literature_ids)
+        : (localDoc.linked_literature_ids || []);
+    } catch {
+      linkedLitIds = [];
+    }
+
+    // Auto-share linked experiment types to the team
+    const sharedExpUuids: string[] = [];
+    for (const expId of linkedExpTypeIds) {
+      const sId = await autoShareExperimentType(supabase, team_id, expId, (req as any).supabaseUserId, req.userId);
+      if (sId) sharedExpUuids.push(sId);
+    }
+
+    // Auto-share linked literature items to the team
+    const sharedLitUuids: string[] = [];
+    for (const litId of linkedLitIds) {
+      const sId = await autoShareLiterature(supabase, team_id, litId, (req as any).supabaseUserId, req.userId);
+      if (sId) sharedLitUuids.push(sId);
+    }
+
+    const payload = {
+      team_id,
+      title: localDoc.title,
+      content: localDoc.content || '',
+      tags: Array.isArray(tags) ? tags : [],
+      linked_shared_experiment_type_ids: sharedExpUuids,
+      linked_shared_literature_ids: sharedLitUuids,
+      original_local_id: local_document_id,
+      shared_by: (req as any).supabaseUserId,
+      updated_at: new Date().toISOString()
+    };
+
+    let { data: existingShared } = await supabase
+      .from('shared_documents')
+      .select('id')
+      .eq('team_id', team_id)
+      .eq('original_local_id', local_document_id)
+      .eq('shared_by', (req as any).supabaseUserId)
+      .maybeSingle();
+
+    if (existingShared) {
+      const { data, error } = await supabase
+        .from('shared_documents')
+        .update(payload)
+        .eq('id', existingShared.id)
+        .select()
+        .single();
+      if (error) throw error;
+      return res.status(200).json({ id: data.id });
+    } else {
+      const { data, error } = await supabase
+        .from('shared_documents')
+        .insert([payload])
+        .select()
+        .single();
+      if (error) throw error;
+      return res.status(201).json({ id: data.id });
+    }
+  } catch (error: any) {
+    console.error('Error sharing document:', error);
+    res.status(500).json({ message: 'Failed to share document', details: error.message });
+  }
+});
+
+router.post('/documents/:id/sync', async (req: Request, res: Response) => {
+  try {
+    const local_document_id = req.params.id;
+    const supabase = getSupabaseAdmin();
+    if (!supabase) return res.status(500).json({ message: 'Supabase client not available' });
+
+    const localDoc = db.prepare('SELECT * FROM documents WHERE id = ? AND user_id = ?').get(local_document_id, req.userId) as any;
+    if (!localDoc) return res.status(404).json({ message: 'Document not found locally' });
+
+    const { data: sharedInstances, error: findError } = await supabase
+      .from('shared_documents')
+      .select('id, team_id')
+      .eq('original_local_id', local_document_id)
+      .eq('shared_by', (req as any).supabaseUserId);
+
+    if (findError) throw findError;
+    if (!sharedInstances || sharedInstances.length === 0) {
+      return res.status(400).json({ message: 'Document has not been shared to any team yet' });
+    }
+
+    let tags: any = [];
+    try {
+      tags = typeof localDoc.tags === 'string' ? JSON.parse(localDoc.tags) : (localDoc.tags || []);
+    } catch {
+      tags = [];
+    }
+
+    let linkedExpTypeIds: number[] = [];
+    try {
+      linkedExpTypeIds = typeof localDoc.linked_experiment_type_ids === 'string'
+        ? JSON.parse(localDoc.linked_experiment_type_ids)
+        : (localDoc.linked_experiment_type_ids || []);
+    } catch {
+      linkedExpTypeIds = [];
+    }
+
+    let linkedLitIds: number[] = [];
+    try {
+      linkedLitIds = typeof localDoc.linked_literature_ids === 'string'
+        ? JSON.parse(localDoc.linked_literature_ids)
+        : (localDoc.linked_literature_ids || []);
+    } catch {
+      linkedLitIds = [];
+    }
+
+    for (const shared of sharedInstances) {
+      const sharedExpUuids: string[] = [];
+      for (const expId of linkedExpTypeIds) {
+        const sId = await autoShareExperimentType(supabase, shared.team_id, expId, (req as any).supabaseUserId, req.userId);
+        if (sId) sharedExpUuids.push(sId);
+      }
+
+      const sharedLitUuids: string[] = [];
+      for (const litId of linkedLitIds) {
+        const sId = await autoShareLiterature(supabase, shared.team_id, litId, (req as any).supabaseUserId, req.userId);
+        if (sId) sharedLitUuids.push(sId);
+      }
+
+      const payload = {
+        title: localDoc.title,
+        content: localDoc.content || '',
+        tags: Array.isArray(tags) ? tags : [],
+        linked_shared_experiment_type_ids: sharedExpUuids,
+        linked_shared_literature_ids: sharedLitUuids,
+        updated_at: new Date().toISOString()
+      };
+
+      const { error: updateError } = await supabase
+        .from('shared_documents')
+        .update(payload)
+        .eq('id', shared.id);
+      if (updateError) throw updateError;
+    }
+
+    res.json({ message: 'Synced successfully' });
+  } catch (error: any) {
+    console.error('Error syncing document:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.post('/documents/:id/import', async (req: Request, res: Response) => {
+  try {
+    const shared_id = req.params.id;
+    const supabase = getSupabaseAdmin();
+    if (!supabase) return res.status(500).json({ message: 'Supabase client not available' });
+
+    const { data: item, error: fetchError } = await supabase
+      .from('shared_documents')
+      .select('*')
+      .eq('id', shared_id)
+      .single();
+
+    if (fetchError) throw fetchError;
+    if (!item) return res.status(404).json({ message: 'Shared document not found' });
+
+    const tagsStr = JSON.stringify(Array.isArray(item.tags) ? item.tags : []);
+
+    // Auto-import linked experiment types
+    const localExpTypeIds: number[] = [];
+    const sharedExpUuids: string[] = Array.isArray(item.linked_shared_experiment_type_ids)
+      ? item.linked_shared_experiment_type_ids
+      : [];
+
+    for (const expUuid of sharedExpUuids) {
+      const localId = await autoImportExperimentType(supabase, expUuid, req.userId);
+      if (localId && !localExpTypeIds.includes(localId)) {
+        localExpTypeIds.push(localId);
+      }
+    }
+
+    // Auto-import linked literature items
+    const localLitIds: number[] = [];
+    const sharedLitUuids: string[] = Array.isArray(item.linked_shared_literature_ids)
+      ? item.linked_shared_literature_ids
+      : [];
+
+    for (const litUuid of sharedLitUuids) {
+      const localId = await autoImportLiterature(supabase, litUuid, req.userId);
+      if (localId && !localLitIds.includes(localId)) {
+        localLitIds.push(localId);
+      }
+    }
+
+    const insertDoc = db.prepare(`
+      INSERT INTO documents (
+        user_id, title, content, tags, linked_experiment_type_ids, linked_literature_ids
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
+    const result = insertDoc.run(
+      req.userId,
+      item.title,
+      item.content || '',
+      tagsStr,
+      JSON.stringify(localExpTypeIds),
+      JSON.stringify(localLitIds)
+    );
+
+    res.status(201).json({ id: Number(result.lastInsertRowid) });
+  } catch (error: any) {
+    console.error('Error importing document:', error);
+    res.status(500).json({ message: 'Failed to import document', details: error.message });
+  }
+});
+
+router.delete('/documents/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from('shared_documents')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+    res.json({ message: 'Deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting shared document:', error);
+    res.status(500).json({ message: error.message });
   }
 });
 

@@ -499,6 +499,8 @@
     "deleteFailed": "Failed to delete",
     "print": "Print",
     "printWithRange": "Print notes with date range",
+    "mathInline": "Inline Math: $...$",
+    "mathBlock": "Block Math: $$...$$",
     "templates": {
       "standard": "Standard Lab Record",
       "meeting": "Meeting Minutes",

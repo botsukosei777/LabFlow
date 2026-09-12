@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Printer, X, Calendar, ArrowUpDown, Scissors } from 'lucide-react';
 import { format, subDays, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import MDEditor from '@uiw/react-md-editor';
+import { mdRemarkPlugins, mdRehypePlugins } from '../../utils/markdownConfig';
 
 interface Note {
   id: number;
@@ -591,6 +592,8 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
                     fontSize: isCompact ? '10.5px' : '11.5px',
                     lineHeight: isCompact ? '1.35' : '1.45',
                   }}
+                  remarkPlugins={mdRemarkPlugins}
+                  rehypePlugins={mdRehypePlugins}
                 />
               </div>
             </div>

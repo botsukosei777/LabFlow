@@ -166,6 +166,9 @@ function initDb() {
           pages TEXT DEFAULT '',
           year INTEGER,
           doi TEXT DEFAULT '',
+          pmid TEXT DEFAULT '',
+          url TEXT DEFAULT '',
+          rating INTEGER DEFAULT 0,
           paper_type TEXT DEFAULT 'original',
           project_name TEXT DEFAULT '',
           abstract TEXT DEFAULT '',
@@ -185,6 +188,10 @@ function initDb() {
       CREATE INDEX IF NOT EXISTS idx_literature_project ON literature(project_name);
     `);
   } catch(e) {}
+
+  try { dbInstance.exec("ALTER TABLE literature ADD COLUMN pmid TEXT DEFAULT ''"); } catch(e) {}
+  try { dbInstance.exec("ALTER TABLE literature ADD COLUMN url TEXT DEFAULT ''"); } catch(e) {}
+  try { dbInstance.exec("ALTER TABLE literature ADD COLUMN rating INTEGER DEFAULT 0"); } catch(e) {}
 
   try {
     dbInstance.exec(`

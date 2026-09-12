@@ -7,7 +7,7 @@ import { ToastContext } from '../App';
 interface ShareModalProps {
   isOpen: boolean;
   onClose: () => void;
-  itemType?: 'experiment-types' | 'protocols' | 'milestones' | 'sub-protocols' | 'reagents';
+  itemType?: 'experiment-types' | 'protocols' | 'milestones' | 'sub-protocols' | 'reagents' | 'literature' | 'documents';
   localItemId?: number;
   itemName: string;
   onSuccess?: () => void;
@@ -87,6 +87,10 @@ export function ShareModal({
           payload.local_milestone_id = localItemId;
         } else if (itemType === 'sub-protocols') {
           payload.local_sub_protocol_id = localItemId;
+        } else if (itemType === 'literature') {
+          payload.local_literature_id = localItemId;
+        } else if (itemType === 'documents') {
+          payload.local_document_id = localItemId;
         }
         
         await supabasePost(`/shared/${itemType}`, payload);

@@ -4,16 +4,23 @@ import {
   FileText, Plus, Search, Trash2, Edit3, Download,
   X, Tag, FlaskConical, BookOpen,
   Calendar, Eye, ExternalLink, Link2, Check, Filter,
-  Columns, Maximize2, Minimize2
+  Columns, Maximize2, Minimize2, Share2
 } from 'lucide-react';
 import MDEditor from '@uiw/react-md-editor';
 import { api } from '../../api/client';
 import { ToastContext } from '../../App';
 import type { ResearchDocument, ExperimentType, LiteratureItem } from '../../types';
+import { mdPreviewOptions, mdRemarkPlugins, mdRehypePlugins, getCustomMdCommands } from '../../utils/markdownConfig';
+import { ShareModal } from '../ShareModal';
+import { ImportModal } from '../ImportModal';
 
 export const DocumentManager: React.FC = () => {
   const { t } = useTranslation();
   const { addToast } = useContext(ToastContext);
+
+  const customCommands = useMemo(() => {
+    return getCustomMdCommands(t('notebook.mathInline', '数式 (インライン): $...$'), t('notebook.mathBlock', '数式ブロック: $$...$$'));
+  }, [t]);
 
   const [documents, setDocuments] = useState<ResearchDocument[]>([]);
   const [allTags, setAllTags] = useState<string[]>([]);
@@ -33,6 +40,8 @@ export const DocumentManager: React.FC = () => {
   // Modals
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showTeamImport, setShowTeamImport] = useState(false);
+  const [shareTarget, setShareTarget] = useState<{ id: number; name: string } | null>(null);
   const [activeDoc, setActiveDoc] = useState<ResearchDocument | null>(null);
 
   // PDF Preview side-by-side state in Edit modal
@@ -356,6 +365,13 @@ export const DocumentManager: React.FC = () => {
 
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setShowTeamImport(true)}
+            className="btn btn-secondary btn-sm flex items-center gap-1.5 text-xs py-1.5 px-3"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>{t('common.importFromTeam', 'チームからインポート')}</span>
+          </button>
+          <button
             onClick={handleOpenCreate}
             className="btn btn-primary btn-sm flex items-center gap-1.5 text-xs py-1.5 px-3 shadow-md"
           >
@@ -470,6 +486,13 @@ export const DocumentManager: React.FC = () => {
                       {doc.title}
                     </h4>
                     <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => setShareTarget({ id: doc.id, name: doc.title })}
+                        className="p-1 hover:bg-white/10 rounded text-gray-400 hover:text-white"
+                        title={t('common.share', 'チームへ共有')}
+                      >
+                        <Share2 className="w-3.5 h-3.5" />
+                      </button>
                       <button
                         onClick={() => handleOpenEdit(doc)}
                         className="p-1 hover:bg-white/10 rounded text-gray-400 hover:text-white"
@@ -983,6 +1006,8 @@ export const DocumentManager: React.FC = () => {
                           onChange={(val) => setFormData({ ...formData, content: val || '' })}
                           height={470}
                           preview="edit"
+                          commands={customCommands}
+                          previewOptions={mdPreviewOptions}
                         />
                       </div>
                     </div>
@@ -1002,6 +1027,8 @@ export const DocumentManager: React.FC = () => {
                         onChange={(val) => setFormData({ ...formData, content: val || '' })}
                         height={340}
                         preview="edit"
+                        commands={customCommands}
+                        previewOptions={mdPreviewOptions}
                       />
                     </div>
                   )}
@@ -1073,6 +1100,13 @@ export const DocumentManager: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShareTarget({ id: activeDoc.id, name: activeDoc.title })}
+                  className="btn btn-secondary btn-sm flex items-center gap-1"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span>{t('common.share', 'チームへ共有')}</span>
+                </button>
                 <button
                   onClick={() => {
                     setShowDetailModal(false);
@@ -1185,6 +1219,8 @@ export const DocumentManager: React.FC = () => {
                 <MDEditor.Markdown
                   source={activeDoc.content || t('documents.noContentMarkdown', '*本文はありません*')}
                   style={{ backgroundColor: 'transparent' }}
+                  remarkPlugins={mdRemarkPlugins}
+                  rehypePlugins={mdRehypePlugins}
                 />
               </div>
             </div>
@@ -1209,6 +1245,34 @@ export const DocumentManager: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ─── TEAM SHARE MODAL ─── */}
+      {shareTarget && (
+        <ShareModal
+          isOpen={true}
+          onClose={() => setShareTarget(null)}
+          itemType="documents"
+          localItemId={shareTarget.id}
+          itemName={shareTarget.name}
+          onSuccess={() => {
+            setShareTarget(null);
+            loadDocuments();
+          }}
+        />
+      )}
+
+      {/* ─── TEAM IMPORT MODAL ─── */}
+      {showTeamImport && (
+        <ImportModal
+          isOpen={true}
+          onClose={() => setShowTeamImport(false)}
+          itemType="documents"
+          onSuccess={() => {
+            setShowTeamImport(false);
+            loadDocuments();
+          }}
+        />
       )}
     </div>
   );

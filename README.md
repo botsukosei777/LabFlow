@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.0.0-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.0.5-blue" alt="Version">
   <img src="https://img.shields.io/badge/license-BSL--1.1-green" alt="License">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Platform">
 </p>
@@ -76,11 +76,18 @@ It provides all the essential management features needed for research activities
 - **Quantity Tracking** — Track inventory counts and receive minimum quantity alerts.
 - **Experiment Linkage** — Associate reagents and consumption amounts with specific experiment types.
 
-### 📝 Lab Notebook
-- **Markdown Editor** — Dual-mode editor supporting Rich Text and Markdown.
+### 📝 Lab Notebook & Documents
+- **Markdown & LaTeX Editor** — Dual-mode editor supporting Rich Text, Markdown, and LaTeX mathematical expressions ($\KaTeX$, inline `$...$` and block `$$...$$`).
+- **Research Documents** — Create independent research notes and documents with tagged organization, side-by-side PDF viewing, and bidirectional links to experiment types and literature.
+- **Paper Notebook Printout** — Space-optimized batch printing with customizable date range for seamless pasting into physical lab notebooks.
 - **Local File Storage** — Automatically saved as `.md` files in the `data/notebooks/` directory.
 - **External Editor Support** — Can be edited directly from external tools like Obsidian and VSCode.
 - **Calendar Integration** — Notes are also displayed on the calendar.
+
+### 📚 Literature Management & 🤝 Team Sharing
+- **Literature Database** — Track research articles, preprints, read status (Abstract/Body), BibTeX/RIS import, and DOI metadata auto-fetching.
+- **Team Cloud Sharing (Supabase)** — Share and sync experiment types, protocols, literature, and research documents with lab members.
+- **Automated Dependency Sharing** — Automatically shares and re-links associated experiment types and literature when sharing research documents.
 
 ### ⚙️ Other Features
 - **Dark Mode** — Toggle between Light, Dark, or System default modes.

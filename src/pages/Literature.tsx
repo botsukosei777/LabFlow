@@ -26,8 +26,11 @@ import {
   Tag,
   Building,
   Calendar,
-  Layers
+  Layers,
+  Share2
 } from 'lucide-react';
+import { ShareModal } from '../components/ShareModal';
+import { ImportModal } from '../components/ImportModal';
 
 const PAPER_TYPE_LABELS: Record<PaperType, { label: string; color: string }> = {
   original: { label: 'Original Article', color: 'var(--color-primary, #6366F1)' },
@@ -65,6 +68,8 @@ export default function Literature() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showTeamImportModal, setShowTeamImportModal] = useState(false);
+  const [shareTarget, setShareTarget] = useState<{ id: number; name: string } | null>(null);
   const [showPdfViewer, setShowPdfViewer] = useState<string | null>(null);
   const [activeItem, setActiveItem] = useState<LiteratureItem | null>(null);
 
@@ -391,6 +396,14 @@ export default function Literature() {
         </div>
 
         <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+          <button
+            className="btn btn-secondary"
+            onClick={() => setShowTeamImportModal(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}
+          >
+            <Download size={16} />
+            <span>{t('common.importFromTeam', 'チームからインポート')}</span>
+          </button>
           <button
             className="btn btn-secondary"
             onClick={() => setShowImportModal(true)}
@@ -737,6 +750,14 @@ export default function Literature() {
                     {/* Actions */}
                     <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
                       <div style={{ display: 'flex', justifyContent: 'center', gap: 4 }}>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          style={{ padding: 4, color: 'var(--color-primary)' }}
+                          onClick={() => setShareTarget({ id: item.id, name: item.title })}
+                          title={t('common.share', 'チームへ共有')}
+                        >
+                          <Share2 size={15} />
+                        </button>
                         <button
                           className="btn btn-ghost btn-sm"
                           style={{ padding: 4 }}
@@ -1176,6 +1197,13 @@ export default function Literature() {
                 )}
               </div>
               <div style={{ display: 'flex', gap: 'var(--space-xs)' }}>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setShareTarget({ id: activeItem.id, name: activeItem.title })}
+                >
+                  <Share2 size={14} />
+                  <span>{t('common.share', 'チームへ共有')}</span>
+                </button>
                 <button className="btn btn-secondary btn-sm" onClick={() => { setShowDetailModal(false); openEdit(activeItem); }}>
                   <Edit2 size={14} />
                   <span>{t('common.edit')}</span>
@@ -1550,6 +1578,34 @@ export default function Literature() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ─── TEAM SHARE MODAL ─── */}
+      {shareTarget && (
+        <ShareModal
+          isOpen={true}
+          onClose={() => setShareTarget(null)}
+          itemType="literature"
+          localItemId={shareTarget.id}
+          itemName={shareTarget.name}
+          onSuccess={() => {
+            setShareTarget(null);
+            loadData();
+          }}
+        />
+      )}
+
+      {/* ─── TEAM IMPORT MODAL ─── */}
+      {showTeamImportModal && (
+        <ImportModal
+          isOpen={true}
+          onClose={() => setShowTeamImportModal(false)}
+          itemType="literature"
+          onSuccess={() => {
+            setShowTeamImportModal(false);
+            loadData();
+          }}
+        />
       )}
     </div>
   );

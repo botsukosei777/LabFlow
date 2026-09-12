@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus, Edit2, Trash2, FileText, Share2, RefreshCw, Unlink, Download } from 'lucide-react';
 import { api } from '../api/client';
@@ -10,10 +10,14 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ShareModal } from '../components/ShareModal';
 import { ImportModal } from '../components/ImportModal';
+import { mdPreviewOptions, mdRemarkPlugins, mdRehypePlugins, getCustomMdCommands } from '../utils/markdownConfig';
 
 export default function SubProtocols() {
   const { t } = useTranslation();
   const { addToast } = useContext(ToastContext);
+  const customCommands = useMemo(() => {
+    return getCustomMdCommands(t('notebook.mathInline', '数式 (インライン): $...$'), t('notebook.mathBlock', '数式ブロック: $$...$$'));
+  }, [t]);
   const [subProtocols, setSubProtocols] = useState<SubProtocol[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -149,7 +153,7 @@ export default function SubProtocols() {
             </div>
             {sp.content && (
               <div className="markdown-preview" data-color-mode="light" style={{ padding: 'var(--space-md)', backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--border-radius-md)' }}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{sp.content}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={mdRemarkPlugins} rehypePlugins={mdRehypePlugins}>{sp.content}</ReactMarkdown>
               </div>
             )}
           </div>
@@ -182,6 +186,8 @@ export default function SubProtocols() {
                     preview="edit"
                     height="100%"
                     visibleDragbar={false}
+                    commands={customCommands}
+                    previewOptions={mdPreviewOptions}
                   />
                 </div>
               </div>
