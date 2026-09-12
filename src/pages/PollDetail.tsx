@@ -8,12 +8,13 @@ import { ToastContext } from '../App';
 import { useAuth } from '../contexts/AuthContext';
 import type { Poll, PollOption, PollVote } from '../types';
 import { format, parse, addMinutes, isSameDay, addDays, parseISO, isValid } from 'date-fns';
-import { ja } from 'date-fns/locale';
+import { ja, enUS } from 'date-fns/locale';
+import DateInput from '../components/DateInput';
 
 export default function PollDetail() {
+  const { t, i18n } = useTranslation();
   const { id } = useParams();
   const navigate = useNavigate();
-  const { t } = useTranslation();
   const { addToast } = useContext(ToastContext);
   const { user } = useAuth();
   
@@ -38,7 +39,7 @@ export default function PollDetail() {
       setTeams(data || []);
     } catch (e: any) {
       console.error('Failed to fetch teams', e);
-      setTeamFetchError(e.message || 'チームの取得に失敗しました');
+      setTeamFetchError(e.message || t('polls.failedFetchTeams', 'チームの取得に失敗しました'));
     }
   };
   
@@ -79,12 +80,12 @@ export default function PollDetail() {
           v.voter_name === user?.username
         );
         if (existingVote) setMyVote(existingVote.answers || {});
-        addToast('success', '回答をインポートしました');
+        addToast('success', t('common.savedSuccessfully', '回答をインポートしました'));
       } else {
-        addToast('error', 'チームが見つかりません');
+        addToast('error', t('polls.noJoinedTeams', 'チームが見つかりません'));
       }
     } catch (e) {
-      addToast('error', 'インポートに失敗しました');
+      addToast('error', t('common.errorOccurred', 'インポートに失敗しました'));
     } finally {
       setSyncing(false);
     }
@@ -101,7 +102,7 @@ export default function PollDetail() {
         voter_name: (user as any)?.supabase_username || user?.username || 'Unknown',
         answers: myVote
       });
-      addToast('success', '回答を送信しました');
+      addToast('success', t('common.savedSuccessfully', '回答を送信しました'));
       
       if (poll.shared_id) {
         try {
@@ -126,7 +127,7 @@ export default function PollDetail() {
     if (!shareTeamId || !poll) return;
     try {
       await supabasePost(`/shared/polls/${poll.id}/share`, { team_id: shareTeamId });
-      addToast('success', 'チームに共有しました');
+      addToast('success', t('common.sharedSuccessfully', 'チームに共有しました'));
       setShowShareModal(false);
       fetchPoll();
     } catch (error: any) {
@@ -145,7 +146,7 @@ export default function PollDetail() {
         className="mb-4 flex items-center gap-2 text-sm font-medium hover:text-indigo-600 transition-colors"
         style={{ color: 'var(--text-secondary)' }}
       >
-        <ArrowLeft size={16} /> 戻る
+        <ArrowLeft size={16} /> {t('polls.back', '戻る')}
       </button>
 
       <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700 mb-6 flex flex-col md:flex-row md:items-start justify-between gap-4">
@@ -157,11 +158,11 @@ export default function PollDetail() {
                 : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300'
             }`}>
               {poll.type === 'schedule' ? <CalendarDays size={12} /> : <CheckSquare size={12} />}
-              {poll.type === 'schedule' ? '日程調整' : 'アンケート'}
+              {poll.type === 'schedule' ? t('polls.schedule', '日程調整') : t('polls.survey', 'アンケート')}
             </span>
             {poll.shared_id && (
               <span className="px-2 py-1 text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300 rounded-md flex items-center gap-1">
-                <Users size={12} /> チーム共有
+                <Users size={12} /> {t('polls.teamShared', 'チーム共有')}
               </span>
             )}
           </div>
@@ -175,7 +176,7 @@ export default function PollDetail() {
                 className="text-sm font-medium text-emerald-600 bg-emerald-50 hover:bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shrink-0 disabled:opacity-50"
               >
                 {syncing ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-                {syncing ? '同期中...' : '回答をインポート'}
+                {syncing ? t('polls.importing', '同期中...') : t('polls.importVotes', '回答をインポート')}
               </button>
             )}
             {isCreator && (
@@ -187,7 +188,7 @@ export default function PollDetail() {
                 className="text-sm font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 dark:text-indigo-400 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shrink-0"
               >
                 <Users size={16} />
-                チームに共有
+                {t('polls.shareToTeam', 'チームに共有')}
               </button>
             )}
           </div>
@@ -199,7 +200,7 @@ export default function PollDetail() {
         
         {poll.deadline && (
           <div className="md:text-right shrink-0">
-            <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">回答期限</div>
+            <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">{t('polls.deadlineLabel', '回答期限')}</div>
             <div className="font-semibold text-red-500 bg-red-50 dark:bg-red-900/20 px-3 py-1.5 rounded-lg border border-red-100 dark:border-red-900/50">
               {format(new Date(poll.deadline), 'yyyy/MM/dd HH:mm')}
             </div>
@@ -214,20 +215,20 @@ export default function PollDetail() {
               className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${viewMode === 'edit' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
               onClick={() => setViewMode('edit')}
             >
-              フォームを編集
+              {t('polls.editForm', 'フォームを編集')}
             </button>
           )}
           <button 
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${viewMode === 'vote' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             onClick={() => setViewMode('vote')}
           >
-            自分の回答
+            {t('polls.myResponse', '自分の回答')}
           </button>
           <button 
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${viewMode === 'results' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             onClick={() => setViewMode('results')}
           >
-            みんなの回答 (集計結果)
+            {t('polls.allResponses', 'みんなの回答 (集計結果)')}
           </button>
         </div>
       )}
@@ -246,7 +247,7 @@ export default function PollDetail() {
             disabled={poll.status === 'closed'}
           >
             <Save size={18} />
-            回答を保存する
+            {t('polls.saveResponse', '回答を保存する')}
           </button>
         </div>
       )}
@@ -255,24 +256,24 @@ export default function PollDetail() {
       {showShareModal && (
         <div className="modal-overlay" onClick={() => setShowShareModal(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-semibold mb-4">チームに共有</h2>
+            <h2 className="text-xl font-semibold mb-4">{t('polls.shareModalTitle', 'チームに共有')}</h2>
             <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
-              「{poll.title}」を共有するチームを選択してください。
+              {t('polls.shareModalDesc', { title: poll.title, defaultValue: `「${poll.title}」を共有するチームを選択してください。` })}
             </p>
             <div className="space-y-2 mb-6 max-h-60 overflow-y-auto">
               {teamFetchError ? (
                 <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg text-sm text-center border border-red-100 dark:border-red-900/50">
                   <p className="font-semibold mb-2">{teamFetchError}</p>
-                  <p>チーム共有機能を利用するには、Supabaseアカウント連携が必要です。</p>
+                  <p>{t('polls.shareNeedsSupabase', 'チーム共有機能を利用するには、Supabaseアカウント連携が必要です。')}</p>
                   <button 
                     onClick={() => navigate('/settings')}
                     className="mt-3 px-4 py-2 bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                   >
-                    設定画面へ
+                    {t('polls.goToSettings', '設定画面へ')}
                   </button>
                 </div>
               ) : teams.length === 0 ? (
-                <p className="text-sm text-center text-gray-500 py-4">参加しているチームがありません</p>
+                <p className="text-sm text-center text-gray-500 py-4">{t('polls.noJoinedTeams', '参加しているチームがありません')}</p>
               ) : (
                 teams.map(team => (
                   <button
@@ -291,13 +292,13 @@ export default function PollDetail() {
               )}
             </div>
             <div className="flex justify-end gap-3">
-              <button className="btn btn-secondary" onClick={() => setShowShareModal(false)}>キャンセル</button>
+              <button className="btn btn-secondary" onClick={() => setShowShareModal(false)}>{t('common.cancel', 'キャンセル')}</button>
               <button 
                 className="btn btn-primary" 
                 disabled={!shareTeamId}
                 onClick={handleTeamShare}
               >
-                共有する
+                {t('polls.shareBtn', '共有する')}
               </button>
             </div>
           </div>
@@ -309,6 +310,7 @@ export default function PollDetail() {
 
 // --- Survey Component ---
 function SurveyForm({ poll, myVote, setMyVote, isCreator, onRefresh, viewMode }: any) {
+  const { t } = useTranslation();
   const { addToast } = useContext(ToastContext);
   const questions = poll.settings?.questions || [];
   
@@ -358,20 +360,20 @@ function SurveyForm({ poll, myVote, setMyVote, isCreator, onRefresh, viewMode }:
     return (
       <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-lg font-semibold">フォームビルダー</h2>
+          <h2 className="text-lg font-semibold">{t('polls.formBuilder', 'フォームビルダー')}</h2>
           <button 
             className="btn btn-primary"
             onClick={saveFormSchema}
             disabled={isSaving}
           >
-            <Save size={16} /> 保存
+            <Save size={16} /> {t('common.save', '保存')}
           </button>
         </div>
 
         <div className="space-y-6">
           {editingQuestions.length === 0 && (
             <div className="text-center p-8 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-lg text-gray-500">
-              まだ設問がありません。下のボタンから追加してください。
+              {t('polls.noQuestionsYet', 'まだ設問がありません。下のボタンから追加してください。')}
             </div>
           )}
           
@@ -381,7 +383,7 @@ function SurveyForm({ poll, myVote, setMyVote, isCreator, onRefresh, viewMode }:
                 <input 
                   type="text" 
                   className="input-field flex-1 font-medium" 
-                  placeholder="質問文を入力..." 
+                  placeholder={t('polls.questionPlaceholder', '質問文を入力...')} 
                   value={q.text}
                   onChange={e => updateQuestion(q.id, { text: e.target.value })}
                 />
@@ -390,14 +392,14 @@ function SurveyForm({ poll, myVote, setMyVote, isCreator, onRefresh, viewMode }:
                   value={q.type}
                   onChange={e => updateQuestion(q.id, { type: e.target.value, options: e.target.value === 'text' ? undefined : (q.options || ['']) })}
                 >
-                  <option value="single_choice">択一式 (ラジオ)</option>
-                  <option value="multiple_choice">複数選択 (チェック)</option>
-                  <option value="text">自由記述</option>
+                  <option value="single_choice">{t('polls.singleChoice', '択一式 (ラジオ)')}</option>
+                  <option value="multiple_choice">{t('polls.multipleChoice', '複数選択 (チェック)')}</option>
+                  <option value="text">{t('polls.freeText', '自由記述')}</option>
                 </select>
                 <button 
                   className="p-2 text-gray-400 hover:text-red-500 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
                   onClick={() => removeQuestion(q.id)}
-                  title="削除"
+                  title={t('common.delete', '削除')}
                 >
                   <Trash2 size={18} />
                 </button>
@@ -412,7 +414,7 @@ function SurveyForm({ poll, myVote, setMyVote, isCreator, onRefresh, viewMode }:
                         type="text" 
                         className="input-field py-1 text-sm flex-1"
                         value={opt}
-                        placeholder={`選択肢 ${oIndex + 1}`}
+                        placeholder={t('polls.optionPlaceholder', { index: oIndex + 1, defaultValue: `選択肢 ${oIndex + 1}` })}
                         onChange={e => {
                           const newOpts = [...q.options];
                           newOpts[oIndex] = e.target.value;
@@ -434,7 +436,7 @@ function SurveyForm({ poll, myVote, setMyVote, isCreator, onRefresh, viewMode }:
                     className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1 mt-2"
                     onClick={() => updateQuestion(q.id, { options: [...(q.options || []), ''] })}
                   >
-                    <Plus size={14} /> 選択肢を追加
+                    <Plus size={14} /> {t('polls.addOption', '選択肢を追加')}
                   </button>
                 </div>
               )}
@@ -442,9 +444,9 @@ function SurveyForm({ poll, myVote, setMyVote, isCreator, onRefresh, viewMode }:
           ))}
 
           <div className="flex gap-3 justify-center pt-4 border-t border-gray-200 dark:border-gray-700">
-            <button className="btn btn-secondary text-sm py-1.5" onClick={() => addQuestion('single_choice')}>+ 択一式</button>
-            <button className="btn btn-secondary text-sm py-1.5" onClick={() => addQuestion('multiple_choice')}>+ 複数選択</button>
-            <button className="btn btn-secondary text-sm py-1.5" onClick={() => addQuestion('text')}>+ 自由記述</button>
+            <button className="btn btn-secondary text-sm py-1.5" onClick={() => addQuestion('single_choice')}>{t('polls.btnSingleChoice', '+ 択一式')}</button>
+            <button className="btn btn-secondary text-sm py-1.5" onClick={() => addQuestion('multiple_choice')}>{t('polls.btnMultipleChoice', '+ 複数選択')}</button>
+            <button className="btn btn-secondary text-sm py-1.5" onClick={() => addQuestion('text')}>{t('polls.btnFreeText', '+ 自由記述')}</button>
           </div>
         </div>
       </div>
@@ -456,7 +458,7 @@ function SurveyForm({ poll, myVote, setMyVote, isCreator, onRefresh, viewMode }:
     <div className="space-y-6">
       {questions.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 rounded-xl p-8 text-center border border-gray-200 dark:border-gray-700 text-gray-500">
-          まだアンケートの設問が作成されていません。
+          {t('polls.noQuestionsInSurvey', 'まだアンケートの設問が作成されていません。')}
         </div>
       ) : (
         questions.map((q: any, index: number) => {
@@ -496,7 +498,7 @@ function SurveyForm({ poll, myVote, setMyVote, isCreator, onRefresh, viewMode }:
               <h3 className="font-semibold text-lg mb-4">
                 <span className="text-gray-400 mr-2">Q{index + 1}.</span> 
                 {q.text}
-                {q.type === 'multiple_choice' && <span className="ml-2 text-xs font-normal text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded">複数選択可</span>}
+                {q.type === 'multiple_choice' && <span className="ml-2 text-xs font-normal text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded">{t('polls.multipleChoiceAllowed', '複数選択可')}</span>}
               </h3>
 
               {viewMode === 'vote' ? (
@@ -505,7 +507,7 @@ function SurveyForm({ poll, myVote, setMyVote, isCreator, onRefresh, viewMode }:
                     <textarea 
                       className="input-field w-full" 
                       rows={3} 
-                      placeholder="回答を入力..."
+                      placeholder={t('polls.textAnswerPlaceholder', '回答を入力...')}
                       value={myVote[q.id] || ''}
                       onChange={e => setMyVote({ ...myVote, [q.id]: e.target.value })}
                     />
@@ -540,7 +542,7 @@ function SurveyForm({ poll, myVote, setMyVote, isCreator, onRefresh, viewMode }:
                 <div className="space-y-3">
                   {q.type === 'text' ? (
                     textAnswers.length === 0 ? (
-                      <p className="text-gray-500 text-sm">回答はありません</p>
+                      <p className="text-gray-500 text-sm">{t('polls.noAnswersYet', '回答はありません')}</p>
                     ) : (
                       <div className="space-y-2">
                         {textAnswers.map((ta, i) => (
@@ -561,7 +563,7 @@ function SurveyForm({ poll, myVote, setMyVote, isCreator, onRefresh, viewMode }:
                         <div key={i} className="p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
                           <div className="flex justify-between items-center mb-2">
                             <span className="font-medium">{opt}</span>
-                            <span className="text-sm font-semibold">{data.count} 票 ({percentage}%)</span>
+                            <span className="text-sm font-semibold">{t('polls.votesCount', { count: data.count, percentage, defaultValue: `${data.count} 票 (${percentage}%)` })}</span>
                           </div>
                           
                           <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2 mb-2">
@@ -596,6 +598,7 @@ function SurveyForm({ poll, myVote, setMyVote, isCreator, onRefresh, viewMode }:
 
 // --- Schedule Component ---
 function ScheduleMatrix({ poll, myVote, setMyVote, isCreator, onRefresh, viewMode }: any) {
+  const { t, i18n } = useTranslation();
   const { addToast } = useContext(ToastContext);
   const [showAddDate, setShowAddDate] = useState(false);
   const [newDate, setNewDate] = useState('');
@@ -628,7 +631,7 @@ function ScheduleMatrix({ poll, myVote, setMyVote, isCreator, onRefresh, viewMod
         const start = parseISO(newDate);
         const end = parseISO(newDateEnd);
         if (start > end) {
-          addToast('error', '終了日は開始日以降にしてください');
+          addToast('error', t('polls.endDateAfterStartDate', '終了日は開始日以降にしてください'));
           return;
         }
         let current = start;
@@ -650,7 +653,7 @@ function ScheduleMatrix({ poll, myVote, setMyVote, isCreator, onRefresh, viewMod
       }
 
       await api.post(`/polls/${poll.id}/options`, { options: uniqueDatesToAdd });
-      addToast('success', `${uniqueDatesToAdd.length}件の候補日を追加しました`);
+      addToast('success', t('common.savedSuccessfully'));
       setNewDate('');
       setNewDateEnd('');
       setShowAddDate(false);
@@ -664,7 +667,7 @@ function ScheduleMatrix({ poll, myVote, setMyVote, isCreator, onRefresh, viewMod
     e.preventDefault();
     try {
       await api.put(`/polls/${poll.id}/settings`, { settings: tempSettings });
-      addToast('success', '設定を保存しました');
+      addToast('success', t('common.savedSuccessfully'));
       setShowSettings(false);
       onRefresh();
     } catch(err) {
@@ -736,10 +739,10 @@ function ScheduleMatrix({ poll, myVote, setMyVote, isCreator, onRefresh, viewMod
   const canAttend = myVote['_attendance'] !== false; // defaults to true if undefined
 
   const brushOptions = [
-    { v: '◎', label: '優先度高', c: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-700' },
-    { v: '◯', label: '参加可能', c: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700' },
-    { v: '△', label: '未定/条件付', c: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700' },
-    { v: '✕', label: '参加不可', c: 'bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-900/40 dark:text-rose-300 dark:border-rose-700' },
+    { v: '◎', label: t('polls.brushHighPriority', '優先度高'), c: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-700' },
+    { v: '◯', label: t('polls.brushAvailable', '参加可能'), c: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700' },
+    { v: '△', label: t('polls.brushTentative', '未定/条件付'), c: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700' },
+    { v: '✕', label: t('polls.brushUnavailable', '参加不可'), c: 'bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-900/40 dark:text-rose-300 dark:border-rose-700' },
   ];
 
   const getCellClass = (status: string, date: string) => {
@@ -803,7 +806,7 @@ function ScheduleMatrix({ poll, myVote, setMyVote, isCreator, onRefresh, viewMod
     return (
       <div 
         className={`w-full h-8 flex items-center justify-center text-[10px] font-medium border ${bgClass} hover:opacity-80 transition-colors`}
-        title={tooltipText || '回答なし'}
+        title={tooltipText || t('polls.noResponseTooltip', '回答なし')}
       >
         {counts['◎'] > 0 && <span className="text-emerald-600 dark:text-emerald-400 mx-0.5">{counts['◎']}</span>}
         {counts['◯'] > 0 && <span className="text-blue-600 dark:text-blue-400 mx-0.5">{counts['◯']}</span>}
@@ -817,9 +820,9 @@ function ScheduleMatrix({ poll, myVote, setMyVote, isCreator, onRefresh, viewMod
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col min-w-0">
       <div className="p-4 border-b border-gray-200 dark:border-gray-700">
         <h2 className="text-lg font-semibold flex flex-wrap items-center gap-2">
-          日程マトリクス 
+          {t('polls.scheduleMatrix', '日程マトリクス')} 
           <span className="text-xs font-normal text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-md">
-            {settings.intervalMin}分刻み ({settings.timeStart}〜{settings.timeEnd})
+            {t('polls.intervalInfo', { interval: settings.intervalMin, start: settings.timeStart, end: settings.timeEnd, defaultValue: `${settings.intervalMin}分刻み (${settings.timeStart}〜${settings.timeEnd})` })}
           </span>
           {isCreator && viewMode === 'vote' && (
             <div className="flex gap-2 ml-auto">
@@ -828,7 +831,7 @@ function ScheduleMatrix({ poll, myVote, setMyVote, isCreator, onRefresh, viewMod
                   className="text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-300 px-2 py-1 rounded transition-colors"
                   onClick={() => setShowSettings(true)}
                 >
-                  時間帯設定
+                  {t('polls.timeRangeSettings', '時間帯設定')}
                 </button>
               )}
               {!showAddDate && (
@@ -836,7 +839,7 @@ function ScheduleMatrix({ poll, myVote, setMyVote, isCreator, onRefresh, viewMod
                   className="text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 px-2 py-1 rounded transition-colors"
                   onClick={() => setShowAddDate(true)}
                 >
-                  + 候補日を追加
+                  {t('polls.addCandidateDate', '+ 候補日を追加')}
                 </button>
               )}
             </div>
@@ -845,17 +848,17 @@ function ScheduleMatrix({ poll, myVote, setMyVote, isCreator, onRefresh, viewMod
 
         {viewMode === 'results' && (
           <div className="mt-4 flex gap-2 items-center text-sm">
-            <span className="font-medium text-gray-600 dark:text-gray-300">回答者 ({poll.votes?.length || 0}人):</span>
+            <span className="font-medium text-gray-600 dark:text-gray-300">{t('polls.respondentsCount', { count: poll.votes?.length || 0, defaultValue: `回答者 (${poll.votes?.length || 0}人):` })}</span>
             <div className="flex flex-wrap gap-1.5">
               {poll.votes && poll.votes.length > 0 ? (
                 poll.votes.map((v: any, idx: number) => (
                   <span key={idx} className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-md text-gray-600 dark:text-gray-300 text-xs flex items-center gap-1">
                     {v.voter_name}
-                    {v.answers['_attendance'] === false && <span className="text-rose-500 text-[10px]">(不参加)</span>}
+                    {v.answers['_attendance'] === false && <span className="text-rose-500 text-[10px]">{t('polls.notAttending', '(不参加)')}</span>}
                   </span>
                 ))
               ) : (
-                <span className="text-gray-400 text-xs">まだ回答がありません</span>
+                <span className="text-gray-400 text-xs">{t('polls.noAnswersYet', 'まだ回答がありません')}</span>
               )}
             </div>
           </div>
@@ -863,27 +866,27 @@ function ScheduleMatrix({ poll, myVote, setMyVote, isCreator, onRefresh, viewMod
 
         {showSettings && viewMode === 'vote' && (
           <form onSubmit={handleSaveSettings} className="mt-4 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700">
-            <h3 className="text-sm font-medium mb-2">時間帯の変更</h3>
+            <h3 className="text-sm font-medium mb-2">{t('polls.changeTimeRange', '時間帯の変更')}</h3>
             <div className="flex items-end gap-3">
               <div>
-                <label className="text-xs text-gray-500 block">開始時間</label>
+                <label className="text-xs text-gray-500 block">{t('polls.startTime', '開始時間')}</label>
                 <input type="time" className="input-field py-1 px-2 text-sm" value={tempSettings.timeStart} onChange={e => setTempSettings({...tempSettings, timeStart: e.target.value})} required />
               </div>
               <div>
-                <label className="text-xs text-gray-500 block">終了時間</label>
+                <label className="text-xs text-gray-500 block">{t('polls.endTime', '終了時間')}</label>
                 <input type="time" className="input-field py-1 px-2 text-sm" value={tempSettings.timeEnd} onChange={e => setTempSettings({...tempSettings, timeEnd: e.target.value})} required />
               </div>
               <div>
-                <label className="text-xs text-gray-500 block">間隔</label>
+                <label className="text-xs text-gray-500 block">{t('polls.interval', '間隔')}</label>
                 <select className="input-field py-1 px-2 text-sm" value={tempSettings.intervalMin} onChange={e => setTempSettings({...tempSettings, intervalMin: Number(e.target.value)})}>
-                  <option value={15}>15分</option>
-                  <option value={30}>30分</option>
-                  <option value={60}>60分</option>
+                  <option value={15}>{t('polls.minutes15', '15分')}</option>
+                  <option value={30}>{t('polls.minutes30', '30分')}</option>
+                  <option value={60}>{t('polls.minutes60', '60分')}</option>
                 </select>
               </div>
               <div className="flex gap-2 ml-auto">
-                <button type="submit" className="btn btn-primary py-1 px-3 text-sm">保存</button>
-                <button type="button" className="btn btn-secondary py-1 px-3 text-sm" onClick={() => setShowSettings(false)}>キャンセル</button>
+                <button type="submit" className="btn btn-primary py-1 px-3 text-sm">{t('common.save', '保存')}</button>
+                <button type="button" className="btn btn-secondary py-1 px-3 text-sm" onClick={() => setShowSettings(false)}>{t('common.cancel', 'キャンセル')}</button>
               </div>
             </div>
           </form>
@@ -892,25 +895,23 @@ function ScheduleMatrix({ poll, myVote, setMyVote, isCreator, onRefresh, viewMod
         {showAddDate && viewMode === 'vote' && (
           <form onSubmit={handleAddDate} className="mt-4 flex gap-2 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700">
             <div className="flex items-center gap-2 flex-1">
-              <label className="text-xs text-gray-500 whitespace-nowrap">候補日を一括追加:</label>
-              <input 
-                type="date" 
+              <label className="text-xs text-gray-500 whitespace-nowrap">{t('polls.addCandidateDatesSingle', '候補日を一括追加:')}</label>
+              <DateInput 
                 className="input-field py-1.5 flex-1" 
                 value={newDate}
-                onChange={e => setNewDate(e.target.value)}
+                onChange={val => setNewDate(val)}
                 required
                 autoFocus
               />
               <span className="text-gray-500">〜</span>
-              <input 
-                type="date" 
+              <DateInput 
                 className="input-field py-1.5 flex-1" 
                 value={newDateEnd}
-                onChange={e => setNewDateEnd(e.target.value)}
+                onChange={val => setNewDateEnd(val)}
               />
             </div>
-            <button type="submit" className="btn btn-primary py-1.5 px-3">追加</button>
-            <button type="button" className="btn btn-secondary py-1.5 px-3" onClick={() => setShowAddDate(false)}>キャンセル</button>
+            <button type="submit" className="btn btn-primary py-1.5 px-3">{t('polls.add', '追加')}</button>
+            <button type="button" className="btn btn-secondary py-1.5 px-3" onClick={() => setShowAddDate(false)}>{t('common.cancel', 'キャンセル')}</button>
           </form>
         )}
 
@@ -918,21 +919,21 @@ function ScheduleMatrix({ poll, myVote, setMyVote, isCreator, onRefresh, viewMod
         {viewMode === 'vote' && (
           <div className="mt-6 p-4 bg-indigo-50/50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-900/30 rounded-xl flex items-center justify-between">
             <div>
-              <h3 className="font-medium text-indigo-900 dark:text-indigo-300">このイベントに参加可能ですか？</h3>
-              <p className="text-xs text-indigo-700/70 dark:text-indigo-400/70 mt-1">参加不可を選択すると入力がスキップされます</p>
+              <h3 className="font-medium text-indigo-900 dark:text-indigo-300">{t('polls.canAttendQuestion', 'このイベントに参加可能ですか？')}</h3>
+              <p className="text-xs text-indigo-700/70 dark:text-indigo-400/70 mt-1">{t('polls.canAttendDesc', '参加不可を選択すると入力がスキップされます')}</p>
             </div>
             <div className="flex bg-white dark:bg-gray-800 rounded-lg p-1 border border-gray-200 dark:border-gray-700 shadow-sm">
               <button 
                 className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${canAttend ? 'bg-indigo-600 text-white shadow' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
                 onClick={() => setMyVote({...myVote, _attendance: true})}
               >
-                参加可能
+                {t('polls.canAttend', '参加可能')}
               </button>
               <button 
                 className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${!canAttend ? 'bg-rose-500 text-white shadow' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
                 onClick={() => setMyVote({...myVote, _attendance: false})}
               >
-                参加不可
+                {t('polls.cannotAttend', '参加不可')}
               </button>
             </div>
           </div>
@@ -944,7 +945,7 @@ function ScheduleMatrix({ poll, myVote, setMyVote, isCreator, onRefresh, viewMod
           {/* Toolbox for Drag-to-paint */}
           {viewMode === 'vote' && (
             <div className="p-3 bg-gray-50/80 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700 flex items-center gap-4 sticky top-0 z-20 backdrop-blur-sm">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">ブラシを選択してドラッグで塗る</span>
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('polls.dragToPaintInstruction', 'ブラシを選択してドラッグで塗る')}</span>
               <div className="flex gap-2">
                 {brushOptions.map(brush => (
                   <button
@@ -968,20 +969,20 @@ function ScheduleMatrix({ poll, myVote, setMyVote, isCreator, onRefresh, viewMod
             <div className="overflow-x-auto shadow-inner rounded-xl border border-gray-200 dark:border-gray-700 w-full relative">
             {dates.length === 0 ? (
               <div className="text-center py-12 text-gray-500 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg m-4">
-                候補日がありません。
+                {t('polls.noCandidateDatesInMatrix', '候補日がありません。')}
               </div>
             ) : (
               <table className="w-full text-sm text-left border-collapse select-none min-w-max table-fixed">
                 <thead className="bg-gray-50 dark:bg-gray-900/50">
                   <tr>
-                    <th className="px-4 py-3 font-semibold text-gray-500 border-b border-r dark:border-gray-700 sticky left-0 bg-gray-50 dark:bg-gray-900 z-20 w-24 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">時間</th>
+                    <th className="px-4 py-3 font-semibold text-gray-500 border-b border-r dark:border-gray-700 sticky left-0 bg-gray-50 dark:bg-gray-900 z-20 w-24 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">{t('polls.timeHeader', '時間')}</th>
                     {dateOptions.map((opt: any) => {
                       const dailyStatus = myVote[`_daily_${opt.text}`] || '';
                       
                       let displayDate = opt.text;
                       const parsedDate = parseISO(opt.text);
                       if (isValid(parsedDate)) {
-                        displayDate = format(parsedDate, 'M/d (E)', { locale: ja });
+                        displayDate = format(parsedDate, 'M/d (E)', { locale: i18n.language === 'en' ? enUS : ja });
                       }
 
                       return (
@@ -992,7 +993,7 @@ function ScheduleMatrix({ poll, myVote, setMyVote, isCreator, onRefresh, viewMod
                               <button 
                                 className="text-gray-400 hover:text-red-500 transition-colors"
                                 onClick={async () => {
-                                  if (confirm('この候補日を削除しますか？')) {
+                                  if (confirm(t('polls.confirmDeleteCandidateDate', 'この候補日を削除しますか？'))) {
                                     try {
                                       await api.delete(`/polls/${poll.id}/options/${opt.id}`);
                                       addToast('success', '削除しました');
@@ -1022,12 +1023,12 @@ function ScheduleMatrix({ poll, myVote, setMyVote, isCreator, onRefresh, viewMod
                                 dailyStatus === '△' ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700' :
                                 'bg-white text-gray-400 border-gray-200 dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
                               }`}>
-                                {dailyStatus || '日ごとの可否...'}
+                                {dailyStatus || t('polls.dailyAvailabilityPlaceholder', '日ごとの可否...')}
                               </div>
                             </div>
                           ) : (
                             <div className="mt-2 text-xs text-gray-500 font-medium h-8 flex items-center justify-center bg-gray-50 dark:bg-gray-800/50 rounded-md border border-gray-200 dark:border-gray-700">
-                              集計結果
+                              {t('polls.matrixResultsHeader', '集計結果')}
                             </div>
                           )}
                         </th>
@@ -1069,8 +1070,8 @@ function ScheduleMatrix({ poll, myVote, setMyVote, isCreator, onRefresh, viewMod
       ) : (
         <div className="p-12 text-center text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-900/20 rounded-b-xl">
           <CalendarDays size={48} className="mx-auto text-gray-300 dark:text-gray-600 mb-4" />
-          <p className="font-medium text-lg text-gray-700 dark:text-gray-300">今回は参加不可ですね</p>
-          <p className="text-sm mt-2">入力は不要です。「保存する」ボタンで確定してください。</p>
+          <p className="font-medium text-lg text-gray-700 dark:text-gray-300">{t('polls.notAttendingNoticeTitle', '今回は参加不可ですね')}</p>
+          <p className="text-sm mt-2">{t('polls.notAttendingNoticeDesc', '入力は不要です。「保存する」ボタンで確定してください。')}</p>
         </div>
       )}
     </div>

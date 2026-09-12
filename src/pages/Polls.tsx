@@ -7,10 +7,11 @@ import { ToastContext } from '../App';
 import type { Poll } from '../types';
 import { ShareModal } from '../components/ShareModal';
 import { format, addDays, parseISO } from 'date-fns';
-import { ja } from 'date-fns/locale';
+import { ja, enUS } from 'date-fns/locale';
 import { supabasePost, supabaseGet, supabaseDelete } from '../api/supabaseClient';
+import DateInput from '../components/DateInput';
 export default function Polls() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { addToast } = useContext(ToastContext);
   const [polls, setPolls] = useState<Poll[]>([]);
@@ -88,35 +89,42 @@ export default function Polls() {
       : []; // For surveys, we don't use poll_options anymore. Questions go into settings.
 
     if (form.type === 'schedule' && options.length === 0) {
-      addToast('error', '少なくとも1つの候補日を選択してください');
+      addToast('error', t('polls.selectAtLeastOneCandidateDate', '少なくとも1つの候補日を選択してください'));
       return;
     }
 
     try {
-      const settings = form.type === 'schedule' ? {
-        timeStart: form.timeStart,
-        timeEnd: form.timeEnd,
-        intervalMin: form.intervalMin
-      } : { questions: [] };
-      
-      const res = await api.post<{id: number}>('/polls', {
+      const payload: any = {
         title: form.title,
         description: form.description,
         type: form.type,
-        deadline: form.deadline ? new Date(form.deadline).toISOString() : '',
-        settings,
-        options
-      });
-      addToast('success', t('common.savedSuccessfully'));
+        deadline: form.deadline ? new Date(form.deadline).toISOString() : null,
+      };
+
+      if (form.type === 'schedule') {
+        payload.settings = {
+          timeStart: form.timeStart,
+          timeEnd: form.timeEnd,
+          intervalMin: form.intervalMin
+        };
+        payload.options = form.scheduleDates;
+      } else {
+        payload.settings = {
+          questions: []
+        };
+      }
+
+      const res = await api.post<Poll>('/polls', payload);
       setShowCreateModal(false);
       navigate(`/polls/${res.id}`);
     } catch (e) {
+      console.error('Failed to create poll:', e);
       addToast('error', t('common.errorOccurred'));
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm(t('common.confirmDelete', { defaultValue: '本当に削除しますか？' }))) return;
+    if (!window.confirm(t('polls.confirmDeletePoll', { defaultValue: 'この投票を削除しますか？' }))) return;
     try {
       const poll = polls.find(p => p.id === id);
       if (poll?.shared_id) {
@@ -140,33 +148,28 @@ export default function Polls() {
     if (!shareTarget) return;
     try {
       await supabasePost(`/shared/polls/${shareTarget.id}/share`, { team_id: teamId });
-      addToast('success', t('common.shareSuccess', { defaultValue: 'チームに共有しました' }));
+      addToast('success', t('common.sharedSuccessfully', { defaultValue: 'チームに共有しました' }));
       setShareTarget(null);
       fetchPolls();
-    } catch (error: any) {
-      addToast('error', error.message || t('common.errorOccurred'));
+    } catch (e: any) {
+      addToast('error', e.message || t('common.errorOccurred'));
     }
   };
 
   if (loading) return <div className="p-8 text-center" style={{ color: 'var(--text-secondary)' }}>Loading...</div>;
 
   return (
-    <div className="polls-page p-6 max-w-5xl mx-auto">
+    <div className="max-w-6xl mx-auto py-6 px-4">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2 mb-1">
-            <CheckSquare className="text-indigo-600" />
-            {t('nav.polls', '投票・日程調整')}
-          </h1>
-          <p style={{ color: 'var(--text-secondary)' }} className="text-sm">
-            チーム内でのアンケートやスケジュール調整を行います。
-          </p>
+          <h1 className="text-2xl font-bold">{t('polls.title', '投票・日程調整')}</h1>
+          <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>{t('polls.subtitle', 'ミーティングの日程調整やアンケート調査')}</p>
         </div>
         <button 
           className="btn btn-primary"
-          onClick={() => { 
+          onClick={() => {
             setForm({ 
-              title: '', description: '', type: 'survey', deadline: '',
+              title: '', description: '', type: 'survey', deadline: '', 
               timeStart: '09:00', timeEnd: '18:00', intervalMin: 15,
               surveyOptions: [''], scheduleDates: []
             }); 
@@ -174,7 +177,7 @@ export default function Polls() {
           }}
         >
           <Plus size={18} />
-          {t('common.add', '新規作成')}
+          {t('polls.newPoll', '新規作成')}
         </button>
       </div>
 
@@ -182,7 +185,7 @@ export default function Polls() {
         {polls.length === 0 ? (
           <div className="col-span-full p-8 text-center bg-white dark:bg-gray-800 rounded-xl border border-dashed border-gray-300 dark:border-gray-700">
             <CheckSquare size={48} className="mx-auto text-gray-400 mb-3" />
-            <p style={{ color: 'var(--text-secondary)' }}>投票はまだありません。</p>
+            <p style={{ color: 'var(--text-secondary)' }}>{t('polls.noPolls', '投票はまだありません。')}</p>
           </div>
         ) : (
           polls.map(poll => (
@@ -198,19 +201,19 @@ export default function Polls() {
                     : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300'
                 }`}>
                   {poll.type === 'schedule' ? <CalendarDays size={12} /> : <CheckSquare size={12} />}
-                  {poll.type === 'schedule' ? '日程調整' : 'アンケート'}
+                  {poll.type === 'schedule' ? t('polls.schedule', '日程調整') : t('polls.survey', 'アンケート')}
                 </span>
                 
                 <div className="flex gap-1" onClick={e => e.stopPropagation()}>
                   {poll.shared_id ? (
-                    <span className="p-1.5 text-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 rounded-md" title="チームに共有済み">
+                    <span className="p-1.5 text-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 rounded-md" title={t('polls.sharedToTeam', 'チームに共有済み')}>
                       <Users size={16} />
                     </span>
                   ) : (
                     <button 
                       className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
                       onClick={() => setShareTarget({ id: poll.id, name: poll.title })}
-                      title="チームへ共有"
+                      title={t('polls.shareToTeam', 'チームへ共有')}
                     >
                       <Share2 size={16} />
                     </button>
@@ -234,11 +237,11 @@ export default function Polls() {
               
               <div className="mt-auto pt-3 border-t border-gray-100 dark:border-gray-700 flex justify-between items-center text-xs" style={{ color: 'var(--text-secondary)' }}>
                 <span className={poll.status === 'closed' ? 'text-red-500 font-medium' : 'text-green-500 font-medium'}>
-                  {poll.status === 'closed' ? '終了' : '受付中'}
+                  {poll.status === 'closed' ? t('polls.statusClosed', '終了') : t('polls.statusOpen', '受付中')}
                 </span>
                 {poll.deadline && (
                   <span className="flex items-center gap-1">
-                    〆 {format(new Date(poll.deadline), 'MM/dd HH:mm', { locale: ja })}
+                    {t('polls.deadlinePrefix', '〆 ')}{format(new Date(poll.deadline), 'MM/dd HH:mm', { locale: i18n.language === 'en' ? enUS : ja })}
                   </span>
                 )}
               </div>
@@ -251,22 +254,22 @@ export default function Polls() {
       {showCreateModal && (
         <div className="modal-overlay">
           <div className="modal-content max-w-md">
-            <h2 className="modal-title">新規作成</h2>
+            <h2 className="modal-title">{t('polls.newPoll', '新規作成')}</h2>
             <div className="space-y-4">
               <div className="form-group">
-                <label>タイトル</label>
+                <label>{t('polls.pollTitle', 'タイトル')} *</label>
                 <input 
                   type="text" 
                   className="input-field"
                   value={form.title} 
                   onChange={e => setForm({...form, title: e.target.value})}
-                  placeholder="例: 月例ミーティングの日程"
+                  placeholder={t('polls.pollTitlePlaceholder', '例: 月例ミーティングの日程')}
                   autoFocus
                 />
               </div>
               
               <div className="form-group">
-                <label>タイプ</label>
+                <label>{t('polls.pollType', 'タイプ')}</label>
                 <div className="flex gap-3 mt-1">
                   <label className="flex items-center gap-2 p-3 border rounded-lg cursor-pointer flex-1 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800" style={{ borderColor: form.type === 'survey' ? 'var(--primary-color)' : 'var(--border-color)' }}>
                     <input 
@@ -277,7 +280,7 @@ export default function Polls() {
                     />
                     <div className="flex items-center gap-2">
                       <CheckSquare size={18} className={form.type === 'survey' ? 'text-indigo-600' : 'text-gray-400'} />
-                      <span className="font-medium">アンケート</span>
+                      <span className="font-medium">{t('polls.survey', 'アンケート')}</span>
                     </div>
                   </label>
                   <label className="flex items-center gap-2 p-3 border rounded-lg cursor-pointer flex-1 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800" style={{ borderColor: form.type === 'schedule' ? 'var(--primary-color)' : 'var(--border-color)' }}>
@@ -289,14 +292,14 @@ export default function Polls() {
                     />
                     <div className="flex items-center gap-2">
                       <CalendarDays size={18} className={form.type === 'schedule' ? 'text-indigo-600' : 'text-gray-400'} />
-                      <span className="font-medium">日程調整</span>
+                      <span className="font-medium">{t('polls.schedule', '日程調整')}</span>
                     </div>
                   </label>
                 </div>
               </div>
 
               <div className="form-group">
-                <label>回答期限 (任意)</label>
+                <label>{t('polls.deadlineOptional', '回答期限 (任意)')}</label>
                 <input 
                   type="datetime-local" 
                   className="input-field"
@@ -306,7 +309,7 @@ export default function Polls() {
               </div>
 
               <div className="form-group">
-                <label>説明 (任意)</label>
+                <label>{t('polls.descriptionOptional', '説明 (任意)')}</label>
                 <textarea 
                   className="input-field"
                   value={form.description} 
@@ -318,40 +321,40 @@ export default function Polls() {
               {/* Type specific inputs */}
               {form.type === 'schedule' ? (
                 <div className="space-y-4 pt-4 border-t border-gray-100 dark:border-gray-700">
-                  <h3 className="font-medium text-sm text-gray-700 dark:text-gray-300">日程設定</h3>
+                  <h3 className="font-medium text-sm text-gray-700 dark:text-gray-300">{t('polls.scheduleSettings', '日程設定')}</h3>
                   <div className="grid grid-cols-3 gap-3">
                     <div>
-                      <label className="text-xs text-gray-500">開始時間</label>
+                      <label className="text-xs text-gray-500">{t('polls.startTime', '開始時間')}</label>
                       <input type="time" className="input-field py-1.5" value={form.timeStart} onChange={e => setForm({...form, timeStart: e.target.value})} />
                     </div>
                     <div>
-                      <label className="text-xs text-gray-500">終了時間</label>
+                      <label className="text-xs text-gray-500">{t('polls.endTime', '終了時間')}</label>
                       <input type="time" className="input-field py-1.5" value={form.timeEnd} onChange={e => setForm({...form, timeEnd: e.target.value})} />
                     </div>
                     <div>
-                      <label className="text-xs text-gray-500">間隔</label>
+                      <label className="text-xs text-gray-500">{t('polls.interval', '間隔')}</label>
                       <select className="input-field py-1.5" value={form.intervalMin} onChange={e => setForm({...form, intervalMin: Number(e.target.value)})}>
-                        <option value={15}>15分</option>
-                        <option value={30}>30分</option>
-                        <option value={60}>60分</option>
+                        <option value={15}>{t('polls.minutes15', '15分')}</option>
+                        <option value={30}>{t('polls.minutes30', '30分')}</option>
+                        <option value={60}>{t('polls.minutes60', '60分')}</option>
                       </select>
                     </div>
                   </div>
                   <div>
-                    <label className="text-xs text-gray-500 block mb-1">候補日を一括追加 (期間指定)</label>
+                    <label className="text-xs text-gray-500 block mb-1">{t('polls.batchAddCandidateDates', '候補日を一括追加 (期間指定)')}</label>
                     <div className="flex items-center gap-2">
-                      <input type="date" className="input-field py-1.5 flex-1" id="candidate-start-date" />
+                      <DateInput id="candidate-start-date" className="input-field py-1.5 flex-1" value="" onChange={() => {}} />
                       <span className="text-gray-500">〜</span>
-                      <input type="date" className="input-field py-1.5 flex-1" id="candidate-end-date" />
+                      <DateInput id="candidate-end-date" className="input-field py-1.5 flex-1" value="" onChange={() => {}} />
                       <button type="button" className="btn btn-secondary py-1.5 px-3" onClick={() => {
                         const startInput = document.getElementById('candidate-start-date') as HTMLInputElement;
                         const endInput = document.getElementById('candidate-end-date') as HTMLInputElement;
                         
-                        if (startInput.value && endInput.value) {
+                        if (startInput?.value && endInput?.value) {
                           const start = parseISO(startInput.value);
                           const end = parseISO(endInput.value);
                           if (start > end) {
-                            addToast('error', '終了日は開始日以降にしてください');
+                            addToast('error', t('polls.endDateAfterStartDate', '終了日は開始日以降にしてください'));
                             return;
                           }
                           
@@ -365,13 +368,13 @@ export default function Polls() {
                           setForm({...form, scheduleDates: Array.from(newDates).sort()});
                           startInput.value = '';
                           endInput.value = '';
-                        } else if (startInput.value) {
+                        } else if (startInput?.value) {
                            // Allow single day add if only start is provided
                            const newDates = new Set([...form.scheduleDates, startInput.value]);
                            setForm({...form, scheduleDates: Array.from(newDates).sort()});
                            startInput.value = '';
                         }
-                      }}>追加</button>
+                      }}>{t('polls.add', '追加')}</button>
                     </div>
                     <div className="flex flex-wrap gap-2 mt-2">
                       {form.scheduleDates.map(date => (
@@ -380,21 +383,21 @@ export default function Polls() {
                           <button type="button" onClick={() => setForm({...form, scheduleDates: form.scheduleDates.filter(d => d !== date)})} className="hover:text-red-500"><Trash2 size={12} /></button>
                         </span>
                       ))}
-                      {form.scheduleDates.length === 0 && <span className="text-xs text-gray-400">候補日がありません</span>}
+                      {form.scheduleDates.length === 0 && <span className="text-xs text-gray-400">{t('polls.noCandidateDates', '候補日がありません')}</span>}
                     </div>
                   </div>
                 </div>
               ) : (
                 <div className="pt-4 border-t border-gray-100 dark:border-gray-700 text-sm text-gray-500">
-                  <p>アンケートの設問（フォームの内容）は、作成後の詳細画面で自由に編集できます。</p>
+                  <p>{t('polls.surveyDescHint', 'アンケートの設問（フォームの内容）は、作成後の詳細画面で自由に編集できます。')}</p>
                 </div>
               )}
             </div>
             
             <div className="modal-actions mt-6">
-              <button className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>キャンセル</button>
+              <button className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>{t('common.cancel', 'キャンセル')}</button>
               <button className="btn btn-primary" onClick={handleCreate} disabled={!form.title.trim()}>
-                作成して次へ
+                {t('polls.createAndProceed', '作成して次へ')}
               </button>
             </div>
           </div>

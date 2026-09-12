@@ -144,7 +144,7 @@ export default function ExperimentDetail() {
       setImportSelectedStepId(null);
       setImportSteps([]);
     } catch (e) {
-      addToast('error', 'Failed to load experiments');
+      addToast('error', t('experiments.loadExperimentsFailed'));
     }
   };
 
@@ -155,7 +155,7 @@ export default function ExperimentDetail() {
       const st = await api.get<any[]>(`/experiments/${expId}/steps`);
       setImportSteps(st);
     } catch (e) {
-      addToast('error', 'Failed to load steps');
+      addToast('error', t('experiments.loadStepsFailed'));
     }
   };
 
@@ -164,11 +164,11 @@ export default function ExperimentDetail() {
     setImporting(true);
     try {
       await api.post(`/experiments/${id}/steps/import`, { source_step_id: importSelectedStepId });
-      addToast('success', 'ステップをインポートしました');
+      addToast('success', t('experiments.importSuccess'));
       setShowImportModal(false);
       fetchData();
     } catch (e: any) {
-      addToast('error', e.message || 'インポートに失敗しました');
+      addToast('error', e.message || t('experiments.importFailed'));
     } finally {
       setImporting(false);
     }
@@ -347,7 +347,7 @@ export default function ExperimentDetail() {
         <div>
           <div style={{ marginBottom: 'var(--space-md)', display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-sm)' }}>
             <button className="btn btn-secondary btn-sm" onClick={openImportModal}>
-              <Edit size={14} /> インポート
+              <Edit size={14} /> {t('experiments.importBtn')}
             </button>
             <button className="btn btn-primary btn-sm" onClick={openAddStep} title="ショートカット: [ 1 ]">
               <Plus size={14} />
@@ -552,23 +552,23 @@ export default function ExperimentDetail() {
                   <input className="form-input" type="number" min="0" step="any" value={stepForm.duration_minutes} onChange={e => setStepForm({ ...stepForm, duration_minutes: parseFloat(e.target.value) || 0 })} disabled={stepForm.is_overnight} />
                   <label className="form-label mt-2" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <input type="checkbox" checked={stepForm.is_sample_dependent} onChange={e => setStepForm({ ...stepForm, is_sample_dependent: e.target.checked })} />
-                    サンプル数依存にする
+                    {t('experiments.sampleDependent')}
                   </label>
                   {stepForm.is_sample_dependent && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px', padding: '8px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: 'var(--border-radius-sm)', border: '1px dashed var(--border-default)' }}>
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                         <input className="form-input" type="number" min="1" step="any" value={stepForm.samples_per_batch} onChange={e => setStepForm({ ...stepForm, samples_per_batch: parseFloat(e.target.value) || 1 })} style={{ width: '80px' }} />
-                        <span style={{ fontSize: 'var(--font-size-xs)' }}>サンプルごとに所要時間を加算</span>
+                        <span style={{ fontSize: 'var(--font-size-xs)' }}>{t('experiments.addPerSample')}</span>
                       </div>
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                         <input className="form-input" type="number" min="0" step="any" value={stepForm.extra_duration_minutes} onChange={e => setStepForm({ ...stepForm, extra_duration_minutes: parseFloat(e.target.value) || 0 })} style={{ width: '80px' }} />
-                        <span style={{ fontSize: 'var(--font-size-xs)' }}>サンプル数に依存しない固定追加時間 (分)</span>
+                        <span style={{ fontSize: 'var(--font-size-xs)' }}>{t('experiments.fixedExtraDuration')}</span>
                       </div>
                     </div>
                   )}
                   <label className="form-checkbox" style={{ marginTop: 'var(--space-xs)' }}>
                     <input type="checkbox" checked={stepForm.is_overnight} onChange={e => setStepForm({ ...stepForm, is_overnight: e.target.checked, duration_minutes: e.target.checked ? 0 : stepForm.duration_minutes })} />
-                    <span style={{ fontSize: 'var(--font-size-sm)' }}>{t('experiments.isOvernight', 'オーバーナイト (一晩放置)')}</span>
+                    <span style={{ fontSize: 'var(--font-size-sm)' }}>{t('experiments.isOvernight')}</span>
                   </label>
                 </div>
                 <div className="form-group">
@@ -577,9 +577,9 @@ export default function ExperimentDetail() {
                 </div>
               </div>
               <div className="form-group">
-                <label className="form-label">サブプロトコルを選択</label>
+                <label className="form-label">{t('experiments.selectSubProtocol')}</label>
                 <select className="form-input" value={stepForm.sub_protocol_id || ''} onChange={e => setStepForm({ ...stepForm, sub_protocol_id: e.target.value ? parseInt(e.target.value) : null })}>
-                  <option value="">(なし)</option>
+                  <option value="">{t('experiments.noneOption')}</option>
                   {subProtocols.map(sp => (
                     <option key={sp.id} value={sp.id}>{sp.name}</option>
                   ))}
@@ -589,31 +589,31 @@ export default function ExperimentDetail() {
                 <label className="form-checkbox" style={{ marginBottom: stepForm.routine_name ? 'var(--space-md)' : 0 }}>
                   <input type="checkbox" checked={!!stepForm.routine_name} onChange={e => {
                     if (e.target.checked) {
-                      setStepForm({ ...stepForm, routine_name: stepForm.name ? `${stepForm.name} 確認` : '自動生成ルーティン', routine_duration_days: 7, routine_recurrence: 'daily' });
+                      setStepForm({ ...stepForm, routine_name: stepForm.name ? `${stepForm.name} ${t('experiments.routineCheckSuffix')}` : t('experiments.autoRoutineDefault'), routine_duration_days: 7, routine_recurrence: 'daily' });
                     } else {
                       setStepForm({ ...stepForm, routine_name: '', routine_duration_days: 0, routine_recurrence: 'daily' });
                     }
                   }} />
-                  <span style={{ fontWeight: '500' }}>完了時に自動でルーティンを生成する</span>
+                  <span style={{ fontWeight: '500' }}>{t('experiments.autoCreateRoutine')}</span>
                 </label>
 
                 {!!stepForm.routine_name && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)', marginTop: 'var(--space-sm)' }}>
                     <div>
-                      <label className="form-label" style={{ fontSize: 'var(--font-size-sm)' }}>ルーティン名</label>
+                      <label className="form-label" style={{ fontSize: 'var(--font-size-sm)' }}>{t('experiments.routineName')}</label>
                       <input className="form-input" value={stepForm.routine_name} onChange={e => setStepForm({ ...stepForm, routine_name: e.target.value })} />
                     </div>
                     <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
                       <div style={{ flex: 1 }}>
-                        <label className="form-label" style={{ fontSize: 'var(--font-size-sm)' }}>期間 (実行日から何日間)</label>
+                        <label className="form-label" style={{ fontSize: 'var(--font-size-sm)' }}>{t('experiments.routineDurationDays')}</label>
                         <input type="number" className="form-input" value={stepForm.routine_duration_days} onChange={e => setStepForm({ ...stepForm, routine_duration_days: parseInt(e.target.value) || 0 })} min={1} />
                       </div>
                       <div style={{ flex: 1 }}>
-                        <label className="form-label" style={{ fontSize: 'var(--font-size-sm)' }}>繰り返しパターン</label>
+                        <label className="form-label" style={{ fontSize: 'var(--font-size-sm)' }}>{t('experiments.routineRecurrence')}</label>
                         <select className="form-input" value={stepForm.routine_recurrence} onChange={e => setStepForm({ ...stepForm, routine_recurrence: e.target.value as any })}>
-                          <option value="daily">毎日</option>
-                          <option value="weekdays">平日のみ</option>
-                          <option value="weekly">毎週</option>
+                          <option value="daily">{t('experiments.routineDaily')}</option>
+                          <option value="weekdays">{t('experiments.routineWeekdays')}</option>
+                          <option value="weekly">{t('experiments.routineWeekly')}</option>
                         </select>
                       </div>
                     </div>
@@ -622,37 +622,37 @@ export default function ExperimentDetail() {
               </div>
               <div className="form-group">
                 <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>{t('experiments.preparations', '事前操作 / In-advance メッセージ')}</span>
+                  <span>{t('experiments.preparations')}</span>
                   <button className="btn btn-ghost btn-sm" onClick={() => setStepForm({ ...stepForm, preparations: [...stepForm.preparations, { message: '', timing_type: 'before_experiment', timing_step_id: null, timing_offset_minutes: 0, requires_check: false }] })}>
-                    <Plus size={14} /> 追加
+                    <Plus size={14} /> {t('common.add')}
                   </button>
                 </label>
                 {stepForm.preparations.map((prep, index) => (
                   <div key={index} style={{ border: '1px solid var(--border-default)', padding: 'var(--space-sm)', borderRadius: 'var(--border-radius-md)', marginBottom: 'var(--space-sm)' }}>
                     <div style={{ display: 'flex', gap: 'var(--space-sm)', marginBottom: 'var(--space-xs)' }}>
-                      <input className="form-input" style={{ flex: 1 }} value={prep.message} onChange={e => { const newPreps = [...stepForm.preparations]; newPreps[index].message = e.target.value; setStepForm({ ...stepForm, preparations: newPreps }); }} placeholder="事前操作内容" />
+                      <input className="form-input" style={{ flex: 1 }} value={prep.message} onChange={e => { const newPreps = [...stepForm.preparations]; newPreps[index].message = e.target.value; setStepForm({ ...stepForm, preparations: newPreps }); }} placeholder={t('experiments.prepMessagePlaceholder')} />
                       <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-danger)' }} onClick={() => { const newPreps = [...stepForm.preparations]; newPreps.splice(index, 1); setStepForm({ ...stepForm, preparations: newPreps }); }}><Trash2 size={14} /></button>
                     </div>
                     <div style={{ display: 'flex', gap: 'var(--space-sm)', alignItems: 'center', flexWrap: 'wrap' }}>
                       <select className="form-input" style={{ width: 'auto' }} value={prep.timing_type} onChange={e => { const newPreps = [...stepForm.preparations]; newPreps[index].timing_type = e.target.value; setStepForm({ ...stepForm, preparations: newPreps }); }}>
-                        <option value="before_experiment">実験開始前</option>
-                        <option value="after_step">特定のステップ終了時</option>
+                        <option value="before_experiment">{t('experiments.timingBeforeExp')}</option>
+                        <option value="after_step">{t('experiments.timingAfterStep')}</option>
                       </select>
                       {prep.timing_type === 'before_experiment' && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}>
                           <input type="number" step="any" className="form-input" style={{ width: 80 }} value={prep.timing_offset_minutes} onChange={e => { const newPreps = [...stepForm.preparations]; newPreps[index].timing_offset_minutes = parseFloat(e.target.value) || 0; setStepForm({ ...stepForm, preparations: newPreps }); }} />
-                          <span style={{ fontSize: 'var(--font-size-sm)' }}>分前</span>
+                          <span style={{ fontSize: 'var(--font-size-sm)' }}>{t('experiments.minutesBefore')}</span>
                         </div>
                       )}
                       {prep.timing_type === 'after_step' && (
                         <select className="form-input" style={{ width: 'auto' }} value={prep.timing_step_id || ''} onChange={e => { const newPreps = [...stepForm.preparations]; newPreps[index].timing_step_id = parseInt(e.target.value) || null; setStepForm({ ...stepForm, preparations: newPreps }); }}>
-                          <option value="">-- ステップを選択 --</option>
+                          <option value="">{t('experiments.selectStepPlaceholder')}</option>
                           {steps.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
                       )}
                       <label className="form-checkbox">
                         <input type="checkbox" checked={prep.requires_check} onChange={e => { const newPreps = [...stepForm.preparations]; newPreps[index].requires_check = e.target.checked; setStepForm({ ...stepForm, preparations: newPreps }); }} />
-                        <span style={{ fontSize: 'var(--font-size-sm)' }}>完了チェックが必要</span>
+                        <span style={{ fontSize: 'var(--font-size-sm)' }}>{t('experiments.requiresCheck')}</span>
                       </label>
                     </div>
                   </div>
@@ -694,7 +694,7 @@ export default function ExperimentDetail() {
                 <label className="form-label">{t('experiments.selectSteps')}</label>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
                   {blockForm.step_nodes.length === 0 ? (
-                    <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--font-size-sm)' }}>追加されたステップはありません</p>
+                    <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--font-size-sm)' }}>{t('experiments.noStepsAdded')}</p>
                   ) : (
                     blockForm.step_nodes.map((stage, stageIndex) => (
                       <div key={stageIndex} style={{ padding: 'var(--space-sm)', borderRadius: 'var(--border-radius-md)', border: '1px solid var(--border-default)', backgroundColor: 'var(--bg-secondary)' }}>
@@ -752,10 +752,10 @@ export default function ExperimentDetail() {
                                       }}><Trash2 size={12} /></button>
                                     </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-tertiary)' }}>
-                                      <span>所要: {formatDuration(step.duration_minutes)}</span>
+                                      <span>{t('experiments.durationLabel')}: {formatDuration(step.duration_minutes)}</span>
                                       {nodeIndex === 0 && branchIndex > 0 ? (
                                         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                          開始: +<input 
+                                          {t('experiments.startDelayLabel')}: +<input 
                                             type="number" 
                                             step="any"
                                             value={node.delay_minutes} 
@@ -773,10 +773,10 @@ export default function ExperimentDetail() {
                                               setBlockForm({ ...blockForm, step_nodes: newNodes });
                                             }}
                                             style={{ width: 45, padding: '0 2px', fontSize: '10px', height: 18 }} 
-                                          />分
+                                          />{t('common.minutes')}
                                         </span>
                                       ) : (
-                                        <span>開始: +{formatDuration(node.delay_minutes)}</span>
+                                        <span>{t('experiments.startDelayLabel')}: +{formatDuration(node.delay_minutes)}</span>
                                       )}
                                     </div>
                                   </div>
@@ -797,7 +797,7 @@ export default function ExperimentDetail() {
                                   setBlockForm({ ...blockForm, step_nodes: newNodes });
                                 }
                               }}>
-                                <option value="">{branch.length === 0 ? "-- ステップを選択 --" : "-- 直列に追加 --"}</option>
+                                <option value="">{branch.length === 0 ? t('experiments.selectStepPlaceholder') : t('experiments.addSequentialStep')}</option>
                                 {steps.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                               </select>
                             </div>
@@ -807,7 +807,7 @@ export default function ExperimentDetail() {
                               const newNodes = [...blockForm.step_nodes];
                               newNodes[stageIndex].push([]);
                               setBlockForm({ ...blockForm, step_nodes: newNodes });
-                            }}>+ ブランチを追加</button>
+                            }}>{t('experiments.addBranch')}</button>
                           </div>
                         </div>
                       </div>
@@ -819,7 +819,7 @@ export default function ExperimentDetail() {
                         setBlockForm({ ...blockForm, step_nodes: [...blockForm.step_nodes, [[{ step_id: parseInt(e.target.value), delay_minutes: 0 }]]] });
                       }
                     }}>
-                      <option value="">-- 新しいステージを追加 --</option>
+                      <option value="">{t('experiments.addNewStage')}</option>
                       {steps.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   </div>
@@ -849,7 +849,7 @@ export default function ExperimentDetail() {
                   <input className="form-input" value={protocolForm.name} onChange={e => setProtocolForm({ ...protocolForm, name: e.target.value })} placeholder={t('experiments.protocolNamePlaceholder')} autoFocus />
                 </div>
                 <div className="form-group" style={{ maxWidth: '100px' }}>
-                  <label className="form-label">色設定</label>
+                  <label className="form-label">{t('experiments.colorSetting')}</label>
                   <input type="color" className="form-input" value={protocolForm.color} onChange={e => setProtocolForm({ ...protocolForm, color: e.target.value })} style={{ width: '100%', height: '40px', padding: 0 }} />
                 </div>
               </div>
@@ -913,14 +913,14 @@ export default function ExperimentDetail() {
         <div className="modal-overlay">
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3 className="modal-title">他の実験種からステップをインポート</h3>
+              <h3 className="modal-title">{t('experiments.importStepModalTitle')}</h3>
               <button className="btn btn-ghost btn-icon" onClick={() => setShowImportModal(false)}>×</button>
             </div>
             <div className="modal-body">
               <div className="form-group">
-                <label className="form-label">インポート元の実験種</label>
+                <label className="form-label">{t('experiments.importSourceExp')}</label>
                 <select className="form-input" value={importSelectedExpId || ''} onChange={e => loadImportSteps(parseInt(e.target.value))}>
-                  <option value="">-- 選択してください --</option>
+                  <option value="">{t('experiments.selectSourceExpPlaceholder')}</option>
                   {allExperiments.map(e => (
                     <option key={e.id} value={e.id}>{e.name}</option>
                   ))}
@@ -929,14 +929,14 @@ export default function ExperimentDetail() {
               
               {importSelectedExpId && (
                 <div className="form-group">
-                  <label className="form-label">インポートするステップ</label>
+                  <label className="form-label">{t('experiments.importTargetStep')}</label>
                   {importSteps.length === 0 ? (
-                    <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-tertiary)' }}>ステップが登録されていません</p>
+                    <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-tertiary)' }}>{t('experiments.noSteps')}</p>
                   ) : (
                     <select className="form-input" value={importSelectedStepId || ''} onChange={e => setImportSelectedStepId(parseInt(e.target.value))}>
-                      <option value="">-- ステップを選択 --</option>
+                      <option value="">{t('experiments.selectStepPlaceholder')}</option>
                       {importSteps.map(s => (
-                        <option key={s.id} value={s.id}>{s.name} ({s.duration_minutes}分)</option>
+                        <option key={s.id} value={s.id}>{s.name} ({s.duration_minutes}{t('common.minutes')})</option>
                       ))}
                     </select>
                   )}
@@ -946,7 +946,7 @@ export default function ExperimentDetail() {
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setShowImportModal(false)}>{t('common.cancel')}</button>
               <button className="btn btn-primary" onClick={handleImportSubmit} disabled={!importSelectedStepId || importing}>
-                {importing ? 'インポート中...' : 'インポート'}
+                {importing ? t('experiments.importing') : t('experiments.importBtn')}
               </button>
             </div>
           </div>

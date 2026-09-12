@@ -24,4 +24,11 @@ i18n
     },
   });
 
+if (typeof document !== 'undefined') {
+  document.documentElement.lang = i18n.language === 'en' ? 'en' : 'ja';
+  i18n.on('languageChanged', (lng) => {
+    document.documentElement.lang = lng === 'en' ? 'en' : 'ja';
+  });
+}
+
 export default i18n;

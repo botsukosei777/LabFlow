@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
-import { Book, Plus, Trash2, Calendar as CalendarIcon, FileText, Check, X, Search, Tag, FlaskConical, FileTerminal } from 'lucide-react';
+import { Book, Plus, Trash2, Calendar as CalendarIcon, FileText, Check, X, Search, Tag, FlaskConical, FileTerminal, Printer, ChevronDown, ChevronRight } from 'lucide-react';
 import { api } from '../api/client';
 import MDEditor from '@uiw/react-md-editor';
 import { DayPicker } from 'react-day-picker';
 import 'react-day-picker/dist/style.css';
 import { format, subDays, isSameDay } from 'date-fns';
+import { CustomDatabaseManager } from '../components/notebook/CustomDatabaseManager';
+import { DocumentManager } from '../components/notebook/DocumentManager';
+import { PrintNotesModal } from '../components/notebook/PrintNotesModal';
 
 interface Note {
   id: number;
@@ -20,16 +23,19 @@ interface Note {
 
 const TEMPLATES = [
   {
+    key: 'standard',
     name: '標準実験記録',
     title: '実験記録: ',
     content: '## 目的\n\n## 準備・使用機器\n\n## 手順\n\n## 結果\n\n## 考察\n\n## 次のステップ\n'
   },
   {
+    key: 'meeting',
     name: 'ミーティング議事録',
     title: 'MTG: ',
     content: '## 日時・参加者\n\n## アジェンダ\n\n## 決定事項\n\n## Next Action (TODO)\n'
   },
   {
+    key: 'troubleshooting',
     name: 'トラブルシューティング',
     title: 'トラブル: ',
     content: '## 発生した問題\n\n## 原因の仮説\n\n## 試した解決策\n\n## 結果・今後の対策\n'
@@ -91,7 +97,7 @@ const TagInput = ({ value, onChange, allTags }: { value: string[], onChange: (ta
               removeTag(value[value.length - 1]);
             }
           }}
-          placeholder={value.length === 0 ? "タグを追加..." : ""}
+          placeholder={value.length === 0 ? t('notebook.addTag', 'タグを追加...') : ""}
           className="bg-transparent border-none outline-none text-sm flex-1 min-w-[100px] text-white"
         />
       </div>
@@ -112,7 +118,7 @@ const TagInput = ({ value, onChange, allTags }: { value: string[], onChange: (ta
               onMouseDown={(e) => { e.preventDefault(); addTag(inputValue.trim()); }} 
               className="p-2.5 hover:bg-indigo-500/20 cursor-pointer text-sm text-indigo-400 flex items-center gap-2"
             >
-              <Plus className="w-4 h-4" /> "{inputValue.trim()}" を新しく作成
+              <Plus className="w-4 h-4" /> {t('notebook.createNewTag', { name: inputValue.trim() })}
             </div>
           )}
         </div>
@@ -142,9 +148,11 @@ export default function Notebook() {
   const [editDate, setEditDate] = useState('');
   const [editTags, setEditTags] = useState<string[]>([]);
   const [editExperimentId, setEditExperimentId] = useState<number | ''>('');
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [showTemplates, setShowTemplates] = useState(false);
   
   useEffect(() => {
     fetchNotes();
@@ -254,7 +262,7 @@ export default function Notebook() {
       }
     } catch (e) {
       console.error(e);
-      alert('ノートの保存に失敗しました');
+      alert(t('notebook.saveFailed', 'ノートの保存に失敗しました'));
     }
   };
 
@@ -310,7 +318,7 @@ export default function Notebook() {
       }
     } catch (e) {
       console.error(e);
-      alert('ノートの保存に失敗しました');
+      alert(t('notebook.saveFailed', 'ノートの保存に失敗しました'));
     }
   };
 
@@ -323,7 +331,7 @@ export default function Notebook() {
       await fetchNotes();
     } catch (e) {
       console.error(e);
-      alert('削除に失敗しました');
+      alert(t('notebook.deleteFailed', '削除に失敗しました'));
     }
   };
 
@@ -352,21 +360,32 @@ export default function Notebook() {
   }, [notes]);
 
   return (
-    <div className="flex h-[calc(100vh-140px)] gap-6">
-      {/* Sidebar List */}
-      <div className="w-[340px] flex flex-col glass-panel rounded-2xl overflow-hidden border border-white/10 shadow-glass">
+    <div className="flex flex-col gap-6 pb-12 min-h-full">
+      {/* ─── Upper Section: Experiment Notebook ─── */}
+      <div className="flex h-[620px] 2xl:h-[680px] gap-6 flex-shrink-0">
+        {/* Sidebar List */}
+        <div className="w-[340px] flex flex-col glass-panel rounded-2xl overflow-hidden border border-white/10 shadow-glass">
         <div className="p-4 border-b border-white/10 flex justify-between items-center bg-white/5">
           <h1 className="text-xl font-semibold flex items-center gap-2">
             <Book className="w-5 h-5 text-indigo-400" />
             {t('notebook.title', '実験ノート')}
           </h1>
-          <button 
-            onClick={handleNewNoteClick}
-            className="p-2 rounded-full hover:bg-white/10 text-indigo-300 transition-colors"
-            title={t('notebook.add', 'ノートを追加')}
-          >
-            <Plus className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button 
+              onClick={() => setIsPrintModalOpen(true)}
+              className="p-2 rounded-full hover:bg-white/10 text-gray-300 hover:text-white transition-colors"
+              title={t('notebook.printWithRange', '期間を指定して印刷')}
+            >
+              <Printer className="w-4 h-4" />
+            </button>
+            <button 
+              onClick={handleNewNoteClick}
+              className="p-2 rounded-full hover:bg-white/10 text-indigo-300 transition-colors"
+              title={t('notebook.add', 'ノートを追加')}
+            >
+              <Plus className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {isCreatingInline && (
@@ -377,7 +396,7 @@ export default function Notebook() {
                 autoFocus
                 value={inlineTitle}
                 onChange={e => setInlineTitle(e.target.value)}
-                placeholder="タイトル..."
+                placeholder={t('notebook.titlePlaceholder', 'タイトル...')}
                 className="flex-1 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500 text-white min-w-0"
               />
               <input
@@ -388,17 +407,32 @@ export default function Notebook() {
               />
             </div>
             
-            <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-1">
-              <span className="text-xs text-gray-400 whitespace-nowrap self-center">テンプレート:</span>
-              {TEMPLATES.map((tmpl, idx) => (
-                <button 
-                  key={idx} 
-                  onClick={() => { setInlineTitle(tmpl.title); setInlineContent(tmpl.content); }}
-                  className="px-2 py-0.5 text-[10px] rounded border border-indigo-500/30 bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 whitespace-nowrap transition-colors"
-                >
-                  {tmpl.name}
-                </button>
-              ))}
+            <div className="flex flex-col gap-1.5">
+              <button
+                type="button"
+                onClick={() => setShowTemplates(!showTemplates)}
+                className="flex items-center gap-1 text-xs text-gray-400 hover:text-indigo-300 w-fit transition-colors"
+              >
+                {showTemplates ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                <FileTerminal className="w-3.5 h-3.5" />
+                <span>{t('notebook.showTemplates', 'テンプレートを表示')} {showTemplates ? t('notebook.closeTemplates', '(閉じる)') : t('notebook.openTemplates', '(開く)')}</span>
+              </button>
+              {showTemplates && (
+                <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-1 pt-0.5">
+                  {TEMPLATES.map((tmpl, idx) => (
+                    <button 
+                      key={idx} 
+                      onClick={() => {
+                        setInlineTitle(t(`notebook.templates.${tmpl.key}Title`, tmpl.title));
+                        setInlineContent(t(`notebook.templates.${tmpl.key}Content`, tmpl.content));
+                      }}
+                      className="px-2 py-0.5 text-[10px] rounded border border-indigo-500/30 bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 whitespace-nowrap transition-colors"
+                    >
+                      {t(`notebook.templates.${tmpl.key}`, tmpl.name)}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div 
@@ -420,25 +454,25 @@ export default function Notebook() {
                 preview="edit"
                 hideToolbar={false}
                 textareaProps={{
-                  placeholder: "内容 (Markdown)..."
+                  placeholder: t('notebook.contentPlaceholder', '内容 (Markdown)...')
                 }}
                 style={{ borderRadius: '0', border: 'none' }}
               />
             </div>
             
             <div className="flex flex-col gap-1">
-              <span className="text-xs text-gray-400">タグ:</span>
+              <span className="text-xs text-gray-400">{t('notebook.tags', 'タグ')}:</span>
               <TagInput value={inlineTags} onChange={setInlineTags} allTags={allTags} />
             </div>
 
             <div className="flex flex-col gap-1">
-              <span className="text-xs text-gray-400">関連する実験:</span>
+              <span className="text-xs text-gray-400">{t('notebook.relatedExperiment', '関連する実験')}:</span>
               <select
                 value={inlineExperimentId}
                 onChange={e => setInlineExperimentId(e.target.value ? Number(e.target.value) : '')}
                 className="w-full bg-black/30 border border-white/10 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-indigo-500 text-white"
               >
-                <option value="">-- 指定なし --</option>
+                <option value="">{t('notebook.unspecified', '-- 指定なし --')}</option>
                 {scheduledExperiments.map(exp => (
                   <option key={exp.id} value={exp.id}>
                     {exp.start_date} | {exp.label ? `${exp.label} - ` : ''}{exp.experiment_type_name}
@@ -448,7 +482,7 @@ export default function Notebook() {
             </div>
             
             <div className="flex justify-end gap-2 mt-1">
-              <button onClick={() => { setIsCreatingInline(false); setInlineNoteId(null); }} className="text-xs text-gray-400 hover:text-white px-2 py-1">キャンセル</button>
+              <button onClick={() => { setIsCreatingInline(false); setInlineNoteId(null); }} className="text-xs text-gray-400 hover:text-white px-2 py-1">{t('common.cancel', 'キャンセル')}</button>
               <button 
                 onClick={async () => {
                   if (inlineTitle.trim()) {
@@ -458,7 +492,7 @@ export default function Notebook() {
                 className="text-xs border border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/10 px-3 py-1 rounded transition-colors"
                 title="Ctrl+S"
               >
-                一時保存
+                {t('notebook.saveDraft', '一時保存')}
               </button>
               <button 
                 onClick={async () => {
@@ -468,7 +502,7 @@ export default function Notebook() {
                 }}
                 className="text-xs bg-indigo-500 text-white px-3 py-1 rounded hover:bg-indigo-600 transition-colors"
               >
-                作成して閉じる
+                {t('notebook.createAndClose', '作成して閉じる')}
               </button>
             </div>
           </div>
@@ -520,21 +554,21 @@ export default function Notebook() {
           <div className="pt-6 border-t border-white/10">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-gray-400">
-                {searchQuery || selectedDate ? '検索結果' : '直近1週間のノート'}
+                {searchQuery || selectedDate ? t('notebook.searchResults', '検索結果') : t('notebook.recentNotes', '直近1週間のノート')}
               </h3>
               {(searchQuery || selectedDate) && (
                 <button 
                   onClick={() => { setSearchQuery(''); setSelectedDate(undefined); }}
                   className="text-xs text-indigo-400 hover:text-indigo-300"
                 >
-                  クリア
+                  {t('notebook.clear', 'クリア')}
                 </button>
               )}
             </div>
             
             {(searchQuery || selectedDate ? filteredNotes : recentNotes).length === 0 ? (
               <div className="text-center p-4 text-gray-500 text-sm bg-black/10 rounded-lg">
-                ノートが見つかりません
+                {t('notebook.noNotesFound', 'ノートが見つかりません')}
               </div>
             ) : (
               <div className="flex flex-col gap-2">
@@ -579,26 +613,38 @@ export default function Notebook() {
                   <X className="w-4 h-4" /> {t('common.cancel', 'キャンセル')}
                 </button>
                 <button onClick={() => handleSaveNote(false)} className="btn-secondary py-1.5 px-3 flex items-center gap-1 text-sm border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/10" title="Ctrl+S">
-                  <Check className="w-4 h-4" /> 一時保存
+                  <Check className="w-4 h-4" /> {t('notebook.saveDraft', '一時保存')}
                 </button>
                 <button onClick={() => handleSaveNote(true)} className="btn-primary py-1.5 px-3 flex items-center gap-1 text-sm">
-                  <Check className="w-4 h-4" /> 保存して閉じる
+                  <Check className="w-4 h-4" /> {t('notebook.saveAndClose', '保存して閉じる')}
                 </button>
               </div>
             </div>
 
             {(!selectedNote || !selectedNote.content) && (
-              <div className="flex gap-2 mb-2 overflow-x-auto pb-2 custom-scrollbar">
-                <span className="text-sm text-gray-400 flex items-center mr-2"><FileTerminal className="w-4 h-4 mr-1"/> テンプレート:</span>
-                {TEMPLATES.map((tmpl, idx) => (
-                  <button 
-                    key={idx} 
-                    onClick={() => applyTemplate(tmpl)}
-                    className="px-3 py-1 text-xs rounded-full border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 whitespace-nowrap transition-colors"
-                  >
-                    {tmpl.name}
-                  </button>
-                ))}
+              <div className="flex flex-col gap-1.5 mb-2">
+                <button
+                  type="button"
+                  onClick={() => setShowTemplates(!showTemplates)}
+                  className="flex items-center gap-1 text-xs text-gray-400 hover:text-indigo-300 w-fit transition-colors"
+                >
+                  {showTemplates ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                  <FileTerminal className="w-3.5 h-3.5" />
+                  <span>{t('notebook.showTemplates', 'テンプレートを表示')} {showTemplates ? t('notebook.closeTemplates', '(閉じる)') : t('notebook.openTemplates', '(開く)')}</span>
+                </button>
+                {showTemplates && (
+                  <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
+                    {TEMPLATES.map((tmpl, idx) => (
+                      <button 
+                        key={idx} 
+                        onClick={() => applyTemplate(tmpl)}
+                        className="px-3 py-1 text-xs rounded-full border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 whitespace-nowrap transition-colors"
+                      >
+                        {t(`notebook.templates.${tmpl.key}`, tmpl.name)}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
             
@@ -622,17 +668,17 @@ export default function Notebook() {
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1 flex items-center gap-1"><Tag className="w-4 h-4"/> タグ</label>
+                <label className="block text-sm text-gray-400 mb-1 flex items-center gap-1"><Tag className="w-4 h-4"/> {t('notebook.tags', 'タグ')}</label>
                 <TagInput value={editTags} onChange={setEditTags} allTags={allTags} />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1 flex items-center gap-1"><FlaskConical className="w-4 h-4"/> 関連する実験</label>
+                <label className="block text-sm text-gray-400 mb-1 flex items-center gap-1"><FlaskConical className="w-4 h-4"/> {t('notebook.relatedExperiment', '関連する実験')}</label>
                 <select 
                   value={editExperimentId}
                   onChange={e => setEditExperimentId(e.target.value ? Number(e.target.value) : '')}
                   className="w-full bg-white/5 border border-white/10 rounded-lg p-2.5 text-sm outline-none focus:border-indigo-500 transition-colors text-white"
                 >
-                  <option value="">-- 指定なし --</option>
+                  <option value="">{t('notebook.unspecified', '-- 指定なし --')}</option>
                   {scheduledExperiments.map(exp => (
                     <option key={exp.id} value={exp.id}>
                       {exp.start_date} | {exp.label ? `${exp.label} - ` : ''}{exp.experiment_type_name}
@@ -676,7 +722,7 @@ export default function Notebook() {
                   <span className="flex items-center gap-1.5"><CalendarIcon className="w-4 h-4" /> {selectedNote.date}</span>
                   {selectedNote.scheduled_experiment_id && (
                     <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                      <FlaskConical className="w-4 h-4" /> 関連実験あり
+                      <FlaskConical className="w-4 h-4" /> {t('notebook.hasRelatedExperiment', '関連実験あり')}
                     </span>
                   )}
                 </div>
@@ -691,6 +737,13 @@ export default function Notebook() {
                 )}
               </div>
               <div className="flex gap-2">
+                <button 
+                  onClick={() => setIsPrintModalOpen(true)}
+                  className="btn-secondary py-1.5 px-3 flex items-center gap-1 text-sm text-gray-300 hover:text-white"
+                  title={t('notebook.printWithRange', '期間を指定して印刷')}
+                >
+                  <Printer className="w-4 h-4" /> {t('notebook.print', '印刷')}
+                </button>
                 <button onClick={handleEditNote} className="btn-secondary py-1.5 px-3 flex items-center gap-1 text-sm">
                   <FileText className="w-4 h-4" /> {t('common.edit', '編集')}
                 </button>
@@ -703,7 +756,7 @@ export default function Notebook() {
             <div className="h-px bg-white/10 w-full" />
             
             <div className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-[#0d1117]" data-color-mode="dark">
-              <MDEditor.Markdown source={selectedNote.content || '*本文はありません*'} style={{ backgroundColor: 'transparent' }} />
+              <MDEditor.Markdown source={selectedNote.content || t('notebook.emptyContent', '*本文はありません*')} style={{ backgroundColor: 'transparent' }} />
             </div>
           </div>
         ) : (
@@ -714,5 +767,19 @@ export default function Notebook() {
         )}
       </div>
     </div>
-  );
+
+    {/* ─── Lower Section: Custom Lab Databases (Primers, Transformants, Antibodies, etc.) ─── */}
+    <CustomDatabaseManager />
+
+    {/* ─── Bottom Section: Research Documents & Reports ─── */}
+    <DocumentManager />
+
+    {/* ─── Print Notes Modal ─── */}
+    <PrintNotesModal 
+      isOpen={isPrintModalOpen} 
+      onClose={() => setIsPrintModalOpen(false)} 
+      notes={notes} 
+    />
+  </div>
+);
 }

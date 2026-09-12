@@ -434,3 +434,19 @@ CREATE TABLE IF NOT EXISTS literature (
 CREATE INDEX IF NOT EXISTS idx_literature_user_id ON literature(user_id);
 CREATE INDEX IF NOT EXISTS idx_literature_project ON literature(project_name);
 
+-- 研究ドキュメント (Documents)
+CREATE TABLE IF NOT EXISTS documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    content TEXT DEFAULT '',
+    tags TEXT DEFAULT '[]',
+    linked_experiment_type_ids TEXT DEFAULT '[]',
+    linked_literature_ids TEXT DEFAULT '[]',
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id);
+

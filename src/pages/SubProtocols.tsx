@@ -26,17 +26,17 @@ export default function SubProtocols() {
   const syncSharedSubProtocol = async (id: number) => {
     try {
       await supabasePost(`/shared/sub-protocols/${id}/sync`, {});
-      addToast('success', t('common.syncSuccess', { defaultValue: 'チームへ更新内容を送信しました' }));
+      addToast('success', t('common.syncSuccess'));
     } catch (error: any) {
       addToast('error', error.message || t('common.errorOccurred'));
     }
   };
 
   const unshareSharedSubProtocol = async (id: number) => {
-    if (!window.confirm(t('common.confirmUnshare', { defaultValue: 'すべてのチームから共有を解除しますか？' }))) return;
+    if (!window.confirm(t('common.confirmUnshare'))) return;
     try {
       await supabaseDelete(`/shared/sub-protocols/local/${id}`);
-      addToast('success', t('common.unshareSuccess', { defaultValue: '共有を解除しました' }));
+      addToast('success', t('common.unshareSuccess'));
     } catch (error: any) {
       addToast('error', error.message || t('common.errorOccurred'));
     }
@@ -73,7 +73,7 @@ export default function SubProtocols() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm(t('common.confirmDelete', { defaultValue: '本当に削除しますか？' }))) return;
+    if (!confirm(t('common.confirmDelete'))) return;
     try {
       await api.delete(`/sub_protocols/${id}`);
       fetchSubProtocols();
@@ -100,15 +100,15 @@ export default function SubProtocols() {
     <div style={{ marginTop: 'var(--space-2xl)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-md)' }}>
         <div>
-          <h2 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 600 }}>サブプロトコル</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-sm)' }}>再利用可能な手順や試薬表を管理します。ここで登録したサブプロトコルは、各実験種のステップに割り当てることができます。</p>
+          <h2 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 600 }}>{t('subProtocols.title')}</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-sm)' }}>{t('subProtocols.subtitle')}</p>
         </div>
         <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
           <button className="btn btn-secondary" onClick={() => setShowImport(true)}>
-            <Download size={20} /> チームからインポート
+            <Download size={20} /> {t('common.importFromTeam')}
           </button>
           <button className="btn btn-primary" onClick={openAddModal}>
-            <Plus size={20} /> 新規作成
+            <Plus size={20} /> {t('subProtocols.createNew')}
           </button>
         </div>
       </div>
@@ -122,7 +122,7 @@ export default function SubProtocols() {
                 <button
                   className="btn btn-ghost btn-icon btn-sm"
                   onClick={() => syncSharedSubProtocol(sp.id)}
-                  title={t('common.syncToTeam', { defaultValue: 'チームへ更新内容を送信' })}
+                  title={t('common.syncToTeam')}
                   style={{ color: 'var(--color-primary)' }}
                 >
                   <RefreshCw size={16} />
@@ -130,7 +130,7 @@ export default function SubProtocols() {
                 <button
                   className="btn btn-ghost btn-icon btn-sm"
                   onClick={() => unshareSharedSubProtocol(sp.id)}
-                  title={t('common.unshare', { defaultValue: 'チーム共有解除' })}
+                  title={t('common.unshare')}
                   style={{ color: 'var(--color-warning)' }}
                 >
                   <Unlink size={16} />
@@ -156,7 +156,7 @@ export default function SubProtocols() {
         ))}
         {subProtocols.length === 0 && (
           <div className="empty-state">
-            <p>サブプロトコルがありません。「新規作成」から追加してください。</p>
+            <p>{t('subProtocols.noSubProtocols')}</p>
           </div>
         )}
       </div>
@@ -165,16 +165,16 @@ export default function SubProtocols() {
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal modal-lg" onClick={e => e.stopPropagation()} style={{ minHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
             <div className="modal-header">
-              <h3 className="modal-title">{editingSubProtocol ? 'サブプロトコルを編集' : 'サブプロトコルを作成'}</h3>
+              <h3 className="modal-title">{editingSubProtocol ? t('subProtocols.editTitle') : t('subProtocols.createTitle')}</h3>
               <button className="btn btn-ghost btn-icon" onClick={() => setShowModal(false)}>×</button>
             </div>
             <div className="modal-body" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
               <div className="form-group">
-                <label className="form-label">名前 *</label>
-                <input className="form-input" value={subProtocolForm.name} onChange={e => setSubProtocolForm({ ...subProtocolForm, name: e.target.value })} placeholder="サブプロトコル名 (例: PCR反応液の調製)" autoFocus />
+                <label className="form-label">{t('subProtocols.name')} *</label>
+                <input className="form-input" value={subProtocolForm.name} onChange={e => setSubProtocolForm({ ...subProtocolForm, name: e.target.value })} placeholder={t('subProtocols.namePlaceholder')} autoFocus />
               </div>
               <div className="form-group" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                <label className="form-label">内容 (Markdown)</label>
+                <label className="form-label">{t('subProtocols.content')}</label>
                 <div style={{ flex: 1, border: '1px solid var(--border-default)', borderRadius: 'var(--border-radius-md)', overflow: 'hidden' }}>
                   <MDEditor
                     value={subProtocolForm.content}

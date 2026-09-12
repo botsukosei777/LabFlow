@@ -345,3 +345,18 @@ export interface LiteratureItem {
   updated_at: string;
 }
 
+// Research Documents
+export interface ResearchDocument {
+  id: number;
+  user_id: number;
+  title: string;
+  content: string;
+  tags: string[];
+  linked_experiment_type_ids: number[];
+  linked_literature_ids: number[];
+  created_at: string;
+  updated_at: string;
+  linked_experiment_types?: ExperimentType[];
+  linked_literatures?: LiteratureItem[];
+}
+

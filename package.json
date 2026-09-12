@@ -1,6 +1,6 @@
 {
   "name": "labflow",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "description": "Research Schedule Management Application",
   "private": true,
   "type": "module",
@@ -10,6 +10,8 @@
     "dev:server": "tsx watch server/index.ts",
     "build": "vite build",
     "build:release": "node scripts/build-release.mjs",
+    "build-release": "node scripts/build-release.mjs",
+    "release": "node scripts/build-release.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

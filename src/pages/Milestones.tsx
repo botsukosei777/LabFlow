@@ -7,9 +7,10 @@ import { ToastContext } from '../App';
 import type { Milestone, MilestoneItem } from '../types';
 import { ShareModal } from '../components/ShareModal';
 import { ImportModal } from '../components/ImportModal';
+import DateInput from '../components/DateInput';
 
 export default function Milestones() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { addToast } = useContext(ToastContext);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [showArchived, setShowArchived] = useState(false);
@@ -80,17 +81,17 @@ export default function Milestones() {
   const syncSharedMilestone = async (id: number) => {
     try {
       await supabasePost(`/shared/milestones/${id}/sync`, {});
-      addToast('success', t('common.syncSuccess', { defaultValue: 'チームへ更新内容を送信しました' }));
+      addToast('success', t('common.syncSuccess'));
     } catch (error: any) {
       addToast('error', error.message || t('common.errorOccurred'));
     }
   };
 
   const unshareSharedMilestone = async (id: number) => {
-    if (!window.confirm(t('common.confirmUnshare', { defaultValue: 'すべてのチームから共有を解除しますか？' }))) return;
+    if (!window.confirm(t('common.confirmUnshare'))) return;
     try {
       await supabaseDelete(`/shared/milestones/local/${id}`);
-      addToast('success', t('common.unshareSuccess', { defaultValue: '共有を解除しました' }));
+      addToast('success', t('common.unshareSuccess'));
     } catch (error: any) {
       addToast('error', error.message || t('common.errorOccurred'));
     }
@@ -144,7 +145,7 @@ export default function Milestones() {
   };
 
   const deleteSubItem = async (subItemId: number) => {
-    if (window.confirm(t('common.confirmDelete', { defaultValue: '本当に削除しますか？' }))) {
+    if (window.confirm(t('common.confirmDelete'))) {
       try {
         await api.delete(`/milestones/subitems/${subItemId}`);
         fetchMilestones();
@@ -230,11 +231,21 @@ export default function Milestones() {
               <div key={ms.id} className="card animate-slide-up">
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 'var(--space-md)' }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', marginBottom: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', marginBottom: 4, flexWrap: 'wrap' }}>
                       <h3 className="card-title">{ms.name}</h3>
                       {daysLeft !== null && (
                         <span className={`badge ${daysLeft < 0 ? 'badge-danger' : daysLeft < 7 ? 'badge-warning' : 'badge-info'}`}>
                           {daysLeft < 0 ? t('milestones.overdue') : t('milestones.daysRemaining', { count: daysLeft })}
+                        </span>
+                      )}
+                      {ms.deadline && (
+                        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)' }}>
+                          {t('milestones.deadlineDate', {
+                            date: new Date(ms.deadline + 'T00:00:00').toLocaleDateString(
+                              i18n.language === 'en' ? 'en-US' : 'ja-JP',
+                              { year: 'numeric', month: 'short', day: 'numeric' }
+                            )
+                          })}
                         </span>
                       )}
                     </div>
@@ -257,41 +268,41 @@ export default function Milestones() {
                     
                     {!showArchived ? (
                       <button className="btn btn-secondary btn-sm" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={async () => {
-                        if (window.confirm(t('milestones.confirmArchive', { defaultValue: 'このマイルストーンをアーカイブしますか？' }))) {
+                        if (window.confirm(t('milestones.confirmArchive'))) {
                           try {
                             await api.put(`/milestones/${ms.id}`, { ...ms, status: 'archived' });
-                            addToast('success', t('milestones.archiveSuccess', { defaultValue: 'アーカイブしました' }));
+                            addToast('success', t('milestones.archiveSuccess'));
                             fetchMilestones();
                           } catch (e) {
                             addToast('error', t('common.errorOccurred'));
                           }
                         }
                       }}>
-                        <CheckCircle2 size={14} style={{ marginRight: 4 }} />{t('milestones.archive', { defaultValue: 'アーカイブ' })}
+                        <CheckCircle2 size={14} style={{ marginRight: 4 }} />{t('milestones.archive')}
                       </button>
                     ) : (
                       <button className="btn btn-warning btn-sm" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={async () => {
                         try {
                           await api.put(`/milestones/${ms.id}`, { ...ms, status: 'active' });
-                          addToast('success', t('milestones.unarchiveSuccess', { defaultValue: 'アクティブに戻しました' }));
+                          addToast('success', t('milestones.unarchiveSuccess'));
                           fetchMilestones();
                         } catch (e) {
                           addToast('error', t('common.errorOccurred'));
                         }
                       }}>
-                        {t('milestones.unarchive', { defaultValue: 'アクティブに戻す' })}
+                        {t('milestones.unarchive')}
                       </button>
                     )}
 
-                    <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-primary)' }} onClick={() => syncSharedMilestone(ms.id)} title={t('milestones.syncToTeam', { defaultValue: 'チームへ更新内容を送信' })}><RefreshCw size={14} /></button>
-                    <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-warning)' }} onClick={() => unshareSharedMilestone(ms.id)} title={t('common.unshare', { defaultValue: 'チーム共有解除' })}><Unlink size={14} /></button>
+                    <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-primary)' }} onClick={() => syncSharedMilestone(ms.id)} title={t('milestones.syncToTeam')}><RefreshCw size={14} /></button>
+                    <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-warning)' }} onClick={() => unshareSharedMilestone(ms.id)} title={t('common.unshare')}><Unlink size={14} /></button>
                     <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-info)' }} onClick={() => setShareTarget({ id: ms.id, name: ms.name })} title={t('common.share', 'Share')}><Share2 size={14} /></button>
                     <button className="btn btn-ghost btn-icon btn-sm" onClick={() => { setEditingMs(ms); setMsForm({ name: ms.name, description: ms.description, deadline: ms.deadline || '' }); setShowModal(true); }}><Edit size={14} /></button>
                     <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-danger)' }} onClick={async () => {
-                      if (window.confirm(t('common.confirmDelete', { defaultValue: '本当に削除しますか？' }))) {
+                      if (window.confirm(t('common.confirmDelete'))) {
                         try {
                           await api.delete(`/milestones/${ms.id}`);
-                          addToast('success', t('common.deletedSuccessfully', { defaultValue: '削除しました' }));
+                          addToast('success', t('common.deletedSuccessfully'));
                           fetchMilestones();
                         } catch (e) {
                           addToast('error', t('common.errorOccurred'));
@@ -363,7 +374,7 @@ export default function Milestones() {
                               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
                                 <span style={{ fontSize: 'var(--font-size-sm)', textDecoration: item.is_completed ? 'line-through' : 'none' }}>{item.name}</span>
                                 <span className={`badge ${item.data_type === 'qualitative' ? 'badge-primary' : item.data_type === 'quantitative' ? 'badge-info' : 'badge-warning'}`}>
-                                  {item.data_type === 'task' ? t('milestones.task', { defaultValue: '作業 (Task)' }) : t(`milestones.${item.data_type}`)}
+                                  {item.data_type === 'task' ? t('milestones.task') : t(`milestones.${item.data_type}`)}
                                 </span>
                               </div>
                               {item.data_type === 'quantitative' && (
@@ -380,7 +391,7 @@ export default function Milestones() {
                                 setShowItemModal(true);
                               }}><Edit size={14} /></button>
                               <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-danger)' }} onClick={async () => {
-                                if (window.confirm(t('common.confirmDelete', { defaultValue: '本当に削除しますか？' }))) {
+                                if (window.confirm(t('common.confirmDelete'))) {
                                   await api.delete(`/milestones/items/${item.id}`); fetchMilestones();
                                 }
                               }}><Trash2 size={14} /></button>
@@ -437,7 +448,7 @@ export default function Milestones() {
                                     <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}>
                                       <span style={{ fontSize: 'var(--font-size-xs)', textDecoration: sub.is_completed ? 'line-through' : 'none' }}>{sub.name}</span>
                                       <span className={`badge ${sub.data_type === 'qualitative' ? 'badge-primary' : sub.data_type === 'quantitative' ? 'badge-info' : 'badge-warning'}`} style={{ transform: 'scale(0.8)', transformOrigin: 'left' }}>
-                                        {sub.data_type === 'task' ? t('milestones.task', { defaultValue: '作業 (Task)' }) : t(`milestones.${sub.data_type}`)}
+                                        {sub.data_type === 'task' ? t('milestones.task') : t(`milestones.${sub.data_type}`)}
                                       </span>
                                     </div>
                                     <button className="btn btn-ghost btn-icon btn-sm" onClick={() => {
@@ -462,7 +473,7 @@ export default function Milestones() {
                                   setSubItemForm({ name: '', data_type: 'qualitative', target_count: 1, current_count: 0, unit: '' });
                                   setShowSubItemModal(true);
                                 }}>
-                                  <Plus size={12} /> {t('milestones.addSubItem', { defaultValue: 'サブタスクを追加' })}
+                                  <Plus size={12} /> {t('milestones.addSubItem')}
                                 </button>
                               </div>
                             </div>
@@ -500,7 +511,7 @@ export default function Milestones() {
               </div>
               <div className="form-group">
                 <label className="form-label">{t('milestones.deadline')}</label>
-                <input className="form-input" type="date" value={msForm.deadline} onChange={e => setMsForm({ ...msForm, deadline: e.target.value })} />
+                <DateInput value={msForm.deadline} onChange={val => setMsForm({ ...msForm, deadline: val })} />
               </div>
             </div>
             <div className="modal-footer">
@@ -529,7 +540,7 @@ export default function Milestones() {
                 <select className="form-input" value={itemForm.data_type} onChange={e => setItemForm({ ...itemForm, data_type: e.target.value as any })}>
                   <option value="qualitative">{t('milestones.qualitative')}</option>
                   <option value="quantitative">{t('milestones.quantitative')}</option>
-                  <option value="task">{t('milestones.task', { defaultValue: '作業 (Task)' })}</option>
+                  <option value="task">{t('milestones.task')}</option>
                 </select>
               </div>
               {itemForm.data_type === 'quantitative' && (
@@ -539,8 +550,8 @@ export default function Milestones() {
                     <input className="form-input" type="number" min="1" value={itemForm.target_count} onChange={e => setItemForm({ ...itemForm, target_count: parseInt(e.target.value) || 1 })} />
                   </div>
                   <div className="form-group" style={{ flex: 1 }}>
-                    <label className="form-label">{t('milestones.unitLabel', { defaultValue: '単位 (例: kg, ml)' })}</label>
-                    <input className="form-input" value={itemForm.unit} onChange={e => setItemForm({ ...itemForm, unit: e.target.value })} placeholder={t('milestones.unitPlaceholder', { defaultValue: '任意' })} />
+                    <label className="form-label">{t('milestones.unitLabel')}</label>
+                    <input className="form-input" value={itemForm.unit} onChange={e => setItemForm({ ...itemForm, unit: e.target.value })} placeholder={t('milestones.unitPlaceholder')} />
                   </div>
                 </div>
               )}
@@ -558,20 +569,20 @@ export default function Milestones() {
         <div className="modal-overlay" onClick={() => setShowSubItemModal(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3 className="modal-title">{editingSubItem ? t('milestones.editSubItem', { defaultValue: 'サブタスクを編集' }) : t('milestones.addSubItem', { defaultValue: 'サブタスクを追加' })}</h3>
+              <h3 className="modal-title">{editingSubItem ? t('milestones.editSubItem') : t('milestones.addSubItem')}</h3>
               <button className="btn btn-ghost btn-icon" onClick={() => { setShowSubItemModal(false); setEditingSubItem(null); }}>×</button>
             </div>
             <div className="modal-body">
               <div className="form-group">
                 <label className="form-label">{t('milestones.itemName')} *</label>
-                <input className="form-input" value={subItemForm.name} onChange={e => setSubItemForm({ ...subItemForm, name: e.target.value })} placeholder={t('milestones.subItemNamePlaceholder', { defaultValue: 'サブタスク名' })} autoFocus />
+                <input className="form-input" value={subItemForm.name} onChange={e => setSubItemForm({ ...subItemForm, name: e.target.value })} placeholder={t('milestones.subItemNamePlaceholder')} autoFocus />
               </div>
               <div className="form-group">
                 <label className="form-label">{t('milestones.itemType')}</label>
                 <select className="form-input" value={subItemForm.data_type} onChange={e => setSubItemForm({ ...subItemForm, data_type: e.target.value as any })}>
                   <option value="qualitative">{t('milestones.qualitative')}</option>
                   <option value="quantitative">{t('milestones.quantitative')}</option>
-                  <option value="task">{t('milestones.task', { defaultValue: '作業 (Task)' })}</option>
+                  <option value="task">{t('milestones.task')}</option>
                 </select>
               </div>
               {subItemForm.data_type === 'quantitative' && (
@@ -581,8 +592,8 @@ export default function Milestones() {
                     <input className="form-input" type="number" min="1" value={subItemForm.target_count} onChange={e => setSubItemForm({ ...subItemForm, target_count: parseInt(e.target.value) || 1 })} />
                   </div>
                   <div className="form-group" style={{ flex: 1 }}>
-                    <label className="form-label">{t('milestones.unitLabel', { defaultValue: '単位 (例: kg, ml)' })}</label>
-                    <input className="form-input" value={subItemForm.unit} onChange={e => setSubItemForm({ ...subItemForm, unit: e.target.value })} placeholder={t('milestones.unitPlaceholder', { defaultValue: '任意' })} />
+                    <label className="form-label">{t('milestones.unitLabel')}</label>
+                    <input className="form-input" value={subItemForm.unit} onChange={e => setSubItemForm({ ...subItemForm, unit: e.target.value })} placeholder={t('milestones.unitPlaceholder')} />
                   </div>
                 </div>
               )}

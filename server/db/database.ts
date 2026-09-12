@@ -186,6 +186,24 @@ function initDb() {
     `);
   } catch(e) {}
 
+  try {
+    dbInstance.exec(`
+      CREATE TABLE IF NOT EXISTS documents (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          title TEXT NOT NULL,
+          content TEXT DEFAULT '',
+          tags TEXT DEFAULT '[]',
+          linked_experiment_type_ids TEXT DEFAULT '[]',
+          linked_literature_ids TEXT DEFAULT '[]',
+          created_at TEXT DEFAULT (datetime('now', 'localtime')),
+          updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id);
+    `);
+  } catch(e) {}
+
 
   // Sub-protocols migration: make it user-scoped instead of experiment-scoped
   const subProtocolTableInfo = dbInstance.prepare("PRAGMA table_info(sub_protocols)").all() as any[];
@@ -252,6 +270,36 @@ function initDb() {
     `);
     console.log('[DB] Added start_date and end_date to routine_tasks table');
   }
+
+  // Custom databases for sample, primer, antibody, etc. management
+  dbInstance.exec(`
+    CREATE TABLE IF NOT EXISTS custom_databases (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT DEFAULT '',
+        category TEXT DEFAULT 'general',
+        columns_json TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT DEFAULT (datetime('now', 'localtime')),
+        updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS custom_database_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        database_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        data_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT DEFAULT (datetime('now', 'localtime')),
+        updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+        FOREIGN KEY (database_id) REFERENCES custom_databases(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_custom_db_user ON custom_databases(user_id);
+    CREATE INDEX IF NOT EXISTS idx_custom_db_items_db ON custom_database_items(database_id);
+    CREATE INDEX IF NOT EXISTS idx_custom_db_items_user ON custom_database_items(user_id);
+  `);
 
   // Ensure default admin user exists
   const adminCheck = dbInstance.prepare('SELECT id FROM users WHERE username = ?').get('admin');

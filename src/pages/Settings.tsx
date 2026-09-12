@@ -80,20 +80,20 @@ export default function Settings() {
       checkSupabaseStatus();
       setSupabaseForm({ email: '', password: '', username: '' });
     } catch (e: any) {
-      addToast('error', e.message || '認証に失敗しました');
+      addToast('error', e.message || t('settings.authFailed', '認証に失敗しました'));
     } finally {
       setSupabaseLoading(false);
     }
   };
 
   const handleSupabaseUnlink = async () => {
-    if (!window.confirm('本当にSupabaseアカウントとの連携を解除しますか？')) return;
+    if (!window.confirm(t('settings.confirmUnlinkSupabase', '本当にSupabaseアカウントとの連携を解除しますか？'))) return;
     setSupabaseLoading(true);
     try {
       await api.post('/supabase-auth/unlink', {});
-      addToast('success', '連携を解除しました');
+      addToast('success', t('settings.unlinkedSuccess', '連携を解除しました'));
     } catch (e: any) {
-      addToast('error', e.message || '解除に失敗しました');
+      addToast('error', e.message || t('settings.unlinkFailed', '解除に失敗しました'));
     } finally {
       setSupabaseLoading(false);
       checkSupabaseStatus();
@@ -189,7 +189,7 @@ export default function Settings() {
     const file = e.target.files?.[0];
     if (!file) return;
     
-    if (!window.confirm('現在のデータはすべて上書きされ、元に戻せなくなります。本当にバックアップを復元しますか？')) {
+    if (!window.confirm(t('settings.confirmRestore', '現在のデータはすべて上書きされ、元に戻せなくなります。本当にバックアップを復元しますか？'))) {
       e.target.value = '';
       return;
     }
@@ -530,14 +530,14 @@ export default function Settings() {
 
         {/* Supabase Team Integration */}
         <div className="card">
-          <div className="card-header"><h3 className="card-title"><Cloud size={18} style={{ marginRight: 8 }} />{t('settings.teamIntegration', { defaultValue: 'チーム連携 / Team Integration' })}</h3></div>
+          <div className="card-header"><h3 className="card-title"><Cloud size={18} style={{ marginRight: 8 }} />{t('settings.teamIntegration', 'チーム連携 / Team Integration')}</h3></div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)', marginTop: 'var(--space-md)' }}>
             
             {supabaseStatus?.linked ? (
               <>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', color: 'var(--color-success)' }}>
                   <Cloud size={20} />
-                  <span style={{ fontWeight: 500 }}>接続済み / Connected</span>
+                  <span style={{ fontWeight: 500 }}>{t('settings.connected', '接続済み / Connected')}</span>
                 </div>
                 <div style={{ backgroundColor: 'var(--bg-secondary)', padding: 'var(--space-md)', borderRadius: 'var(--radius-md)' }}>
                   <p style={{ margin: '0 0 var(--space-sm) 0' }}><strong>Email:</strong> {supabaseStatus.email}</p>
@@ -545,7 +545,7 @@ export default function Settings() {
                 </div>
                 <div>
                   <button className="btn btn-secondary" style={{ color: 'var(--color-danger)' }} onClick={handleSupabaseUnlink} disabled={supabaseLoading}>
-                    <Unlink size={16} /> {supabaseLoading ? t('common.loading', { defaultValue: '処理中...' }) : '連携を解除 / Unlink'}
+                    <Unlink size={16} /> {supabaseLoading ? t('common.loading', { defaultValue: '処理中...' }) : t('settings.unlink', '連携を解除 / Unlink')}
                   </button>
                 </div>
               </>
@@ -553,10 +553,10 @@ export default function Settings() {
               <>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', color: 'var(--text-secondary)' }}>
                   <CloudOff size={20} />
-                  <span style={{ fontWeight: 500 }}>未接続 / Not Connected</span>
+                  <span style={{ fontWeight: 500 }}>{t('settings.notConnected', '未接続 / Not Connected')}</span>
                 </div>
                 <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-                  チーム共有機能を使うには、Supabase アカウントとの連携が必要です
+                  {t('settings.teamIntegrationDesc', 'チーム共有機能を使うには、Supabase アカウントとの連携が必要です')}
                 </p>
 
                 <div style={{ display: 'flex', gap: 'var(--space-sm)', marginBottom: 'var(--space-sm)' }}>
@@ -564,13 +564,13 @@ export default function Settings() {
                     className={`btn ${supabaseMode === 'login' ? 'btn-primary' : 'btn-ghost'}`} 
                     onClick={() => setSupabaseMode('login')}
                   >
-                    既存のアカウントを連携
+                    {t('settings.linkExistingAccount', '既存のアカウントを連携')}
                   </button>
                   <button 
                     className={`btn ${supabaseMode === 'signup' ? 'btn-primary' : 'btn-ghost'}`} 
                     onClick={() => setSupabaseMode('signup')}
                   >
-                    新しくアカウントを作成
+                    {t('settings.createNewAccount', '新しくアカウントを作成')}
                   </button>
                 </div>
 
@@ -623,7 +623,7 @@ export default function Settings() {
                 <div>
                   <button className="btn btn-primary" onClick={handleSupabaseAuth} disabled={supabaseLoading || !supabaseForm.email || !supabaseForm.password || (supabaseMode === 'signup' && !supabaseForm.username)}>
                     {supabaseMode === 'login' ? <LinkIcon size={16} /> : <Cloud size={16} />}
-                    {supabaseLoading ? t('common.loading', { defaultValue: '処理中...' }) : (supabaseMode === 'login' ? '連携する / Link Account' : '作成して連携 / Create Account')}
+                    {supabaseLoading ? t('common.loading', { defaultValue: '処理中...' }) : (supabaseMode === 'login' ? t('settings.linkAccountBtn', '連携する / Link Account') : t('settings.createAccountBtn', '作成して連携 / Create Account'))}
                   </button>
                 </div>
               </>

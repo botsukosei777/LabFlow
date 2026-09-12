@@ -756,6 +756,49 @@ a:hover {
   animation: fadeIn var(--transition-fast) ease;
 }
 
+/* Print Notes Modal Overlay (Syncs with Sidebar) */
+.print-modal-overlay {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  left: var(--sidebar-width);
+  z-index: 50;
+  transition: left var(--transition-normal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-md);
+  background-color: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(4px);
+  overflow-y: auto;
+}
+
+.app-layout.sidebar-collapsed .print-modal-overlay {
+  left: var(--sidebar-collapsed-width);
+}
+
+@media (max-width: 768px) {
+  .print-modal-overlay {
+    left: var(--sidebar-collapsed-width);
+    padding: var(--space-sm);
+  }
+}
+
+.print-preview-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+.print-preview-scroll::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.4);
+}
+.print-preview-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: var(--border-radius-full);
+}
+.print-preview-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.45);
+}
+
 .modal {
   background: var(--bg-surface);
   border: 1px solid var(--border-default);

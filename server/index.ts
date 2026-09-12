@@ -21,6 +21,8 @@ import notebookRoutes from './routes/notebook.js';
 import miniMemosRoutes from './routes/miniMemos.js';
 import quickLinksRoutes from './routes/quickLinks.js';
 import literatureRoutes from './routes/literature.js';
+import customDatabaseRoutes from './routes/customDatabases.js';
+import documentRoutes from './routes/documents.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -62,6 +64,8 @@ app.use('/api/shared', requireAuth, sharedRoutes);
 app.use('/api/polls', requireAuth, pollsRoutes);
 app.use('/api/analysis', requireAuth, analysisRoutes);
 app.use('/api/literature', requireAuth, literatureRoutes);
+app.use('/api/custom-databases', requireAuth, customDatabaseRoutes);
+app.use('/api/documents', requireAuth, documentRoutes);
 
 // Backup endpoint
 app.get('/api/backup', requireAuth, async (req, res) => {

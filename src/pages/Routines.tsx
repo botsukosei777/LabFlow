@@ -4,6 +4,7 @@ import { RotateCcw, Plus, Trash2, Edit, CheckCircle2 } from 'lucide-react';
 import { api } from '../api/client';
 import { ToastContext } from '../App';
 import type { RoutineTask } from '../types';
+import DateInput from '../components/DateInput';
 
 const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 
@@ -122,7 +123,7 @@ export default function Routines() {
                 {r.description && <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)' }}>{r.description}</div>}
                 {(r.start_date || r.end_date) && (
                   <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-primary)', marginTop: 4 }}>
-                    {r.start_date ? r.start_date : '指定なし'} 〜 {r.end_date ? r.end_date : '指定なし'}
+                    {r.start_date ? r.start_date : t('routines.unspecified', '指定なし')} 〜 {r.end_date ? r.end_date : t('routines.unspecified', '指定なし')}
                   </div>
                 )}
               </div>
@@ -182,12 +183,12 @@ export default function Routines() {
               )}
               <div style={{ display: 'flex', gap: 'var(--space-md)' }}>
                 <div className="form-group" style={{ flex: 1 }}>
-                  <label className="form-label">開始日 (任意)</label>
-                  <input type="date" className="form-input" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} />
+                  <label className="form-label">{t('routines.startDateOptional', '開始日 (任意)')}</label>
+                  <DateInput value={form.start_date} onChange={val => setForm({ ...form, start_date: val })} />
                 </div>
                 <div className="form-group" style={{ flex: 1 }}>
-                  <label className="form-label">終了日 (任意)</label>
-                  <input type="date" className="form-input" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })} />
+                  <label className="form-label">{t('routines.endDateOptional', '終了日 (任意)')}</label>
+                  <DateInput value={form.end_date} onChange={val => setForm({ ...form, end_date: val })} />
                 </div>
               </div>
               <label className="form-checkbox">

@@ -61,7 +61,7 @@ export default function Inventory() {
   const handleShareReagent = async (teamId: string, reagentId: number) => {
     try {
       await supabasePost(`/shared/reagents/${reagentId}/share`, { team_id: teamId });
-      addToast('success', t('common.sharedSuccessfully', { defaultValue: 'チームに共有しました' }));
+      addToast('success', t('common.sharedSuccessfully'));
       setShareTarget(null);
       fetchReagents();
     } catch (error: any) {
@@ -70,10 +70,10 @@ export default function Inventory() {
   };
 
   const unshareReagent = async (id: number) => {
-    if (!window.confirm(t('common.confirmUnshare', { defaultValue: 'チーム共有を解除しますか？ (自分が共有したアイテムはチームからも削除されます)' }))) return;
+    if (!window.confirm(t('common.confirmUnshare'))) return;
     try {
       await supabaseDelete(`/shared/reagents/local/${id}`);
-      addToast('success', t('common.unshareSuccess', { defaultValue: '共有を解除しました' }));
+      addToast('success', t('common.unshareSuccess'));
       fetchReagents();
     } catch (error: any) {
       addToast('error', error.message || t('common.errorOccurred'));
@@ -134,11 +134,11 @@ export default function Inventory() {
         <div className="page-actions">
           <button className="btn btn-secondary" onClick={() => setShowImport(true)}>
             <Download size={16} />
-            {t('common.importFromTeam', 'チームからインポート')}
+            {t('common.importFromTeam')}
           </button>
           <button className="btn btn-secondary" onClick={handleSyncAll} disabled={syncing}>
             <RefreshCw size={16} className={syncing ? 'animate-spin' : ''} />
-            {t('common.syncToTeam', 'チームへ同期')}
+            {t('common.syncToTeam')}
           </button>
           <button className="btn btn-primary" onClick={() => {
             setEditing(null); setForm({ name: '', description: '', category: '', quantity_trackable: false, current_quantity: 0, min_quantity: 0, unit: '', supplier: '', catalog_number: '', location: '' });
@@ -174,7 +174,7 @@ export default function Inventory() {
                 <th>{t('inventory.category')}</th>
                 <th>{t('common.status')}</th>
                 <th>{t('inventory.currentQuantity')}</th>
-                <th>{t('inventory.location', '場所')}</th>
+                <th>{t('inventory.location')}</th>
                 <th>{t('inventory.supplier')}</th>
                 <th>{t('common.actions')}</th>
               </tr>
@@ -202,7 +202,7 @@ export default function Inventory() {
                           <button 
                             className="btn btn-ghost btn-icon btn-sm" 
                             onClick={() => setShareTarget({ id: r.id, name: r.name })}
-                            title={t('common.share', 'チームへ共有')}
+                            title={t('common.share')}
                           >
                             <Share2 size={14} />
                           </button>
@@ -210,7 +210,7 @@ export default function Inventory() {
                           <button 
                             className="btn btn-ghost btn-icon btn-sm" 
                             onClick={() => unshareReagent(r.id)}
-                            title={t('common.unshare', { defaultValue: 'チーム共有解除' })}
+                            title={t('common.unshare')}
                             style={{ color: 'var(--color-warning)' }}
                           >
                             <Unlink size={14} />
@@ -270,8 +270,8 @@ export default function Inventory() {
                 </div>
               </div>
               <div className="form-group">
-                <label className="form-label">{t('inventory.location', '在庫の場所')}</label>
-                <input className="form-input" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} placeholder={t('inventory.locationPlaceholder', '例: 試薬棚A')} />
+                <label className="form-label">{t('inventory.location')}</label>
+                <input className="form-input" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} placeholder={t('inventory.locationPlaceholder')} />
               </div>
               <label className="form-checkbox" style={{ marginBottom: 'var(--space-md)' }}>
                 <input type="checkbox" checked={form.quantity_trackable} onChange={e => setForm({ ...form, quantity_trackable: e.target.checked })} />

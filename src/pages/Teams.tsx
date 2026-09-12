@@ -212,43 +212,43 @@ export const Teams: React.FC = () => {
         <div style={{ maxWidth: 600, margin: '0 auto', textAlign: 'center', padding: 'var(--space-3xl) var(--space-xl)' }}>
           <Users size={48} style={{ color: 'var(--text-tertiary)', marginBottom: 'var(--space-lg)', margin: '0 auto var(--space-lg)' }} />
           <h2 style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 'var(--font-weight-bold)', marginBottom: 'var(--space-md)', color: 'var(--text-primary)' }}>
-            {t('チーム機能を使うにはセットアップが必要です')}
+            {t('teams.setupRequiredTitle', 'チーム機能を使うにはセットアップが必要です')}
           </h2>
           {supabaseStatus === 'not_configured' && (
             <div style={{ background: 'var(--color-warning-dim)', border: '1px solid var(--color-warning)', borderRadius: 'var(--border-radius-lg)', padding: 'var(--space-lg)', marginBottom: 'var(--space-lg)', textAlign: 'left' }}>
               <p style={{ fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--space-sm)', color: 'var(--color-warning)' }}>
-                ⚠️ Supabase未設定
+                {t('teams.supabaseNotConfiguredTitle', '⚠️ Supabase未設定')}
               </p>
               <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-                {t('チーム共有機能を使うには、まず .env ファイルにSupabaseの接続情報を設定してサーバーを再起動してください。')}
+                {t('teams.supabaseNotConfiguredDesc', 'チーム共有機能を使うには、まず .env ファイルにSupabaseの接続情報を設定してサーバーを再起動してください。')}
               </p>
               <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--font-size-xs)', marginTop: 'var(--space-sm)' }}>
-                .env.example をコピーして .env を作成 → Supabase Dashboard から API キーを取得して入力 → LabFlowアプリを再起動
+                {t('teams.supabaseNotConfiguredHint', '.env.example をコピーして .env を作成 → Supabase Dashboard から API キーを取得して入力 → LabFlowアプリを再起動')}
               </p>
             </div>
           )}
           {supabaseStatus === 'not_linked' && (
             <div style={{ background: 'var(--color-info-dim)', border: '1px solid var(--color-info)', borderRadius: 'var(--border-radius-lg)', padding: 'var(--space-lg)', marginBottom: 'var(--space-lg)', textAlign: 'left' }}>
               <p style={{ fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--space-sm)', color: '#60A5FA' }}>
-                🔗 Supabaseアカウント未連携
+                {t('teams.supabaseNotLinkedTitle', '🔗 Supabaseアカウント未連携')}
               </p>
               <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-                {t('Supabaseは設定済みですが、アカウントの連携がまだです。設定画面の「チーム連携」セクションでアカウントを作成またはリンクしてください。')}
+                {t('teams.supabaseNotLinkedDesc', 'Supabaseは設定済みですが、アカウントの連携がまだです。設定画面の「チーム連携」セクションでアカウントを作成またはリンクしてください。')}
               </p>
             </div>
           )}
           {supabaseStatus === 'no_session' && (
             <div style={{ background: 'var(--color-info-dim)', border: '1px solid var(--color-info)', borderRadius: 'var(--border-radius-lg)', padding: 'var(--space-lg)', marginBottom: 'var(--space-lg)', textAlign: 'left' }}>
               <p style={{ fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--space-sm)', color: '#60A5FA' }}>
-                🔑 Supabaseへのログインが必要です
+                {t('teams.supabaseNoSessionTitle', '🔑 Supabaseへのログインが必要です')}
               </p>
               <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-                {t('Supabaseセッションが切れています。設定画面の「チーム連携」セクションで再ログインしてください。')}
+                {t('teams.supabaseNoSessionDesc', 'Supabaseセッションが切れています。設定画面の「チーム連携」セクションで再ログインしてください。')}
               </p>
             </div>
           )}
           <a href="/settings" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 20px', background: 'var(--color-primary)', color: 'white', borderRadius: 'var(--border-radius-md)', textDecoration: 'none', fontWeight: 'var(--font-weight-medium)' }}>
-            {t('設定画面を開く')}
+            {t('teams.openSettings', '設定画面を開く')}
           </a>
         </div>
       );

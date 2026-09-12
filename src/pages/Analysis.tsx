@@ -240,7 +240,7 @@ export default function Analysis() {
             </div>
           </div>
 
-          {loading && <p>Loading...</p>}
+          {loading && <p>{t('common.loading', '読み込み中...')}</p>}
 
           {!loading && analysisData && Object.keys(analysisData).length === 0 && (
             <div className="card" style={{ padding: 'var(--space-xl)', textAlign: 'center', color: 'var(--text-secondary)' }}>
@@ -282,7 +282,7 @@ export default function Analysis() {
 
       {/* Image Processing Tab */}
       {activeTab === 'image' && (
-        <Suspense fallback={<div className="card" style={{ padding: 'var(--space-xl)', textAlign: 'center' }}>読み込み中...</div>}>
+        <Suspense fallback={<div className="card" style={{ padding: 'var(--space-xl)', textAlign: 'center' }}>{t('common.loading', '読み込み中...')}</div>}>
           <ImageProcessor />
         </Suspense>
       )}

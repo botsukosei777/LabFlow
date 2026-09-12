@@ -230,7 +230,7 @@ export function ImportModal({
                         <div className="item-meta" style={{ display: 'flex', gap: '12px', fontSize: '0.85em', color: 'var(--text-secondary)' }}>
                           {item.shared_by_name && (
                             <span className="badge" style={{ padding: '4px 8px', borderRadius: '12px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-default)' }}>
-                              Shared by: {item.shared_by_name}
+                              {t('importModal.sharedBy', { name: item.shared_by_name })}
                             </span>
                           )}
                         </div>

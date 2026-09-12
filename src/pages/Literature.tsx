@@ -30,18 +30,22 @@ import {
 } from 'lucide-react';
 
 const PAPER_TYPE_LABELS: Record<PaperType, { label: string; color: string }> = {
-  original: { label: '原著論文', color: 'var(--color-primary, #6366F1)' },
-  review: { label: '総説', color: '#10B981' },
-  letter: { label: '速報', color: '#F59E0B' },
-  conference: { label: '学会発表', color: '#8B5CF6' },
-  preprint: { label: 'プレプリント', color: '#EC4899' },
-  book_chapter: { label: '書籍・分担', color: '#3B82F6' },
-  other: { label: 'その他', color: '#64748B' }
+  original: { label: 'Original Article', color: 'var(--color-primary, #6366F1)' },
+  review: { label: 'Review', color: '#10B981' },
+  letter: { label: 'Letter / Communication', color: '#F59E0B' },
+  conference: { label: 'Conference Paper', color: '#8B5CF6' },
+  preprint: { label: 'Preprint', color: '#EC4899' },
+  book_chapter: { label: 'Book Chapter', color: '#3B82F6' },
+  other: { label: 'Other', color: '#64748B' }
 };
 
 export default function Literature() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { addToast } = useContext(ToastContext);
+
+  const getPaperTypeLabel = (type: PaperType) => {
+    return t(`literature.types.${type}`, { defaultValue: PAPER_TYPE_LABELS[type]?.label || type });
+  };
 
   const [items, setItems] = useState<LiteratureItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -86,6 +90,9 @@ export default function Literature() {
   const [tagInput, setTagInput] = useState('');
   const [doiLoading, setDoiLoading] = useState(false);
 
+  // Selected PDF file for Add/Edit modal
+  const [selectedPdfFile, setSelectedPdfFile] = useState<File | null>(null);
+
   // File Upload State in Edit/Detail
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [uploadingSupp, setUploadingSupp] = useState(false);
@@ -120,7 +127,7 @@ export default function Literature() {
       setAllTags(resTags);
     } catch (err: any) {
       console.error(err);
-      addToast('error', t('common.errorOccurred', 'データの読み込みに失敗しました'));
+      addToast('error', t('common.errorOccurred'));
     } finally {
       setLoading(false);
     }
@@ -146,9 +153,9 @@ export default function Literature() {
       if (activeItem && activeItem.id === item.id) {
         setActiveItem({ ...activeItem, [field]: updatedVal });
       }
-      addToast('success', t('common.savedSuccessfully', 'ステータスを更新しました'));
+      addToast('success', t('common.savedSuccessfully'));
     } catch (err) {
-      addToast('error', t('common.errorOccurred', '更新に失敗しました'));
+      addToast('error', t('common.errorOccurred'));
     }
   };
 
@@ -156,7 +163,7 @@ export default function Literature() {
   const handleDoiLookup = async (doiValue?: string) => {
     const targetDoi = (doiValue || formData.doi).trim();
     if (!targetDoi) {
-      addToast('warning', 'DOIを入力してください');
+      addToast('warning', t('literature.enterDoi'));
       return;
     }
     setDoiLoading(true);
@@ -176,9 +183,9 @@ export default function Literature() {
         paper_type: (data.paper_type as PaperType) || prev.paper_type,
         doi: data.doi || prev.doi
       }));
-      addToast('success', 'DOIから書誌情報を自動補完しました！');
+      addToast('success', t('literature.doiSuccess'));
     } catch (err: any) {
-      addToast('error', err.message || 'DOIの取得に失敗しました');
+      addToast('error', err.message || t('literature.doiError', { message: '' }));
     } finally {
       setDoiLoading(false);
     }
@@ -187,6 +194,7 @@ export default function Literature() {
   // Open Edit modal
   const openEdit = (item: LiteratureItem) => {
     setActiveItem(item);
+    setSelectedPdfFile(null);
     setFormData({
       title: item.title,
       authors: item.authors,
@@ -219,40 +227,50 @@ export default function Literature() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.title.trim()) {
-      addToast('warning', 'タイトルを入力してください');
+      addToast('warning', t('literature.enterTitle'));
       return;
     }
 
     try {
+      let targetId: number;
       if (showEditModal && activeItem) {
         const res = await api.put(`/literature/${activeItem.id}`, formData);
+        targetId = activeItem.id;
         setItems(prev => prev.map(i => i.id === activeItem.id ? res : i));
         setActiveItem(res);
-        addToast('success', t('common.savedSuccessfully', '保存しました'));
+        addToast('success', t('literature.updatedSuccess'));
         setShowEditModal(false);
       } else {
-        const res = await api.post('/literature', formData);
+        const res = await api.post<LiteratureItem>('/literature', formData);
+        targetId = res.id;
         setItems(prev => [res, ...prev]);
-        addToast('success', '文献を追加しました');
+        addToast('success', t('literature.addedSuccess'));
         setShowAddModal(false);
       }
+
+      // If a PDF file was selected in the form, upload it now
+      if (selectedPdfFile && targetId) {
+        await handleFileUpload(targetId, selectedPdfFile, 'pdf');
+        setSelectedPdfFile(null);
+      }
+
       loadData();
     } catch (err: any) {
-      addToast('error', t('common.errorOccurred', '保存に失敗しました'));
+      addToast('error', t('literature.saveError'));
     }
   };
 
   // Delete
   const handleDelete = async (id: number) => {
-    if (!window.confirm('この文献を削除してもよろしいですか？添付ファイルも削除されます。')) return;
+    if (!window.confirm(t('literature.confirmDeleteLiterature'))) return;
     try {
       await api.delete(`/literature/${id}`);
       setItems(prev => prev.filter(i => i.id !== id));
       if (showDetailModal) setShowDetailModal(false);
       if (showEditModal) setShowEditModal(false);
-      addToast('success', t('common.deletedSuccessfully', '削除しました'));
+      addToast('success', t('common.deletedSuccessfully'));
     } catch (err) {
-      addToast('error', t('common.errorOccurred', '削除に失敗しました'));
+      addToast('error', t('common.errorOccurred'));
     }
   };
 
@@ -265,10 +283,11 @@ export default function Literature() {
     else setUploadingSupp(true);
 
     try {
+      const token = localStorage.getItem('labflow-auth-token') || localStorage.getItem('token') || '';
       const res = await fetch(`/api/literature/${itemId}/upload`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`
+          Authorization: `Bearer ${token}`
         },
         body: uploadForm
       });
@@ -276,9 +295,9 @@ export default function Literature() {
       const updated = await res.json();
       setItems(prev => prev.map(i => i.id === itemId ? updated : i));
       if (activeItem && activeItem.id === itemId) setActiveItem(updated);
-      addToast('success', `${type === 'pdf' ? 'PDF' : 'サプルメンタルデータ'}をアップロードしました`);
+      addToast('success', t('literature.uploadedFileSuccess', { type: type === 'pdf' ? 'PDF' : t('literature.supplementalData') }));
     } catch (err: any) {
-      addToast('error', err.message || 'アップロードに失敗しました');
+      addToast('error', err.message || t('literature.uploadFileError'));
     } finally {
       if (type === 'pdf') setUploadingPdf(false);
       else setUploadingSupp(false);
@@ -287,14 +306,14 @@ export default function Literature() {
 
   // Delete file
   const handleDeleteFile = async (itemId: number, type: 'pdf' | 'supplemental') => {
-    if (!window.confirm(`${type === 'pdf' ? 'PDF' : 'サプルメンタルデータ'}を削除しますか？`)) return;
+    if (!window.confirm(t('literature.confirmDeleteFile', { type: type === 'pdf' ? 'PDF' : t('literature.supplementalData') }))) return;
     try {
       const updated = await api.delete(`/literature/${itemId}/files/${type}`);
       setItems(prev => prev.map(i => i.id === itemId ? updated : i));
       if (activeItem && activeItem.id === itemId) setActiveItem(updated);
-      addToast('success', 'ファイルを削除しました');
+      addToast('success', t('literature.deleteFileSuccess'));
     } catch (err) {
-      addToast('error', 'ファイルの削除に失敗しました');
+      addToast('error', t('literature.deleteFileError'));
     }
   };
 
@@ -302,7 +321,7 @@ export default function Literature() {
   const handleZoteroImport = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!importContent.trim()) {
-      addToast('warning', 'インポートするテキストまたはファイル内容を指定してください');
+      addToast('warning', t('literature.inputImportContent'));
       return;
     }
     setImportLoading(true);
@@ -312,14 +331,14 @@ export default function Literature() {
         project_name: importProject,
         default_paper_type: importType || undefined
       });
-      addToast('success', `${res.imported_count} 件の文献をインポートしました！`);
+      addToast('success', t('literature.importSuccess', { count: res.imported_count }));
       setShowImportModal(false);
       setImportContent('');
       setImportProject('');
       setImportType('');
       loadData();
     } catch (err: any) {
-      addToast('error', err.message || 'インポートに失敗しました。形式をご確認ください。');
+      addToast('error', err.message || t('literature.importError'));
     } finally {
       setImportLoading(false);
     }
@@ -363,11 +382,11 @@ export default function Literature() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', marginBottom: 'var(--space-xs)' }}>
             <Library size={28} style={{ color: 'var(--color-primary)' }} />
             <h1 style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 'var(--font-weight-bold)', color: 'var(--text-primary)' }}>
-              {t('literature.title', '文献管理')}
+              {t('literature.title')}
             </h1>
           </div>
           <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-            {t('literature.subtitle', '研究論文・総説のデータベース管理、読了状態のトラッキング、文献ファイル連携 (BibTeX/RIS)')}
+            {t('literature.subtitle')}
           </p>
         </div>
 
@@ -378,11 +397,12 @@ export default function Literature() {
             style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}
           >
             <Upload size={16} />
-            <span>{t('literature.importZotero', '文献管理ツールからインポート')}</span>
+            <span>{t('literature.importZotero')}</span>
           </button>
           <button
             className="btn btn-primary"
             onClick={() => {
+              setSelectedPdfFile(null);
               setFormData({
                 title: '',
                 authors: '',
@@ -407,7 +427,7 @@ export default function Literature() {
             style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}
           >
             <Plus size={16} />
-            <span>{t('literature.add', '文献を追加')}</span>
+            <span>{t('literature.add')}</span>
           </button>
         </div>
       </div>
@@ -416,7 +436,7 @@ export default function Literature() {
       <div className="grid grid-4" style={{ marginBottom: 'var(--space-xl)' }}>
         <div className="card" style={{ padding: 'var(--space-md)' }}>
           <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)', marginBottom: 4 }}>
-            {t('literature.totalCount', '登録文献数')}
+            {t('literature.totalCount')}
           </div>
           <div style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 'bold', color: 'var(--text-primary)' }}>
             {stats.total}
@@ -425,7 +445,7 @@ export default function Literature() {
         <div className="card" style={{ padding: 'var(--space-md)' }}>
           <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-primary)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
             <BookOpen size={14} />
-            {t('literature.readAbstractCount', 'Abstract読了')}
+            {t('literature.readAbstractCount')}
           </div>
           <div style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 'bold', color: 'var(--color-primary)' }}>
             {stats.readAbstract}
@@ -434,7 +454,7 @@ export default function Literature() {
         <div className="card" style={{ padding: 'var(--space-md)' }}>
           <div style={{ fontSize: 'var(--font-size-xs)', color: '#10B981', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
             <CheckCircle2 size={14} />
-            {t('literature.readBodyCount', '本文読了')}
+            {t('literature.readBodyCount')}
           </div>
           <div style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 'bold', color: '#10B981' }}>
             {stats.readBody}
@@ -443,7 +463,7 @@ export default function Literature() {
         <div className="card" style={{ padding: 'var(--space-md)' }}>
           <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
             <Clock size={14} />
-            {t('literature.unreadCount', '未読')}
+            {t('literature.unreadCount')}
           </div>
           <div style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 'bold', color: 'var(--text-secondary)' }}>
             {stats.unread}
@@ -461,7 +481,7 @@ export default function Literature() {
               type="text"
               className="form-input"
               style={{ paddingLeft: 36 }}
-              placeholder={t('common.searchPlaceholder', 'タイトル、著者、ジャーナル、タグで検索...')}
+              placeholder={t('common.searchPlaceholder')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -474,7 +494,7 @@ export default function Literature() {
               value={selectedProject}
               onChange={(e) => setSelectedProject(e.target.value)}
             >
-              <option value="">{t('common.allProjects', '全プロジェクト')}</option>
+              <option value="">{t('common.allProjects')}</option>
               {projects.map(p => (
                 <option key={p} value={p}>{p}</option>
               ))}
@@ -488,9 +508,9 @@ export default function Literature() {
               value={selectedPaperType}
               onChange={(e) => setSelectedPaperType(e.target.value)}
             >
-              <option value="">{t('common.allTypes', '全種別')}</option>
+              <option value="">{t('common.allTypes')}</option>
               {Object.entries(PAPER_TYPE_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>{v.label}</option>
+                <option key={k} value={k}>{getPaperTypeLabel(k as PaperType)}</option>
               ))}
             </select>
           </div>
@@ -502,10 +522,10 @@ export default function Literature() {
               value={selectedReadStatus}
               onChange={(e) => setSelectedReadStatus(e.target.value)}
             >
-              <option value="all">{t('common.allStatus', '全読書ステータス')}</option>
-              <option value="unread">{t('literature.unreadCount', '未読のみ')}</option>
-              <option value="read_abstract">{t('literature.readAbstractCount', 'Abstract読了')}</option>
-              <option value="read_body">{t('literature.readBodyCount', '本文読了')}</option>
+              <option value="all">{t('common.allStatus')}</option>
+              <option value="unread">{t('literature.unreadCount')}</option>
+              <option value="read_abstract">{t('literature.readAbstractCount')}</option>
+              <option value="read_body">{t('literature.readBodyCount')}</option>
             </select>
           </div>
 
@@ -517,7 +537,7 @@ export default function Literature() {
                 value={selectedTag}
                 onChange={(e) => setSelectedTag(e.target.value)}
               >
-                <option value="">全タグ</option>
+                <option value="">{t('literature.allTags')}</option>
                 {allTags.map(tag => (
                   <option key={tag} value={tag}>#{tag}</option>
                 ))}
@@ -537,7 +557,7 @@ export default function Literature() {
                 setSelectedTag('');
               }}
             >
-              リセット
+              {t('common.reset')}
             </button>
           )}
         </div>
@@ -546,25 +566,25 @@ export default function Literature() {
       {/* Literature List Table */}
       {loading ? (
         <div className="card" style={{ padding: 'var(--space-3xl)', textAlign: 'center', color: 'var(--text-secondary)' }}>
-          <p>{t('common.loading', '読み込み中...')}</p>
+          <p>{t('common.loading')}</p>
         </div>
       ) : items.length === 0 ? (
         <div className="card" style={{ padding: 'var(--space-3xl)', textAlign: 'center', color: 'var(--text-secondary)' }}>
           <Library size={48} style={{ margin: '0 auto var(--space-md)', opacity: 0.3 }} />
-          <p>{t('literature.noLiterature', '文献が登録されていません。「文献を追加」または「文献管理ツールからインポート」してください。')}</p>
+          <p>{t('literature.noLiterature')}</p>
         </div>
       ) : (
         <div className="table-container card">
           <table className="table">
             <thead>
               <tr>
-                <th style={{ width: 110, textAlign: 'center' }}>読書状態</th>
-                <th style={{ width: 100 }}>種別</th>
-                <th>タイトル / 著者 / 所属</th>
-                <th style={{ width: 180 }}>ジャーナル (年)</th>
-                <th style={{ width: 140 }}>プロジェクト / タグ</th>
-                <th style={{ width: 80, textAlign: 'center' }}>添付</th>
-                <th style={{ width: 90, textAlign: 'center' }}>操作</th>
+                <th style={{ width: 110, textAlign: 'center' }}>{t('literature.readingStatus')}</th>
+                <th style={{ width: 100 }}>{t('literature.paperType')}</th>
+                <th>{t('literature.titleAuthorsLab')}</th>
+                <th style={{ width: 180 }}>{t('literature.journalYear')}</th>
+                <th style={{ width: 140 }}>{t('literature.projectTags')}</th>
+                <th style={{ width: 80, textAlign: 'center' }}>{t('literature.attachmentsCol')}</th>
+                <th style={{ width: 90, textAlign: 'center' }}>{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -577,7 +597,7 @@ export default function Literature() {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start', paddingLeft: 6 }}>
                         <label
                           style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '11px', cursor: 'pointer', color: item.read_abstract ? 'var(--color-primary)' : 'var(--text-secondary)' }}
-                          title="Abstract読了を切り替え"
+                          title={t('literature.toggleReadAbstract')}
                         >
                           <input
                             type="checkbox"
@@ -588,14 +608,14 @@ export default function Literature() {
                         </label>
                         <label
                           style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '11px', cursor: 'pointer', color: item.read_body ? '#10B981' : 'var(--text-secondary)' }}
-                          title="本文読了を切り替え"
+                          title={t('literature.toggleReadBody')}
                         >
                           <input
                             type="checkbox"
                             checked={Boolean(item.read_body)}
                             onChange={() => handleToggleStatus(item, 'read_body')}
                           />
-                          <span>本文</span>
+                          <span>{t('literature.body')}</span>
                         </label>
                       </div>
                     </td>
@@ -612,7 +632,7 @@ export default function Literature() {
                           whiteSpace: 'nowrap'
                         }}
                       >
-                        {typeInfo.label}
+                        {getPaperTypeLabel(item.paper_type)}
                       </span>
                     </td>
 
@@ -642,7 +662,7 @@ export default function Literature() {
                         {item.journal || '—'}
                       </div>
                       <div style={{ color: 'var(--text-secondary)', marginTop: 2 }}>
-                        {item.year ? `${item.year}年` : ''}
+                        {item.year ? (i18n.language === 'en' ? item.year : `${item.year}年`) : ''}
                         {item.volume ? ` Vol.${item.volume}` : ''}
                         {item.issue ? `(${item.issue})` : ''}
                         {item.pages ? ` pp.${item.pages}` : ''}
@@ -694,7 +714,7 @@ export default function Literature() {
                           <button
                             className="btn btn-ghost btn-sm"
                             style={{ padding: 4, color: 'var(--color-primary)' }}
-                            title={`PDF: ${item.pdf_filename || '閲覧'}`}
+                            title={`PDF: ${item.pdf_filename || t('literature.viewPdf')}`}
                             onClick={() => setShowPdfViewer(`/api/literature/files/${item.pdf_path}`)}
                           >
                             <FileText size={16} />
@@ -706,7 +726,7 @@ export default function Literature() {
                             download
                             className="btn btn-ghost btn-sm"
                             style={{ padding: 4, color: '#10B981' }}
-                            title={`サプルメンタル: ${item.supplemental_filename || 'ダウンロード'}`}
+                            title={`${t('literature.supplementalData')}: ${item.supplemental_filename || t('literature.downloadSupplemental')}`}
                           >
                             <Paperclip size={16} />
                           </a>
@@ -721,7 +741,7 @@ export default function Literature() {
                           className="btn btn-ghost btn-sm"
                           style={{ padding: 4 }}
                           onClick={() => openEdit(item)}
-                          title="編集"
+                          title={t('common.edit')}
                         >
                           <Edit2 size={15} />
                         </button>
@@ -729,7 +749,7 @@ export default function Literature() {
                           className="btn btn-ghost btn-sm"
                           style={{ padding: 4, color: 'var(--color-danger)' }}
                           onClick={() => handleDelete(item.id)}
-                          title="削除"
+                          title={t('common.delete')}
                         >
                           <Trash2 size={15} />
                         </button>
@@ -749,7 +769,7 @@ export default function Literature() {
           <div className="modal modal-lg" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 750 }}>
             <div className="modal-header">
               <h2 className="modal-title">
-                {showEditModal ? t('literature.edit', '文献を編集') : t('literature.add', '文献を追加')}
+                {showEditModal ? t('literature.edit') : t('literature.add')}
               </h2>
               <button className="btn btn-ghost btn-icon" onClick={() => { setShowAddModal(false); setShowEditModal(false); }}>
                 <X size={18} />
@@ -762,13 +782,13 @@ export default function Literature() {
                 <div style={{ background: 'var(--bg-base)', padding: 'var(--space-md)', borderRadius: 'var(--border-radius-md)', border: '1px dashed var(--border-default)', marginBottom: 'var(--space-md)' }}>
                   <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <Sparkles size={14} style={{ color: 'var(--color-primary)' }} />
-                    <span>DOIから自動入力</span>
+                    <span>{t('literature.doiAutoFill')}</span>
                   </label>
                   <div style={{ display: 'flex', gap: 'var(--space-sm)', marginTop: 4 }}>
                     <input
                       type="text"
                       className="form-input"
-                      placeholder="例: 10.1038/s41586-020-2649-2"
+                      placeholder={t('literature.doiLookupPlaceholder')}
                       value={formData.doi}
                       onChange={(e) => setFormData({ ...formData, doi: e.target.value })}
                     />
@@ -778,14 +798,14 @@ export default function Literature() {
                       onClick={() => handleDoiLookup()}
                       disabled={doiLoading}
                     >
-                      {doiLoading ? '検索中...' : '自動補完'}
+                      {doiLoading ? t('literature.doiSearching') : t('literature.doiLookupBtn')}
                     </button>
                   </div>
                 </div>
 
                 {/* Title */}
                 <div className="form-group">
-                  <label className="form-label">タイトル <span style={{ color: 'var(--color-danger)' }}>*</span></label>
+                  <label className="form-label">{t('literature.formTitle')} <span style={{ color: 'var(--color-danger)' }}>*</span></label>
                   <input
                     type="text"
                     className="form-input"
@@ -798,21 +818,21 @@ export default function Literature() {
                 {/* Authors & Lab */}
                 <div className="form-row">
                   <div className="form-group">
-                    <label className="form-label">著者</label>
+                    <label className="form-label">{t('literature.authors')}</label>
                     <input
                       type="text"
                       className="form-input"
-                      placeholder="例: Smith J, Doe A, Yamada T"
+                      placeholder={t('literature.authorsPlaceholder')}
                       value={formData.authors}
                       onChange={(e) => setFormData({ ...formData, authors: e.target.value })}
                     />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">発表元研究室 / 所属</label>
+                    <label className="form-label">{t('literature.labName')}</label>
                     <input
                       type="text"
                       className="form-input"
-                      placeholder="例: Univ. of Tokyo, Tanaka Lab"
+                      placeholder={t('literature.labNamePlaceholder')}
                       value={formData.lab_name}
                       onChange={(e) => setFormData({ ...formData, lab_name: e.target.value })}
                     />
@@ -822,7 +842,7 @@ export default function Literature() {
                 {/* Journal, Year, Vol, Issue, Pages */}
                 <div className="form-row" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr' }}>
                   <div className="form-group">
-                    <label className="form-label">ジャーナル</label>
+                    <label className="form-label">{t('literature.journal')}</label>
                     <input
                       type="text"
                       className="form-input"
@@ -832,7 +852,7 @@ export default function Literature() {
                     />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">出版年</label>
+                    <label className="form-label">{t('literature.publishYear')}</label>
                     <input
                       type="number"
                       className="form-input"
@@ -842,7 +862,7 @@ export default function Literature() {
                     />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">巻 (Vol)</label>
+                    <label className="form-label">{t('literature.volume')}</label>
                     <input
                       type="text"
                       className="form-input"
@@ -851,7 +871,7 @@ export default function Literature() {
                     />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">号 (Issue)</label>
+                    <label className="form-label">{t('literature.issue')}</label>
                     <input
                       type="text"
                       className="form-input"
@@ -860,7 +880,7 @@ export default function Literature() {
                     />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">ページ</label>
+                    <label className="form-label">{t('literature.pages')}</label>
                     <input
                       type="text"
                       className="form-input"
@@ -874,24 +894,24 @@ export default function Literature() {
                 {/* Paper Type & Project */}
                 <div className="form-row">
                   <div className="form-group">
-                    <label className="form-label">論文種別</label>
+                    <label className="form-label">{t('literature.paperType')}</label>
                     <select
                       className="form-select"
                       value={formData.paper_type}
                       onChange={(e) => setFormData({ ...formData, paper_type: e.target.value as PaperType })}
                     >
                       {Object.entries(PAPER_TYPE_LABELS).map(([k, v]) => (
-                        <option key={k} value={k}>{v.label}</option>
+                        <option key={k} value={k}>{getPaperTypeLabel(k as PaperType)}</option>
                       ))}
                     </select>
                   </div>
                   <div className="form-group">
-                    <label className="form-label">関連プロジェクト名</label>
+                    <label className="form-label">{t('literature.projectName')}</label>
                     <input
                       type="text"
                       className="form-input"
                       list="project-suggestions"
-                      placeholder="例: がん治療"
+                      placeholder={t('literature.projectPlaceholder')}
                       value={formData.project_name}
                       onChange={(e) => setFormData({ ...formData, project_name: e.target.value })}
                     />
@@ -914,11 +934,11 @@ export default function Literature() {
 
                 {/* Notes */}
                 <div className="form-group">
-                  <label className="form-label">メモ・所感 (Markdown対応)</label>
+                  <label className="form-label">{t('literature.notesMarkdown')}</label>
                   <textarea
                     className="form-textarea"
                     rows={3}
-                    placeholder="この論文の重要ポイント、実験条件、考察など..."
+                    placeholder={t('literature.notesPlaceholder')}
                     value={formData.notes}
                     onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   />
@@ -926,12 +946,13 @@ export default function Literature() {
 
                 {/* Keywords / Tags */}
                 <div className="form-group">
-                  <label className="form-label">キーワード (タグ)</label>
+                  <label className="form-label">{t('literature.keywords')}</label>
                   <div style={{ display: 'flex', gap: 'var(--space-sm)', marginBottom: 'var(--space-xs)' }}>
                     <input
                       type="text"
+                      list="available-tags-list"
                       className="form-input"
-                      placeholder="タグを入力して追加 (例: CRISPR, Cas9)"
+                      placeholder={t('literature.keywordsPlaceholder')}
                       value={tagInput}
                       onChange={(e) => setTagInput(e.target.value)}
                       onKeyDown={(e) => {
@@ -941,11 +962,39 @@ export default function Literature() {
                         }
                       }}
                     />
+                    <datalist id="available-tags-list">
+                      {allTags.map((t, idx) => (
+                        <option key={idx} value={t} />
+                      ))}
+                    </datalist>
+                    {allTags.length > 0 && (
+                      <select
+                        className="form-select"
+                        style={{ maxWidth: '160px' }}
+                        value=""
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            const val = e.target.value;
+                            if (!formData.keywords.includes(val)) {
+                              setFormData(prev => ({ ...prev, keywords: [...prev.keywords, val] }));
+                            }
+                            e.target.value = '';
+                          }
+                        }}
+                      >
+                        <option value="">{t('literature.selectFromTags')}</option>
+                        {allTags.filter(t => !formData.keywords.includes(t)).map((t, idx) => (
+                          <option key={idx} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    )}
                     <button type="button" className="btn btn-secondary" onClick={addTag}>
-                      追加
+                      {t('common.add')}
                     </button>
                   </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-xs)' }}>
+
+                  {/* Registered tags for this item */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-xs)', marginBottom: allTags.length > 0 ? 'var(--space-xs)' : 0 }}>
                     {formData.keywords.map((kw, idx) => (
                       <span key={idx} className="tag active" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         #{kw}
@@ -953,6 +1002,26 @@ export default function Literature() {
                       </span>
                     ))}
                   </div>
+
+                  {/* Quick-add chips from existing tags */}
+                  {allTags.filter(t => !formData.keywords.includes(t)).length > 0 && (
+                    <div style={{ marginTop: 'var(--space-xs)', fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)' }}>
+                      <span style={{ marginRight: 6 }}>{t('literature.clickTagToAdd')}</span>
+                      <div style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                        {allTags.filter(t => !formData.keywords.includes(t)).slice(0, 15).map((t, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            className="tag"
+                            style={{ padding: '2px 8px', fontSize: '11px', cursor: 'pointer' }}
+                            onClick={() => setFormData(prev => ({ ...prev, keywords: [...prev.keywords, t] }))}
+                          >
+                            + {t}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Reading Status Checkboxes */}
@@ -963,7 +1032,7 @@ export default function Literature() {
                       checked={formData.read_abstract}
                       onChange={(e) => setFormData({ ...formData, read_abstract: e.target.checked })}
                     />
-                    <span>Abstract読了</span>
+                    <span>{t('literature.readAbstractCount')}</span>
                   </label>
                   <label className="form-checkbox">
                     <input
@@ -971,8 +1040,102 @@ export default function Literature() {
                       checked={formData.read_body}
                       onChange={(e) => setFormData({ ...formData, read_body: e.target.checked })}
                     />
-                    <span>本文読了</span>
+                    <span>{t('literature.readBodyCount')}</span>
                   </label>
+                </div>
+
+                {/* PDF File Attachment (New or Replace) */}
+                <div className="form-group" style={{ borderTop: '1px solid var(--border-default)', paddingTop: 'var(--space-md)' }}>
+                  <label className="form-label font-bold flex items-center gap-1.5" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <FileText size={15} style={{ color: 'var(--color-primary)' }} />
+                    <span>{t('literature.attachPdf')}</span>
+                  </label>
+                  
+                  {/* If editing and has existing PDF */}
+                  {showEditModal && activeItem?.pdf_path && !selectedPdfFile && (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 12px',
+                      background: 'var(--bg-base)',
+                      borderRadius: 'var(--border-radius-md)',
+                      marginBottom: 8,
+                      border: '1px solid var(--border-default)'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
+                        <FileText size={16} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+                        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-primary)', wordBreak: 'break-all' }}>
+                          {t('literature.currentAttached', { filename: activeItem.pdf_filename || 'paper.pdf' })}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        style={{ color: 'var(--color-primary)', fontSize: '11px', flexShrink: 0 }}
+                        onClick={() => setShowPdfViewer(`/api/literature/files/${activeItem.pdf_path}`)}
+                      >
+                        <Eye size={13} />
+                        <span>{t('literature.check')}</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Selected new PDF file badge */}
+                  {selectedPdfFile ? (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 12px',
+                      background: 'rgba(99, 102, 241, 0.1)',
+                      borderRadius: 'var(--border-radius-md)',
+                      border: '1px solid rgba(99, 102, 241, 0.3)'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
+                        <FileText size={16} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+                        <div style={{ fontSize: 'var(--font-size-xs)' }}>
+                          <span style={{ fontWeight: 'bold', color: 'var(--color-primary)' }}>{t('literature.selectedPdf', { filename: '' })}</span>
+                          <span style={{ color: 'var(--text-primary)' }}>{selectedPdfFile.name}</span>
+                          <span style={{ color: 'var(--text-tertiary)', marginLeft: 6 }}>
+                            ({(selectedPdfFile.size / (1024 * 1024)).toFixed(2)} MB)
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        style={{ padding: 4, color: 'var(--color-danger)' }}
+                        onClick={() => setSelectedPdfFile(null)}
+                        title={t('literature.clearSelection')}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <label
+                        className="btn btn-secondary btn-sm"
+                        style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                      >
+                        <Upload size={14} />
+                        <span>{showEditModal && activeItem?.pdf_path ? t('literature.changePdf') : t('literature.selectPdf')}</span>
+                        <input
+                          type="file"
+                          accept=".pdf,application/pdf"
+                          style={{ display: 'none' }}
+                          onChange={(e) => {
+                            if (e.target.files?.[0]) {
+                              setSelectedPdfFile(e.target.files[0]);
+                            }
+                          }}
+                        />
+                      </label>
+                      <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)', marginLeft: 8 }}>
+                        {t('literature.pdfSupportNotice')}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -982,10 +1145,10 @@ export default function Literature() {
                   className="btn btn-secondary"
                   onClick={() => { setShowAddModal(false); setShowEditModal(false); }}
                 >
-                  {t('common.cancel', 'キャンセル')}
+                  {t('common.cancel')}
                 </button>
                 <button type="submit" className="btn btn-primary">
-                  {t('common.save', '保存')}
+                  {t('common.save')}
                 </button>
               </div>
             </form>
@@ -1006,7 +1169,7 @@ export default function Literature() {
                     color: (PAPER_TYPE_LABELS[activeItem.paper_type] || PAPER_TYPE_LABELS.other).color
                   }}
                 >
-                  {(PAPER_TYPE_LABELS[activeItem.paper_type] || PAPER_TYPE_LABELS.other).label}
+                  {getPaperTypeLabel(activeItem.paper_type)}
                 </span>
                 {activeItem.project_name && (
                   <span className="badge badge-info">{activeItem.project_name}</span>
@@ -1015,7 +1178,7 @@ export default function Literature() {
               <div style={{ display: 'flex', gap: 'var(--space-xs)' }}>
                 <button className="btn btn-secondary btn-sm" onClick={() => { setShowDetailModal(false); openEdit(activeItem); }}>
                   <Edit2 size={14} />
-                  <span>編集</span>
+                  <span>{t('common.edit')}</span>
                 </button>
                 <button className="btn btn-ghost btn-icon" onClick={() => setShowDetailModal(false)}>
                   <X size={18} />
@@ -1031,7 +1194,7 @@ export default function Literature() {
 
               {/* Authors & Lab */}
               <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-xs)' }}>
-                {activeItem.authors || '著者情報なし'}
+                {activeItem.authors || t('literature.noAuthors')}
               </div>
               {activeItem.lab_name && (
                 <div style={{ color: 'var(--text-tertiary)', fontSize: 'var(--font-size-xs)', display: 'flex', alignItems: 'center', gap: 4, marginBottom: 'var(--space-sm)' }}>
@@ -1043,7 +1206,7 @@ export default function Literature() {
               {/* Citation & DOI */}
               <div style={{ background: 'var(--bg-base)', padding: 'var(--space-md)', borderRadius: 'var(--border-radius-md)', marginBottom: 'var(--space-md)', fontSize: 'var(--font-size-sm)' }}>
                 <div>
-                  <span style={{ fontStyle: 'italic', fontWeight: 600 }}>{activeItem.journal || 'ジャーナル未設定'}</span>
+                  <span style={{ fontStyle: 'italic', fontWeight: 600 }}>{activeItem.journal || t('literature.noJournal')}</span>
                   {activeItem.year && ` (${activeItem.year})`}
                   {activeItem.volume && ` Vol.${activeItem.volume}`}
                   {activeItem.issue && `(${activeItem.issue})`}
@@ -1073,7 +1236,7 @@ export default function Literature() {
                     onChange={() => handleToggleStatus(activeItem, 'read_abstract')}
                   />
                   <span style={{ fontWeight: activeItem.read_abstract ? 'bold' : 'normal', color: activeItem.read_abstract ? 'var(--color-primary)' : 'inherit' }}>
-                    Abstract 読了
+                    {t('literature.abstractRead')}
                   </span>
                 </label>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 'var(--font-size-sm)' }}>
@@ -1083,7 +1246,7 @@ export default function Literature() {
                     onChange={() => handleToggleStatus(activeItem, 'read_body')}
                   />
                   <span style={{ fontWeight: activeItem.read_body ? 'bold' : 'normal', color: activeItem.read_body ? '#10B981' : 'inherit' }}>
-                    本文 読了
+                    {t('literature.bodyRead')}
                   </span>
                 </label>
               </div>
@@ -1091,7 +1254,7 @@ export default function Literature() {
               {/* Tags */}
               {activeItem.keywords && activeItem.keywords.length > 0 && (
                 <div style={{ marginBottom: 'var(--space-md)' }}>
-                  <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)', marginBottom: 4 }}>キーワード・タグ</div>
+                  <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)', marginBottom: 4 }}>{t('literature.keywordsAndTags')}</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                     {activeItem.keywords.map((kw, idx) => (
                       <span key={idx} className="tag">#{kw}</span>
@@ -1113,7 +1276,7 @@ export default function Literature() {
               {/* Notes */}
               {activeItem.notes && (
                 <div style={{ marginBottom: 'var(--space-md)' }}>
-                  <h4 style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'bold', marginBottom: 4 }}>メモ・所感</h4>
+                  <h4 style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'bold', marginBottom: 4 }}>{t('literature.notesHeading')}</h4>
                   <div style={{ fontSize: 'var(--font-size-sm)', lineHeight: 1.6, color: 'var(--text-primary)', background: 'var(--bg-base)', padding: 'var(--space-md)', borderRadius: 'var(--border-radius-md)', whiteSpace: 'pre-wrap' }}>
                     {activeItem.notes}
                   </div>
@@ -1122,14 +1285,14 @@ export default function Literature() {
 
               {/* Attachments Section */}
               <div style={{ marginTop: 'var(--space-lg)', borderTop: '1px solid var(--border-default)', paddingTop: 'var(--space-md)' }}>
-                <h4 style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'bold', marginBottom: 'var(--space-sm)' }}>添付ファイル</h4>
+                <h4 style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'bold', marginBottom: 'var(--space-sm)' }}>{t('literature.attachmentsHeading')}</h4>
 
                 <div className="grid grid-2" style={{ gap: 'var(--space-md)' }}>
                   {/* Main PDF / Capture */}
                   <div className="card" style={{ padding: 'var(--space-md)' }}>
                     <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 'bold', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
                       <FileText size={14} style={{ color: 'var(--color-primary)' }} />
-                      <span>本文 PDF / キャプチャ</span>
+                      <span>{t('literature.bodyPdfOrCapture')}</span>
                     </div>
 
                     {activeItem.pdf_path ? (
@@ -1143,7 +1306,7 @@ export default function Literature() {
                             onClick={() => setShowPdfViewer(`/api/literature/files/${activeItem.pdf_path}`)}
                           >
                             <Eye size={13} />
-                            <span>プレビュー</span>
+                            <span>{t('literature.preview')}</span>
                           </button>
                           <a
                             href={`/api/literature/files/${activeItem.pdf_path}`}
@@ -1151,7 +1314,7 @@ export default function Literature() {
                             className="btn btn-secondary btn-sm"
                           >
                             <Download size={13} />
-                            <span>ダウンロード</span>
+                            <span>{t('literature.downloadSupplemental')}</span>
                           </a>
                           <button
                             className="btn btn-danger btn-sm"
@@ -1164,11 +1327,11 @@ export default function Literature() {
                     ) : (
                       <div>
                         <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)', marginBottom: 8 }}>
-                          PDFやキャプチャ画像が未添付です
+                          {t('literature.noPdfAttached')}
                         </p>
                         <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer', display: 'inline-flex' }}>
                           <Upload size={13} />
-                          <span>{uploadingPdf ? 'アップロード中...' : 'ファイルを選択'}</span>
+                          <span>{uploadingPdf ? t('literature.uploading') : t('literature.selectFile')}</span>
                           <input
                             type="file"
                             accept=".pdf,image/*"
@@ -1186,7 +1349,7 @@ export default function Literature() {
                   <div className="card" style={{ padding: 'var(--space-md)' }}>
                     <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 'bold', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
                       <Paperclip size={14} style={{ color: '#10B981' }} />
-                      <span>サプルメンタルデータ</span>
+                      <span>{t('literature.supplementalData')}</span>
                     </div>
 
                     {activeItem.supplemental_path ? (
@@ -1201,7 +1364,7 @@ export default function Literature() {
                             className="btn btn-secondary btn-sm"
                           >
                             <Download size={13} />
-                            <span>ダウンロード</span>
+                            <span>{t('literature.downloadSupplemental')}</span>
                           </a>
                           <button
                             className="btn btn-danger btn-sm"
@@ -1214,11 +1377,11 @@ export default function Literature() {
                     ) : (
                       <div>
                         <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)', marginBottom: 8 }}>
-                          サプルメンタルデータが未添付です
+                          {t('literature.noSupplementalAttached')}
                         </p>
                         <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer', display: 'inline-flex' }}>
                           <Upload size={13} />
-                          <span>{uploadingSupp ? 'アップロード中...' : 'ファイルを選択'}</span>
+                          <span>{uploadingSupp ? t('literature.uploading') : t('literature.selectFile')}</span>
                           <input
                             type="file"
                             style={{ display: 'none' }}
@@ -1236,7 +1399,7 @@ export default function Literature() {
 
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setShowDetailModal(false)}>
-                {t('common.close', '閉じる')}
+                {t('common.close')}
               </button>
             </div>
           </div>
@@ -1250,7 +1413,7 @@ export default function Literature() {
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
                 <Upload size={20} style={{ color: 'var(--color-primary)' }} />
-                <h2 className="modal-title">{t('literature.importZotero', '文献管理ツールからインポート')}</h2>
+                <h2 className="modal-title">{t('literature.importZotero')}</h2>
               </div>
               <button className="btn btn-ghost btn-icon" onClick={() => setShowImportModal(false)}>
                 <X size={18} />
@@ -1260,7 +1423,7 @@ export default function Literature() {
             <form onSubmit={handleZoteroImport}>
               <div className="modal-body" style={{ maxHeight: '75vh', overflowY: 'auto' }}>
                 <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)' }}>
-                  文献管理ツール（Zotero, Mendeley, EndNote等）や各種データベースからエクスポートした <strong>BibTeX (.bib)</strong>、<strong>RIS (.ris)</strong>、または <strong>CSL-JSON (.json)</strong> ファイルをアップロードするか、内容を下に貼り付けてください。
+                  {t('literature.importModalDesc')}
                 </p>
 
                 {/* File Drop Area */}
@@ -1282,10 +1445,10 @@ export default function Literature() {
                 >
                   <Upload size={28} style={{ color: 'var(--color-primary)', margin: '0 auto 8px' }} />
                   <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'bold' }}>
-                    クリックしてファイルを選択 または ドラッグ＆ドロップ
+                    {t('literature.dragDropOrClick')}
                   </div>
                   <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)', marginTop: 4 }}>
-                    .bib, .ris, .json ファイルに対応
+                    {t('literature.supportedImportFormats')}
                   </div>
                   <input
                     id="zotero-file-input"
@@ -1300,11 +1463,11 @@ export default function Literature() {
 
                 {/* Paste Area */}
                 <div className="form-group" style={{ marginTop: 'var(--space-md)' }}>
-                  <label className="form-label">またはテキストを直接貼り付け</label>
+                  <label className="form-label">{t('literature.orPasteText')}</label>
                   <textarea
                     className="form-textarea"
                     rows={6}
-                    placeholder="@article{smith2026, ...} または TY - JOUR ..."
+                    placeholder={t('literature.pastePlaceholder')}
                     value={importContent}
                     onChange={(e) => setImportContent(e.target.value)}
                   />
@@ -1313,12 +1476,12 @@ export default function Literature() {
                 {/* Batch Options */}
                 <div className="form-row" style={{ marginTop: 'var(--space-sm)' }}>
                   <div className="form-group">
-                    <label className="form-label">一括設定する関連プロジェクト名 (任意)</label>
+                    <label className="form-label">{t('literature.batchProject')}</label>
                     <input
                       type="text"
                       className="form-input"
                       list="import-project-suggestions"
-                      placeholder="例: がん治療"
+                      placeholder={t('literature.projectPlaceholder')}
                       value={importProject}
                       onChange={(e) => setImportProject(e.target.value)}
                     />
@@ -1327,15 +1490,15 @@ export default function Literature() {
                     </datalist>
                   </div>
                   <div className="form-group">
-                    <label className="form-label">論文種別の上書き (任意)</label>
+                    <label className="form-label">{t('literature.overridePaperType')}</label>
                     <select
                       className="form-select"
                       value={importType}
                       onChange={(e) => setImportType(e.target.value as PaperType)}
                     >
-                      <option value="">自動判別 (ファイル内情報を使用)</option>
+                      <option value="">{t('literature.autoDetect')}</option>
                       {Object.entries(PAPER_TYPE_LABELS).map(([k, v]) => (
-                        <option key={k} value={k}>{v.label}</option>
+                        <option key={k} value={k}>{getPaperTypeLabel(k as PaperType)}</option>
                       ))}
                     </select>
                   </div>
@@ -1344,10 +1507,10 @@ export default function Literature() {
 
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={() => setShowImportModal(false)}>
-                  {t('common.cancel', 'キャンセル')}
+                  {t('common.cancel')}
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={importLoading || !importContent.trim()}>
-                  {importLoading ? 'インポート中...' : 'インポート実行'}
+                  {importLoading ? t('literature.importing') : t('literature.executeImport')}
                 </button>
               </div>
             </form>
@@ -1366,12 +1529,12 @@ export default function Literature() {
             <div className="modal-header" style={{ padding: 'var(--space-sm) var(--space-md)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
                 <FileText size={18} style={{ color: 'var(--color-primary)' }} />
-                <span style={{ fontSize: 'var(--font-size-md)', fontWeight: 'bold' }}>ドキュメントビューア</span>
+                <span style={{ fontSize: 'var(--font-size-md)', fontWeight: 'bold' }}>{t('literature.documentViewer')}</span>
               </div>
               <div style={{ display: 'flex', gap: 'var(--space-xs)' }}>
                 <a href={showPdfViewer} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">
                   <ExternalLink size={13} />
-                  <span>新しいタブで開く</span>
+                  <span>{t('literature.openInNewTab')}</span>
                 </a>
                 <button className="btn btn-ghost btn-icon" onClick={() => setShowPdfViewer(null)}>
                   <X size={18} />

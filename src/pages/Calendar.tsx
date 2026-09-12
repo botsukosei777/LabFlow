@@ -11,6 +11,7 @@ import CustomAgendaView from '../components/CustomAgendaView';
 
 import { api } from '../api/client';
 import { ToastContext } from '../App';
+import DateInput from '../components/DateInput';
 
 const locales = {
   'en': enUS,
@@ -500,7 +501,7 @@ export default function Calendar() {
             setShowEventModal(true);
           }}>
             <Plus size={18} />
-            イベントを追加
+            {t('calendar.addEvent', 'イベントを追加')}
           </button>
           <button className="btn btn-primary" onClick={() => setShowScheduleModal(true)}>
             <Plus size={18} />
@@ -570,11 +571,9 @@ export default function Calendar() {
               <div className="form-row">
                 <div className="form-group" style={{ flex: 1 }}>
                   <label className="form-label">{t('calendar.startDate', '開始日')}</label>
-                  <input 
-                    type="date" 
-                    className="form-input"
+                  <DateInput 
                     value={scheduleForm.start_date}
-                    onChange={(e) => setScheduleForm({...scheduleForm, start_date: e.target.value})}
+                    onChange={(val) => setScheduleForm({...scheduleForm, start_date: val})}
                     required
                   />
                 </div>
@@ -582,7 +581,7 @@ export default function Calendar() {
               
               {selectedProtocol?.has_sample_dependent_steps && (
                 <div className="form-group">
-                  <label className="form-label">サンプル数 (Sample Count)</label>
+                  <label className="form-label">{t('calendar.sampleCount', 'サンプル数 (Sample Count)')}</label>
                   <input type="number" min="1" className="form-input" value={scheduleForm.sample_count} onChange={(e) => setScheduleForm({...scheduleForm, sample_count: parseInt(e.target.value) || 1})} />
                 </div>
               )}
@@ -655,7 +654,7 @@ export default function Calendar() {
                   {t('common.cancel', 'キャンセル')}
                 </button>
                 <button type="submit" className="btn btn-primary">
-                  {t('common.save', '追加する')}
+                  {t('common.add', '追加する')}
                 </button>
               </div>
             </form>
@@ -712,7 +711,7 @@ export default function Calendar() {
                   {t('calendar.delayWarning', 'このブロック以降の全ブロックが自動的に遅延されます')}
                 </p>
                 <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
-                  <input type="date" className="form-input" value={rescheduleDate} onChange={e => setRescheduleDate(e.target.value)} style={{ flex: 1 }} />
+                  <DateInput value={rescheduleDate} onChange={val => setRescheduleDate(val)} style={{ flex: 1 }} />
                   <button className="btn btn-secondary" onClick={handleRescheduleBlock} disabled={!rescheduleDate || rescheduleDate === selectedBlock.scheduled_date}>
                     {t('common.save', '保存')}
                   </button>
@@ -744,20 +743,19 @@ export default function Calendar() {
             <div style={{ padding: 'var(--space-md)' }}>
               <p style={{ marginBottom: 'var(--space-md)' }}>
                 {selectedStep.status === 'completed' 
-                  ? 'このステップの完了を取り消しますか？' 
+                  ? t('calendar.revertIncompletePrompt', 'このステップの完了を取り消しますか？') 
                   : t('dashboard.stepActionPrompt', 'このステップを完了にするか、延期しますか？')}
               </p>
               
               {selectedStep.status !== 'completed' && (
                 <div style={{ marginBottom: 'var(--space-md)', padding: 'var(--space-md)', backgroundColor: 'var(--color-surface)', border: '1px solid var(--border-default)', borderRadius: 'var(--border-radius-md)' }}>
                 <label className="form-label">{t('calendar.rescheduleDate', '延期先の日付')}</label>
-                <input
-                  type="date"
-                  className="form-input"
-                  value={rescheduleDate}
-                  onChange={e => setRescheduleDate(e.target.value)}
-                  style={{ marginBottom: 'var(--space-sm)' }}
-                />
+                <div style={{ marginBottom: 'var(--space-sm)' }}>
+                  <DateInput
+                    value={rescheduleDate}
+                    onChange={val => setRescheduleDate(val)}
+                  />
+                </div>
                 
                 <label className="form-label">{t('calendar.rescheduleTime', '延期先の時刻')}</label>
                 <input
@@ -812,7 +810,7 @@ export default function Calendar() {
                     addToast('error', t('common.errorOccurred'));
                   }
                 }}>
-                  {selectedStep.status === 'completed' ? '未完了に戻す' : t('common.done', '完了')}
+                  {selectedStep.status === 'completed' ? t('common.revertToIncomplete', '未完了に戻す') : t('common.done', '完了')}
                 </button>
               </div>
             </div>
@@ -824,7 +822,7 @@ export default function Calendar() {
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div className="card animate-fade-in" style={{ width: '100%', maxWidth: 500, margin: 'var(--space-md)' }}>
             <div className="card-header">
-              <h2 className="card-title">{editingEvent ? 'イベントを編集' : 'イベントを追加'}</h2>
+              <h2 className="card-title">{editingEvent ? t('calendar.editEvent', 'イベントを編集') : t('calendar.addEvent', 'イベントを追加')}</h2>
               <button className="btn btn-ghost btn-icon" onClick={() => setShowEventModal(false)}>
                 <X size={20} />
               </button>
@@ -832,21 +830,18 @@ export default function Calendar() {
             <div style={{ padding: 'var(--space-md)' }}>
               <form onSubmit={handleEventSubmit}>
                 <div style={{ marginBottom: 'var(--space-md)' }}>
-                  <label className="form-label">タイトル *</label>
-                  <input type="text" className="form-input" required value={eventForm.title} onChange={e => setEventForm({ ...eventForm, title: e.target.value })} placeholder="例: 学会発表、セミナー、出張" autoFocus />
+                  <label className="form-label">{t('calendar.eventTitle', 'タイトル')} *</label>
+                  <input type="text" className="form-input" required value={eventForm.title} onChange={e => setEventForm({ ...eventForm, title: e.target.value })} placeholder={t('calendar.eventTitlePlaceholder', '例: 学会発表、セミナー、出張')} autoFocus />
                 </div>
                 
                 {/* Date range */}
                 <div style={{ display: 'flex', gap: 'var(--space-md)', marginBottom: 'var(--space-md)' }}>
                   <div style={{ flex: 1 }}>
-                    <label className="form-label">開始日 *</label>
-                    <input
-                      type="date"
-                      className="form-input"
+                    <label className="form-label">{t('calendar.startDate', '開始日')} *</label>
+                    <DateInput
                       required
                       value={eventForm.date}
-                      onChange={e => {
-                        const newStart = e.target.value;
+                      onChange={newStart => {
                         setEventForm(prev => ({
                           ...prev,
                           date: newStart,
@@ -856,13 +851,11 @@ export default function Calendar() {
                     />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <label className="form-label">終了日 (連日イベント)</label>
-                    <input
-                      type="date"
-                      className="form-input"
+                    <label className="form-label">{t('calendar.endDateMultiDay', '終了日 (連日イベント)')}</label>
+                    <DateInput
                       min={eventForm.date}
                       value={eventForm.end_date || eventForm.date}
-                      onChange={e => setEventForm({ ...eventForm, end_date: e.target.value })}
+                      onChange={newEnd => setEventForm({ ...eventForm, end_date: newEnd })}
                     />
                   </div>
                 </div>
@@ -874,44 +867,44 @@ export default function Calendar() {
                       checked={eventForm.is_all_day}
                       onChange={e => setEventForm({ ...eventForm, is_all_day: e.target.checked })}
                     />
-                    <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>終日イベント（または複数日）</span>
+                    <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>{t('calendar.allDayOrMultiDay', '終日イベント（または複数日）')}</span>
                   </label>
                 </div>
 
                 {!eventForm.is_all_day && (
                   <div style={{ display: 'flex', gap: 'var(--space-md)', marginBottom: 'var(--space-md)' }}>
                     <div style={{ flex: 1 }}>
-                      <label className="form-label">開始時刻</label>
+                      <label className="form-label">{t('calendar.startTime', '開始時刻')}</label>
                       <input type="time" className="form-input" value={eventForm.start_time} onChange={e => setEventForm({ ...eventForm, start_time: e.target.value })} />
                     </div>
                     <div style={{ flex: 1 }}>
-                      <label className="form-label">終了時刻</label>
+                      <label className="form-label">{t('calendar.endTime', '終了時刻')}</label>
                       <input type="time" className="form-input" value={eventForm.end_time} onChange={e => setEventForm({ ...eventForm, end_time: e.target.value })} />
                     </div>
                   </div>
                 )}
 
                 <div style={{ marginBottom: 'var(--space-md)' }}>
-                  <label className="form-label">メモ (任意)</label>
-                  <textarea className="form-input" rows={2} value={eventForm.description} onChange={e => setEventForm({ ...eventForm, description: e.target.value })} placeholder="場所や持ち物など" />
+                  <label className="form-label">{t('calendar.notesOptional', 'メモ (任意)')}</label>
+                  <textarea className="form-input" rows={2} value={eventForm.description} onChange={e => setEventForm({ ...eventForm, description: e.target.value })} placeholder={t('calendar.eventNotesPlaceholder', '場所や持ち物など')} />
                 </div>
                 <div style={{ marginBottom: 'var(--space-lg)' }}>
-                  <label className="form-label">表示カラー</label>
+                  <label className="form-label">{t('calendar.displayColor', '表示カラー')}</label>
                   <div style={{ display: 'flex', gap: 'var(--space-sm)', alignItems: 'center' }}>
                     <input type="color" value={eventForm.color} onChange={e => setEventForm({ ...eventForm, color: e.target.value })} style={{ width: 44, height: 36, padding: 0, border: 'none', borderRadius: 4, cursor: 'pointer' }} />
-                    <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)' }}>カレンダー上の帯の色</span>
+                    <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)' }}>{t('calendar.displayColorDesc', 'カレンダー上の帯の色')}</span>
                   </div>
                 </div>
                 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   {editingEvent ? (
                     <button type="button" className="btn btn-ghost" style={{ color: 'var(--color-danger)' }} onClick={handleDeleteEvent}>
-                      <Trash2 size={16} style={{ marginRight: 4 }} /> 削除
+                      <Trash2 size={16} style={{ marginRight: 4 }} /> {t('common.delete', '削除')}
                     </button>
                   ) : <div />}
                   <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
-                    <button type="button" className="btn btn-ghost" onClick={() => setShowEventModal(false)}>キャンセル</button>
-                    <button type="submit" className="btn btn-primary">保存</button>
+                    <button type="button" className="btn btn-ghost" onClick={() => setShowEventModal(false)}>{t('common.cancel', 'キャンセル')}</button>
+                    <button type="submit" className="btn btn-primary">{t('common.save', '保存')}</button>
                   </div>
                 </div>
               </form>

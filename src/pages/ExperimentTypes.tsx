@@ -73,17 +73,17 @@ export default function ExperimentTypes() {
   const syncSharedExperimentType = async (id: number) => {
     try {
       await supabasePost(`/shared/experiment-types/${id}/sync`, {});
-      addToast('success', t('common.syncSuccess', { defaultValue: 'チームへ更新内容を送信しました' }));
+      addToast('success', t('common.syncSuccess'));
     } catch (error: any) {
       addToast('error', error.message || t('common.errorOccurred'));
     }
   };
 
   const unshareSharedExperimentType = async (id: number) => {
-    if (!window.confirm(t('common.confirmUnshare', { defaultValue: 'すべてのチームから共有を解除しますか？' }))) return;
+    if (!window.confirm(t('common.confirmUnshare'))) return;
     try {
       await supabaseDelete(`/shared/experiment-types/local/${id}`);
-      addToast('success', t('common.unshareSuccess', { defaultValue: '共有を解除しました' }));
+      addToast('success', t('common.unshareSuccess'));
     } catch (error: any) {
       addToast('error', error.message || t('common.errorOccurred'));
     }
@@ -166,7 +166,7 @@ export default function ExperimentTypes() {
                   <button
                     className="btn btn-ghost btn-icon btn-sm"
                     onClick={(e) => { e.stopPropagation(); syncSharedExperimentType(exp.id); }}
-                    title={t('common.syncToTeam', { defaultValue: 'チームへ更新内容を送信' })}
+                    title={t('common.syncToTeam')}
                     style={{ color: 'var(--color-primary)' }}
                   >
                     <RefreshCw size={14} />
@@ -174,7 +174,7 @@ export default function ExperimentTypes() {
                   <button
                     className="btn btn-ghost btn-icon btn-sm"
                     onClick={(e) => { e.stopPropagation(); unshareSharedExperimentType(exp.id); }}
-                    title={t('common.unshare', { defaultValue: 'チーム共有解除' })}
+                    title={t('common.unshare')}
                     style={{ color: 'var(--color-warning)' }}
                   >
                     <Unlink size={14} />
