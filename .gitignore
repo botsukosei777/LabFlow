@@ -70,3 +70,7 @@ node.exe
 server.cjs
 update.bat
 start.bat
+
+# AI Agent configs / instructions
+AGENTS.md
+GEMINI.md
