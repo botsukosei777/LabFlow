@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
-import { Book, Plus, Trash2, Calendar as CalendarIcon, FileText, Check, X, Search, Tag, FlaskConical, FileTerminal, Printer, ChevronDown, ChevronRight } from 'lucide-react';
+import { Book, Plus, Trash2, Calendar as CalendarIcon, FileText, Check, X, Search, Tag, FlaskConical, FileTerminal, Printer, ChevronDown, ChevronRight, Clock, History } from 'lucide-react';
 import { api } from '../api/client';
 import MDEditor from '@uiw/react-md-editor';
 import { DayPicker } from 'react-day-picker';
@@ -10,7 +10,18 @@ import { format, subDays, isSameDay } from 'date-fns';
 import { CustomDatabaseManager } from '../components/notebook/CustomDatabaseManager';
 import { DocumentManager } from '../components/notebook/DocumentManager';
 import { PrintNotesModal } from '../components/notebook/PrintNotesModal';
-import { mdPreviewOptions, mdRemarkPlugins, mdRehypePlugins, getCustomMdCommands } from '../utils/markdownConfig';
+import {
+  mdPreviewOptions,
+  mdRemarkPlugins,
+  mdRehypePlugins,
+  getCustomMdCommands,
+  handleMarkdownDragOver,
+  handleMarkdownPasteWithCrop,
+  handleMarkdownDropWithCrop,
+  uploadImageFile,
+  insertTextAtCursor,
+  ImageCropModal
+} from '../utils/markdownConfig';
 
 interface Note {
   id: number;
@@ -19,7 +30,8 @@ interface Note {
   date: string;
   scheduled_experiment_id?: number | null;
   tags?: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 const TEMPLATES = [
@@ -132,9 +144,48 @@ const TagInput = ({ value, onChange, allTags }: { value: string[], onChange: (ta
 export default function Notebook() {
   const { t } = useTranslation();
   const location = useLocation();
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const [cropTargetApi, setCropTargetApi] = useState<{
+    replaceSelection?: (text: string) => void;
+    textarea?: HTMLTextAreaElement;
+  } | null>(null);
+
+  const handleOpenCrop = useCallback((file: File, apiOrTextarea: any) => {
+    setCropFile(file);
+    if (apiOrTextarea && 'replaceSelection' in apiOrTextarea) {
+      setCropTargetApi({ replaceSelection: (text: string) => apiOrTextarea.replaceSelection(text) });
+    } else if (apiOrTextarea instanceof HTMLTextAreaElement) {
+      setCropTargetApi({ textarea: apiOrTextarea });
+    }
+    setCropModalOpen(true);
+  }, []);
+
+  const handleCropConfirm = async (blob: Blob, altText: string) => {
+    try {
+      const data = await uploadImageFile(blob, `${altText || 'image'}.png`);
+      const markdown = `\n![${altText || 'image'}](${data.url})\n`;
+      if (cropTargetApi?.replaceSelection) {
+        cropTargetApi.replaceSelection(markdown);
+      } else if (cropTargetApi?.textarea) {
+        insertTextAtCursor(cropTargetApi.textarea, markdown);
+      }
+    } catch (err: any) {
+      console.error('Image upload failed:', err);
+      alert(err.message || '画像のアップロードに失敗しました');
+    }
+  };
+
   const customCommands = useMemo(() => {
-    return getCustomMdCommands(t('notebook.mathInline', '数式 (インライン): $...$'), t('notebook.mathBlock', '数式ブロック: $$...$$'));
-  }, [t]);
+    return getCustomMdCommands(
+      t('notebook.mathInline', '数式 (インライン): $...$'),
+      t('notebook.mathBlock', '数式ブロック: $$...$$'),
+      t('notebook.insertImage', '画像を挿入 (PC内の画像ファイルを選択)'),
+      (file, api) => handleOpenCrop(file, api),
+      t('notebook.superscript', '上付き文字: <sup>...</sup>'),
+      t('notebook.subscript', '下付き文字: <sub>...</sub>')
+    );
+  }, [t, handleOpenCrop]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [scheduledExperiments, setScheduledExperiments] = useState<any[]>([]);
   
@@ -154,6 +205,7 @@ export default function Notebook() {
   const [editTags, setEditTags] = useState<string[]>([]);
   const [editExperimentId, setEditExperimentId] = useState<number | ''>('');
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [zoomImage, setZoomImage] = useState<{ src: string; alt?: string } | null>(null);
   
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
@@ -443,6 +495,8 @@ export default function Notebook() {
             <div 
               data-color-mode="dark" 
               className="border border-white/10 rounded-lg overflow-hidden"
+              onDrop={(e) => handleMarkdownDropWithCrop(e, handleOpenCrop)}
+              onDragOver={handleMarkdownDragOver}
               onKeyDown={(e) => {
                 if ((e.ctrlKey || e.metaKey) && e.key === 's') {
                   e.preventDefault();
@@ -457,11 +511,15 @@ export default function Notebook() {
                 onChange={(val) => setInlineContent(val || '')}
                 height={200}
                 preview="edit"
+                highlightEnable={false}
                 hideToolbar={false}
                 commands={customCommands}
                 previewOptions={mdPreviewOptions}
                 textareaProps={{
-                  placeholder: t('notebook.contentPlaceholder', '内容 (Markdown)...')
+                  placeholder: t('notebook.contentPlaceholder', '内容 (Markdown)...'),
+                  onPaste: (e) => handleMarkdownPasteWithCrop(e, handleOpenCrop),
+                  onDrop: (e) => handleMarkdownDropWithCrop(e, handleOpenCrop),
+                  onDragOver: handleMarkdownDragOver,
                 }}
                 style={{ borderRadius: '0', border: 'none' }}
               />
@@ -588,9 +646,16 @@ export default function Notebook() {
                       className={`p-3 rounded-xl cursor-pointer transition-all border ${selectedNote?.id === note.id ? 'bg-indigo-500/10 border-indigo-500/30 shadow-[inset_0_0_15px_rgba(99,102,241,0.1)]' : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/10'}`}
                     >
                       <h3 className="font-medium truncate text-sm">{note.title}</h3>
-                      <div className="flex items-center justify-between mt-2">
-                        <span className="flex items-center gap-1 text-xs text-gray-400"><CalendarIcon className="w-3 h-3" /> {note.date}</span>
-                        {note.scheduled_experiment_id && <FlaskConical className="w-3 h-3 text-emerald-400" />}
+                      <div className="flex items-center justify-between mt-2 text-xs text-gray-400">
+                        <span className="flex items-center gap-1"><CalendarIcon className="w-3 h-3" /> {note.date}</span>
+                        <div className="flex items-center gap-2">
+                          {note.updated_at && (
+                            <span className="text-[10px] text-gray-500 font-mono" title={`${t('notebook.updatedAt', '更新日時')}: ${note.updated_at}`}>
+                              {t('notebook.updatedAt', '更新')}: {note.updated_at.replace('T', ' ').substring(0, 10)}
+                            </span>
+                          )}
+                          {note.scheduled_experiment_id && <FlaskConical className="w-3 h-3 text-emerald-400" />}
+                        </div>
                       </div>
                       {tags.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-2">
@@ -699,6 +764,8 @@ export default function Notebook() {
               <label className="block text-sm text-gray-400 mb-1">{t('notebook.content', '内容 (Markdown)')}</label>
               <div 
                 className="flex-1 overflow-hidden h-full rounded-lg border border-white/10"
+                onDrop={(e) => handleMarkdownDropWithCrop(e, handleOpenCrop)}
+                onDragOver={handleMarkdownDragOver}
                 onKeyDown={(e) => {
                   if ((e.ctrlKey || e.metaKey) && e.key === 's') {
                     e.preventDefault();
@@ -711,11 +778,15 @@ export default function Notebook() {
                   onChange={(val) => setEditContent(val || '')}
                   height="100%"
                   preview="live"
+                  highlightEnable={false}
                   hideToolbar={false}
                   commands={customCommands}
                   previewOptions={mdPreviewOptions}
                   textareaProps={{
-                    placeholder: t('notebook.placeholder', '実験の記録やメモをMarkdown形式で記述してください...')
+                    placeholder: t('notebook.placeholder', '実験の記録やメモをMarkdown形式で記述してください...'),
+                    onPaste: (e) => handleMarkdownPasteWithCrop(e, handleOpenCrop),
+                    onDrop: (e) => handleMarkdownDropWithCrop(e, handleOpenCrop),
+                    onDragOver: handleMarkdownDragOver,
                   }}
                   style={{ borderRadius: '0', border: 'none', height: '100%' }}
                 />
@@ -727,11 +798,26 @@ export default function Notebook() {
             <div className="p-6 bg-white/5 flex justify-between items-start">
               <div>
                 <h2 className="text-2xl font-bold text-gray-100">{selectedNote.title}</h2>
-                <div className="flex items-center gap-4 mt-3 text-sm text-gray-400">
-                  <span className="flex items-center gap-1.5"><CalendarIcon className="w-4 h-4" /> {selectedNote.date}</span>
+                <div className="flex flex-wrap items-center gap-3 mt-3 text-xs text-gray-400">
+                  <span className="flex items-center gap-1.5 text-sm font-medium text-gray-200">
+                    <CalendarIcon className="w-4 h-4 text-indigo-400" />
+                    <span>{t('notebook.experimentDate', '実験日')}: {selectedNote.date}</span>
+                  </span>
+                  {selectedNote.created_at && (
+                    <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-white/5 border border-white/10 font-mono text-gray-300">
+                      <Clock className="w-3.5 h-3.5 text-gray-400" />
+                      <span>{t('notebook.createdAt', '作成日時')}: {selectedNote.created_at.replace('T', ' ').substring(0, 16)}</span>
+                    </span>
+                  )}
+                  {selectedNote.updated_at && (
+                    <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-white/5 border border-white/10 font-mono text-gray-300">
+                      <History className="w-3.5 h-3.5 text-gray-400" />
+                      <span>{t('notebook.updatedAt', '更新日時')}: {selectedNote.updated_at.replace('T', ' ').substring(0, 16)}</span>
+                    </span>
+                  )}
                   {selectedNote.scheduled_experiment_id && (
                     <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                      <FlaskConical className="w-4 h-4" /> {t('notebook.hasRelatedExperiment', '関連実験あり')}
+                      <FlaskConical className="w-3.5 h-3.5" /> {t('notebook.hasRelatedExperiment', '関連実験あり')}
                     </span>
                   )}
                 </div>
@@ -764,7 +850,19 @@ export default function Notebook() {
             
             <div className="h-px bg-white/10 w-full" />
             
-            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-[#0d1117]" data-color-mode="dark">
+            <div 
+              className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-[#0d1117]" 
+              data-color-mode="dark"
+              onClick={(e) => {
+                const target = e.target as HTMLElement;
+                if (target.tagName === 'IMG') {
+                  const img = target as HTMLImageElement;
+                  if (img.src) {
+                    setZoomImage({ src: img.src, alt: img.alt });
+                  }
+                }
+              }}
+            >
               <MDEditor.Markdown
                 source={selectedNote.content || t('notebook.emptyContent', '*本文はありません*')}
                 style={{ backgroundColor: 'transparent' }}
@@ -794,6 +892,49 @@ export default function Notebook() {
       onClose={() => setIsPrintModalOpen(false)} 
       notes={notes} 
     />
+
+    {/* ─── Image Crop & Orientation Modal ─── */}
+    <ImageCropModal
+      isOpen={cropModalOpen}
+      file={cropFile}
+      onClose={() => {
+        setCropModalOpen(false);
+        setCropFile(null);
+        setCropTargetApi(null);
+      }}
+      onConfirm={handleCropConfirm}
+    />
+
+    {/* ─── Click-to-Zoom Lightbox for Markdown Images ─── */}
+    {zoomImage && (
+      <div
+        className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 cursor-zoom-out"
+        onClick={() => setZoomImage(null)}
+      >
+        <div 
+          className="relative max-w-[90vw] max-h-[90vh] flex flex-col items-center"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <img
+            src={zoomImage.src}
+            alt={zoomImage.alt || 'Enlarged view'}
+            className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl border border-white/20"
+          />
+          {zoomImage.alt && (
+            <p className="text-xs text-gray-300 mt-2 bg-black/60 px-3 py-1 rounded">
+              {zoomImage.alt}
+            </p>
+          )}
+          <button
+            onClick={() => setZoomImage(null)}
+            className="absolute -top-3 -right-3 p-2 rounded-full bg-gray-800 text-white hover:bg-gray-700 shadow-lg border border-white/20 cursor-pointer"
+            title={t('common.close', '閉じる')}
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    )}
   </div>
 );
 }

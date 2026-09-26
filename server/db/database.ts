@@ -203,6 +203,7 @@ function initDb() {
           tags TEXT DEFAULT '[]',
           linked_experiment_type_ids TEXT DEFAULT '[]',
           linked_literature_ids TEXT DEFAULT '[]',
+          file_path TEXT DEFAULT '',
           created_at TEXT DEFAULT (datetime('now', 'localtime')),
           updated_at TEXT DEFAULT (datetime('now', 'localtime')),
           FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -210,6 +211,7 @@ function initDb() {
       CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id);
     `);
   } catch(e) {}
+  try { dbInstance.exec("ALTER TABLE documents ADD COLUMN file_path TEXT DEFAULT ''"); } catch(e) {}
 
 
   // Sub-protocols migration: make it user-scoped instead of experiment-scoped

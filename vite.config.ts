@@ -18,4 +18,17 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    chunkSizeWarningLimit: 1500,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-katex': ['katex', 'rehype-katex'],
+          'vendor-markdown': ['@uiw/react-md-editor', 'remark-gfm', 'remark-math'],
+          'vendor-calendar': ['react-big-calendar', 'date-fns'],
+          'vendor-icons': ['lucide-react'],
+        },
+      },
+    },
+  },
 });

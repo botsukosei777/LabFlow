@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import * as fs from 'fs';
+import * as path from 'path';
 import { requireAuth } from '../middleware/auth.js';
 import { requireSupabase } from '../middleware/supabase.js';
 import db from '../db/database.js';
@@ -2744,8 +2745,8 @@ router.post('/documents/:id/import', async (req: Request, res: Response) => {
 
     const insertDoc = db.prepare(`
       INSERT INTO documents (
-        user_id, title, content, tags, linked_experiment_type_ids, linked_literature_ids
-      ) VALUES (?, ?, ?, ?, ?, ?)
+        user_id, title, content, tags, linked_experiment_type_ids, linked_literature_ids, file_path
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
 
     const result = insertDoc.run(
@@ -2754,10 +2755,30 @@ router.post('/documents/:id/import', async (req: Request, res: Response) => {
       item.content || '',
       tagsStr,
       JSON.stringify(localExpTypeIds),
-      JSON.stringify(localLitIds)
+      JSON.stringify(localLitIds),
+      ''
     );
 
-    res.status(201).json({ id: Number(result.lastInsertRowid) });
+    const newDocId = Number(result.lastInsertRowid);
+    const cleanTitle = (item.title || 'untitled')
+      .replace(/[\\/:*?"<>|\r\n\t]/g, '_')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .substring(0, 60) || 'document';
+    const fileName = `${newDocId}_${cleanTitle}.md`;
+    const docDir = path.join(process.cwd(), 'data', 'documents');
+    if (!fs.existsSync(docDir)) {
+      fs.mkdirSync(docDir, { recursive: true });
+    }
+    const fullPath = path.join(docDir, fileName);
+    try {
+      fs.writeFileSync(fullPath, item.content || '', 'utf8');
+      db.prepare('UPDATE documents SET file_path = ? WHERE id = ?').run(fileName, newDocId);
+    } catch (fsErr) {
+      console.error('[Shared] Failed to write markdown file for imported document:', fsErr);
+    }
+
+    res.status(201).json({ id: newDocId });
   } catch (error: any) {
     console.error('Error importing document:', error);
     res.status(500).json({ message: 'Failed to import document', details: error.message });

@@ -354,6 +354,7 @@ export interface ResearchDocument {
   tags: string[];
   linked_experiment_type_ids: number[];
   linked_literature_ids: number[];
+  file_path?: string;
   created_at: string;
   updated_at: string;
   linked_experiment_types?: ExperimentType[];

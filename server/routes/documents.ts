@@ -1,7 +1,57 @@
 import { Router } from 'express';
 import db from '../db/database.js';
+import fs from 'fs';
+import path from 'path';
 
 const router = Router();
+const DOCUMENTS_DIR = path.join(process.cwd(), 'data', 'documents');
+
+// Ensure directory exists
+if (!fs.existsSync(DOCUMENTS_DIR)) {
+  fs.mkdirSync(DOCUMENTS_DIR, { recursive: true });
+}
+
+// Generate cross-platform safe filename for markdown file
+export const safeDocumentFilename = (title: string, id: number | string) => {
+  const cleanTitle = (title || 'untitled')
+    .replace(/[\\/:*?"<>|\r\n\t]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .substring(0, 60) || 'document';
+  return `${id}_${cleanTitle}.md`;
+};
+
+// Helper: sync DB document to .md file
+export function syncDocumentToFile(doc: any): string {
+  try {
+    if (!fs.existsSync(DOCUMENTS_DIR)) {
+      fs.mkdirSync(DOCUMENTS_DIR, { recursive: true });
+    }
+    const fileName = doc.file_path || safeDocumentFilename(doc.title, doc.id);
+    const fullPath = path.join(DOCUMENTS_DIR, fileName);
+    if (!fs.existsSync(fullPath)) {
+      fs.writeFileSync(fullPath, doc.content || '', 'utf8');
+    }
+    if (doc.file_path !== fileName) {
+      db.prepare(`UPDATE documents SET file_path = ? WHERE id = ?`).run(fileName, doc.id);
+      doc.file_path = fileName;
+    }
+    return fileName;
+  } catch (err) {
+    console.error(`[Documents] Error syncing doc ${doc.id} to file:`, err);
+    return doc.file_path || '';
+  }
+}
+
+// Startup check: sync all existing documents without files or file_path
+try {
+  const existingDocs = db.prepare(`SELECT * FROM documents`).all() as any[];
+  for (const doc of existingDocs) {
+    syncDocumentToFile(doc);
+  }
+} catch (e) {
+  // DB might be initializing
+}
 
 // Helper: safe JSON parse
 function safeJsonParse<T>(val: any, fallback: T): T {
@@ -42,6 +92,22 @@ router.get('/', (req, res) => {
     const litMap = new Map(allLit.map(l => [l.id, l]));
 
     let documents = rawDocs.map(doc => {
+      // Sync or read from local .md file if available
+      if (doc.file_path) {
+        const fullPath = path.join(DOCUMENTS_DIR, doc.file_path);
+        if (fs.existsSync(fullPath)) {
+          try {
+            doc.content = fs.readFileSync(fullPath, 'utf8');
+          } catch (e) {
+            // Keep DB content fallback
+          }
+        } else {
+          syncDocumentToFile(doc);
+        }
+      } else {
+        syncDocumentToFile(doc);
+      }
+
       const tags = safeJsonParse<string[]>(doc.tags, []);
       const linkedExpIds = safeJsonParse<number[]>(doc.linked_experiment_type_ids, []);
       const linkedLitIds = safeJsonParse<number[]>(doc.linked_literature_ids, []);
@@ -96,6 +162,22 @@ router.get('/:id', (req, res) => {
       return res.status(404).json({ message: 'ドキュメントが見つかりませんでした' });
     }
 
+    // Read latest from file if exists
+    if (doc.file_path) {
+      const fullPath = path.join(DOCUMENTS_DIR, doc.file_path);
+      if (fs.existsSync(fullPath)) {
+        try {
+          doc.content = fs.readFileSync(fullPath, 'utf8');
+        } catch (e) {
+          // Keep DB fallback
+        }
+      } else {
+        syncDocumentToFile(doc);
+      }
+    } else {
+      syncDocumentToFile(doc);
+    }
+
     const tags = safeJsonParse<string[]>(doc.tags, []);
     const linkedExpIds = safeJsonParse<number[]>(doc.linked_experiment_type_ids, []);
     const linkedLitIds = safeJsonParse<number[]>(doc.linked_literature_ids, []);
@@ -133,20 +215,34 @@ router.post('/', (req, res) => {
     const litJson = JSON.stringify(Array.isArray(linked_literature_ids) ? linked_literature_ids : []);
 
     const result = db.prepare(`
-      INSERT INTO documents (user_id, title, content, tags, linked_experiment_type_ids, linked_literature_ids)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO documents (user_id, title, content, tags, linked_experiment_type_ids, linked_literature_ids, file_path)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       req.userId,
       title.trim(),
       content || '',
       tagsJson,
       expJson,
-      litJson
+      litJson,
+      ''
     );
 
-    const created = db.prepare(`SELECT * FROM documents WHERE id = ?`).get(result.lastInsertRowid) as any;
+    const newId = Number(result.lastInsertRowid);
+    const fileName = safeDocumentFilename(title, newId);
+    const fullPath = path.join(DOCUMENTS_DIR, fileName);
+
+    try {
+      fs.writeFileSync(fullPath, content || '', 'utf8');
+      db.prepare(`UPDATE documents SET file_path = ? WHERE id = ?`).run(fileName, newId);
+    } catch (fsErr) {
+      console.error('[Documents] Failed to write markdown file:', fsErr);
+    }
+
+    const created = db.prepare(`SELECT * FROM documents WHERE id = ?`).get(newId) as any;
     res.status(201).json({
       ...created,
+      content: content || '',
+      file_path: fileName,
       tags: safeJsonParse<string[]>(created.tags, []),
       linked_experiment_type_ids: safeJsonParse<number[]>(created.linked_experiment_type_ids, []),
       linked_literature_ids: safeJsonParse<number[]>(created.linked_literature_ids, [])
@@ -165,8 +261,8 @@ router.put('/:id', (req, res) => {
       return res.status(400).json({ message: 'タイトルを入力してください' });
     }
 
-    const doc = db.prepare(`SELECT id FROM documents WHERE id = ? AND user_id = ?`).get(req.params.id, req.userId);
-    if (!doc) {
+    const existing = db.prepare(`SELECT id, title, file_path FROM documents WHERE id = ? AND user_id = ?`).get(req.params.id, req.userId) as any;
+    if (!existing) {
       return res.status(404).json({ message: 'ドキュメントが見つかりませんでした' });
     }
 
@@ -174,9 +270,24 @@ router.put('/:id', (req, res) => {
     const expJson = JSON.stringify(Array.isArray(linked_experiment_type_ids) ? linked_experiment_type_ids : []);
     const litJson = JSON.stringify(Array.isArray(linked_literature_ids) ? linked_literature_ids : []);
 
+    const targetFileName = safeDocumentFilename(title, req.params.id);
+    if (existing.file_path && existing.file_path !== targetFileName) {
+      const oldPath = path.join(DOCUMENTS_DIR, existing.file_path);
+      if (fs.existsSync(oldPath)) {
+        try { fs.unlinkSync(oldPath); } catch (e) {}
+      }
+    }
+
+    const fullPath = path.join(DOCUMENTS_DIR, targetFileName);
+    try {
+      fs.writeFileSync(fullPath, content || '', 'utf8');
+    } catch (fsErr) {
+      console.error('[Documents] Failed to update markdown file:', fsErr);
+    }
+
     db.prepare(`
       UPDATE documents
-      SET title = ?, content = ?, tags = ?, linked_experiment_type_ids = ?, linked_literature_ids = ?, updated_at = datetime('now', 'localtime')
+      SET title = ?, content = ?, tags = ?, linked_experiment_type_ids = ?, linked_literature_ids = ?, file_path = ?, updated_at = datetime('now', 'localtime')
       WHERE id = ? AND user_id = ?
     `).run(
       title.trim(),
@@ -184,6 +295,7 @@ router.put('/:id', (req, res) => {
       tagsJson,
       expJson,
       litJson,
+      targetFileName,
       req.params.id,
       req.userId
     );
@@ -191,6 +303,8 @@ router.put('/:id', (req, res) => {
     const updated = db.prepare(`SELECT * FROM documents WHERE id = ?`).get(req.params.id) as any;
     res.json({
       ...updated,
+      content: content || '',
+      file_path: targetFileName,
       tags: safeJsonParse<string[]>(updated.tags, []),
       linked_experiment_type_ids: safeJsonParse<number[]>(updated.linked_experiment_type_ids, []),
       linked_literature_ids: safeJsonParse<number[]>(updated.linked_literature_ids, [])
@@ -204,6 +318,18 @@ router.put('/:id', (req, res) => {
 // DELETE /api/documents/:id - delete document
 router.delete('/:id', (req, res) => {
   try {
+    const existing = db.prepare(`SELECT id, file_path FROM documents WHERE id = ? AND user_id = ?`).get(req.params.id, req.userId) as any;
+    if (!existing) {
+      return res.status(404).json({ message: 'ドキュメントが見つかりませんでした' });
+    }
+
+    if (existing.file_path) {
+      const fullPath = path.join(DOCUMENTS_DIR, existing.file_path);
+      if (fs.existsSync(fullPath)) {
+        try { fs.unlinkSync(fullPath); } catch (e) {}
+      }
+    }
+
     const result = db.prepare(`DELETE FROM documents WHERE id = ? AND user_id = ?`).run(req.params.id, req.userId);
     if (result.changes === 0) {
       return res.status(404).json({ message: 'ドキュメントが見つかりませんでした' });

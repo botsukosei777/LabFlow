@@ -78,10 +78,11 @@ It provides all the essential management features needed for research activities
 
 ### 📝 Lab Notebook & Documents
 - **Markdown & LaTeX Editor** — Dual-mode editor supporting Rich Text, Markdown, and LaTeX mathematical expressions ($\KaTeX$, inline `$...$` and block `$$...$$`).
-- **Research Documents** — Create independent research notes and documents with tagged organization, side-by-side PDF viewing, and bidirectional links to experiment types and literature.
+- **Direct PC Image Embedding & Pre-Insertion Editor** — Embed local images directly into your notes via toolbar file picker, drag-and-drop, or clipboard paste (`Ctrl + V`). Supports interactive cropping, 90° rotation, horizontal/vertical flipping, aspect ratio presets (1:1, 4:3, 16:9), text annotations, and experimental stamps (Circle 〇, Cross ✕, 4-directional Arrows →, and auto-incrementing Numbers 1, 2, 3...) with customizable sizes, colors, and high-contrast outlines prior to insertion. Files are stored safely in local storage (`data/notebook_images/`).
+- **Research Documents** — Create independent research notes and documents (e.g. paper summaries, protocol overviews) with tagged organization, side-by-side PDF viewing, and bidirectional links to experiment types and literature.
 - **Paper Notebook Printout** — Space-optimized batch printing with customizable date range for seamless pasting into physical lab notebooks.
-- **Local File Storage** — Automatically saved as `.md` files in the `data/notebooks/` directory.
-- **External Editor Support** — Can be edited directly from external tools like Obsidian and VSCode.
+- **Local Markdown Storage** — Automatically saved as `.md` files in `data/notebooks/` and `data/documents/` directories.
+- **External Editor Support** — Can be viewed and edited directly from external tools like Obsidian and VSCode.
 - **Calendar Integration** — Notes are also displayed on the calendar.
 
 ### 📚 Literature Management & 🤝 Team Sharing
@@ -126,7 +127,10 @@ labflow/
 │   └── index.ts            # Server entry point
 ├── data/                   # User data (ignored by Git)
 │   ├── labflow.db          # SQLite database
-│   └── notebooks/          # Markdown notebooks
+│   ├── notebooks/          # Markdown notebooks
+│   ├── documents/          # Markdown research documents
+│   ├── notebook_images/    # Embedded images
+│   └── literature_files/   # Attached PDF files
 ├── scripts/                # Build & Release scripts
 └── package.json
 ```

@@ -714,7 +714,7 @@ a:hover {
   color: #60A5FA;
 }
 
-.tag {
+.tag:not(.token) {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -728,12 +728,12 @@ a:hover {
   transition: all var(--transition-fast);
 }
 
-.tag:hover {
+.tag:not(.token):hover {
   border-color: var(--color-primary);
   color: var(--color-primary);
 }
 
-.tag.active {
+.tag:not(.token).active {
   background: var(--color-primary-dim);
   border-color: var(--color-primary);
   color: var(--color-primary-hover);
@@ -1507,4 +1507,96 @@ a:hover {
   background-color: #ef4444;
   border-radius: 50%;
 }
+
+/* ============================================
+   Fix react-md-editor cursor / font alignment
+   Prevent sup/sub/html tags from altering line-height/font-size
+   in the syntax-highlighted background <pre> element.
+   ============================================ */
+.w-md-editor-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+}
+
+.w-md-editor-text-pre,
+.w-md-editor-text-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+  font-size: 14px !important;
+  line-height: 20px !important;
+  letter-spacing: 0px !important;
+  tab-size: 2 !important;
+}
+
+.w-md-editor-text-input {
+  -webkit-text-fill-color: inherit !important;
+  color: inherit !important;
+}
+
+.w-md-editor-text-pre,
+.w-md-editor-text-pre *,
+.w-md-editor-text-pre > code,
+.w-md-editor-text-pre > code * {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+  font-size: 14px !important;
+  line-height: 20px !important;
+  vertical-align: baseline !important;
+  letter-spacing: 0px !important;
+}
+
+.w-md-editor-text-pre .token,
+.w-md-editor-text-pre .token.tag,
+.w-md-editor-text-pre .tag,
+.w-md-editor-text-pre span,
+.w-md-editor-text-pre sup,
+.w-md-editor-text-pre sub {
+  display: inline !important;
+  align-items: baseline !important;
+  gap: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-size: 14px !important;
+  line-height: 20px !important;
+  vertical-align: baseline !important;
+  position: static !important;
+  top: auto !important;
+  bottom: auto !important;
+  cursor: text !important;
+  letter-spacing: 0px !important;
+}
+
+/* ============================================
+   Markdown Images in Notebook & Documents
+   Constrain images and center horizontally
+   ============================================ */
+.wmde-markdown img,
+.w-md-editor-preview img {
+  max-width: min(100%, 580px) !important;
+  max-height: 440px !important;
+  width: auto !important;
+  height: auto !important;
+  object-fit: contain !important;
+  border-radius: var(--border-radius-md, 8px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background-color: rgba(0, 0, 0, 0.15) !important;
+  margin: 14px auto !important;
+  display: block !important;
+  cursor: zoom-in;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.wmde-markdown p:has(> img),
+.w-md-editor-preview p:has(> img) {
+  text-align: center;
+}
+
+.wmde-markdown img:hover,
+.w-md-editor-preview img:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
+  border-color: rgba(99, 102, 241, 0.5) !important;
+}
+
+
 

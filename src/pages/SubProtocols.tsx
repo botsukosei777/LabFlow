@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext, useMemo } from 'react';
+import { useState, useEffect, useContext, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus, Edit2, Trash2, FileText, Share2, RefreshCw, Unlink, Download } from 'lucide-react';
 import { api } from '../api/client';
@@ -10,14 +10,65 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ShareModal } from '../components/ShareModal';
 import { ImportModal } from '../components/ImportModal';
-import { mdPreviewOptions, mdRemarkPlugins, mdRehypePlugins, getCustomMdCommands } from '../utils/markdownConfig';
+import {
+  mdPreviewOptions,
+  mdRemarkPlugins,
+  mdRehypePlugins,
+  getCustomMdCommands,
+  handleMarkdownDragOver,
+  handleMarkdownPasteWithCrop,
+  handleMarkdownDropWithCrop,
+  uploadImageFile,
+  insertTextAtCursor,
+  ImageCropModal
+} from '../utils/markdownConfig';
 
 export default function SubProtocols() {
   const { t } = useTranslation();
   const { addToast } = useContext(ToastContext);
+
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const [cropTargetApi, setCropTargetApi] = useState<{
+    replaceSelection?: (text: string) => void;
+    textarea?: HTMLTextAreaElement;
+  } | null>(null);
+
+  const handleOpenCrop = useCallback((file: File, apiOrTextarea: any) => {
+    setCropFile(file);
+    if (apiOrTextarea && 'replaceSelection' in apiOrTextarea) {
+      setCropTargetApi({ replaceSelection: (text: string) => apiOrTextarea.replaceSelection(text) });
+    } else if (apiOrTextarea instanceof HTMLTextAreaElement) {
+      setCropTargetApi({ textarea: apiOrTextarea });
+    }
+    setCropModalOpen(true);
+  }, []);
+
+  const handleCropConfirm = async (blob: Blob, altText: string) => {
+    try {
+      const data = await uploadImageFile(blob, `${altText || 'image'}.png`);
+      const markdown = `\n![${altText || 'image'}](${data.url})\n`;
+      if (cropTargetApi?.replaceSelection) {
+        cropTargetApi.replaceSelection(markdown);
+      } else if (cropTargetApi?.textarea) {
+        insertTextAtCursor(cropTargetApi.textarea, markdown);
+      }
+    } catch (err: any) {
+      console.error('Image upload failed:', err);
+      addToast('error', err.message || '画像のアップロードに失敗しました');
+    }
+  };
+
   const customCommands = useMemo(() => {
-    return getCustomMdCommands(t('notebook.mathInline', '数式 (インライン): $...$'), t('notebook.mathBlock', '数式ブロック: $$...$$'));
-  }, [t]);
+    return getCustomMdCommands(
+      t('notebook.mathInline', '数式 (インライン): $...$'),
+      t('notebook.mathBlock', '数式ブロック: $$...$$'),
+      t('notebook.insertImage', '画像を挿入 (PC内の画像ファイルを選択)'),
+      (file, api) => handleOpenCrop(file, api),
+      t('notebook.superscript', '上付き文字: <sup>...</sup>'),
+      t('notebook.subscript', '下付き文字: <sub>...</sub>')
+    );
+  }, [t, handleOpenCrop]);
   const [subProtocols, setSubProtocols] = useState<SubProtocol[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -179,15 +230,25 @@ export default function SubProtocols() {
               </div>
               <div className="form-group" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                 <label className="form-label">{t('subProtocols.content')}</label>
-                <div style={{ flex: 1, border: '1px solid var(--border-default)', borderRadius: 'var(--border-radius-md)', overflow: 'hidden' }}>
+                <div 
+                  style={{ flex: 1, border: '1px solid var(--border-default)', borderRadius: 'var(--border-radius-md)', overflow: 'hidden' }}
+                  onDrop={(e) => handleMarkdownDropWithCrop(e, handleOpenCrop)}
+                  onDragOver={handleMarkdownDragOver}
+                >
                   <MDEditor
                     value={subProtocolForm.content}
                     onChange={val => setSubProtocolForm({ ...subProtocolForm, content: val || '' })}
                     preview="edit"
+                    highlightEnable={false}
                     height="100%"
                     visibleDragbar={false}
                     commands={customCommands}
                     previewOptions={mdPreviewOptions}
+                    textareaProps={{
+                      onPaste: (e) => handleMarkdownPasteWithCrop(e, handleOpenCrop),
+                      onDrop: (e) => handleMarkdownDropWithCrop(e, handleOpenCrop),
+                      onDragOver: handleMarkdownDragOver,
+                    }}
                   />
                 </div>
               </div>
@@ -222,6 +283,18 @@ export default function SubProtocols() {
         onClose={() => setShowImport(false)}
         itemType="sub-protocols"
         onSuccess={() => { setShowImport(false); fetchSubProtocols(); }}
+      />
+
+      {/* ─── Image Crop & Orientation Modal ─── */}
+      <ImageCropModal
+        isOpen={cropModalOpen}
+        file={cropFile}
+        onClose={() => {
+          setCropModalOpen(false);
+          setCropFile(null);
+          setCropTargetApi(null);
+        }}
+        onConfirm={handleCropConfirm}
       />
     </div>
   );

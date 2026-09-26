@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Printer, X, Calendar, ArrowUpDown, Scissors } from 'lucide-react';
 import { format, subDays, startOfMonth, endOfMonth, subMonths } from 'date-fns';
@@ -12,7 +12,8 @@ interface Note {
   date: string;
   scheduled_experiment_id?: number | null;
   tags?: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface PrintNotesModalProps {
@@ -21,10 +22,96 @@ interface PrintNotesModalProps {
   notes: Note[];
 }
 
+interface ContentBlock {
+  id: string;
+  noteId: number;
+  type: 'header' | 'markdown';
+  content?: string;
+  isImage?: boolean;
+  note?: Note;
+  isLastInNote?: boolean;
+}
+
 const parseTags = (tagsStr?: string) => {
   if (!tagsStr) return [];
   try { return JSON.parse(tagsStr); } catch (e) { return []; }
 };
+
+/**
+ * Splits markdown content into atomic blocks so that images are separated
+ * from text paragraphs. This allows the pagination algorithm to move images to the next
+ * page if they don't fit on the current page, leaving preceding text on the current page.
+ */
+function splitMarkdownIntoAtomicBlocks(markdown: string, noteId: number): ContentBlock[] {
+  const blocks: ContentBlock[] = [];
+  const lines = markdown.split('\n');
+  let textBuffer: string[] = [];
+
+  const flushText = () => {
+    const trimmed = textBuffer.join('\n').trim();
+    if (trimmed) {
+      blocks.push({
+        id: `note-${noteId}-b-${blocks.length}`,
+        noteId,
+        type: 'markdown',
+        content: trimmed,
+        isImage: false,
+      });
+    }
+    textBuffer = [];
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // Check if line contains markdown or HTML image
+    const hasImage = /!\[.*?\]\(.*?\)/.test(line) || /<img\s+[^>]*>/i.test(line);
+
+    if (hasImage) {
+      flushText();
+      blocks.push({
+        id: `note-${noteId}-b-${blocks.length}`,
+        noteId,
+        type: 'markdown',
+        content: line.trim(),
+        isImage: true,
+      });
+    } else if (line.trim() === '' && textBuffer.length > 0) {
+      // Empty line boundary: flush if buffer has accumulated several lines to allow paragraph breaks
+      if (textBuffer.length >= 4) {
+        flushText();
+      } else {
+        textBuffer.push(line);
+      }
+    } else {
+      textBuffer.push(line);
+    }
+  }
+
+  flushText();
+  return blocks;
+}
+
+function splitNoteIntoPrintBlocks(note: Note): ContentBlock[] {
+  const blocks: ContentBlock[] = [];
+
+  // 1. Header block
+  blocks.push({
+    id: `note-${note.id}-header`,
+    noteId: note.id,
+    type: 'header',
+    note,
+  });
+
+  // 2. Content blocks
+  const contentBlocks = splitMarkdownIntoAtomicBlocks(note.content || '', note.id);
+  blocks.push(...contentBlocks);
+
+  if (blocks.length > 0) {
+    blocks[blocks.length - 1].isLastInNote = true;
+  }
+
+  return blocks;
+}
 
 export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
   isOpen,
@@ -35,10 +122,15 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const [startDate, setStartDate] = useState<string>(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState<string>(todayStr);
-  const [sortAsc, setSortAsc] = useState<boolean>(true); // デフォルトは時系列貼り付けしやすい昇順
+  const [sortAsc, setSortAsc] = useState<boolean>(true);
   const [fontSize, setFontSize] = useState<'compact' | 'normal'>('compact');
 
-  // クイック選択プリセット
+  const measureRef = useRef<HTMLDivElement>(null);
+  const heightProbeRef = useRef<HTMLDivElement>(null);
+  const [measureVersion, setMeasureVersion] = useState(0);
+  const [pages, setPages] = useState<ContentBlock[][]>([]);
+
+  // Presets
   const handlePreset = (type: 'week' | 'this_month' | 'last_month' | 'all') => {
     const now = new Date();
     if (type === 'week') {
@@ -57,7 +149,7 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
     }
   };
 
-  // フィルタリング & ソート
+  // Filter & Sort
   const targetNotes = useMemo(() => {
     return notes
       .filter((note) => {
@@ -73,11 +165,168 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
       });
   }, [notes, startDate, endDate, sortAsc]);
 
+  // Convert notes into flat atomic blocks
+  const allBlocks = useMemo(() => {
+    const result: ContentBlock[] = [];
+    for (const note of targetNotes) {
+      result.push(...splitNoteIntoPrintBlocks(note));
+    }
+    return result;
+  }, [targetNotes]);
+
+  // A4 Pagination Algorithm: Partition blocks into exact A4 pages
+  useEffect(() => {
+    if (allBlocks.length === 0) {
+      setPages([]);
+      return;
+    }
+
+    // Measure maximum content height for A4 (297mm - margins - footer)
+    const pageMaxHeight = heightProbeRef.current?.clientHeight || 980;
+    const resultPages: ContentBlock[][] = [];
+    let currentPage: ContentBlock[] = [];
+    let currentHeight = 0;
+
+    for (let i = 0; i < allBlocks.length; i++) {
+      const block = allBlocks[i];
+      const el = document.getElementById(`measure-${block.id}`);
+      const elHeight = el ? Math.ceil(el.getBoundingClientRect().height) : 32;
+
+      // Avoid leaving an orphan header at the very bottom of a page
+      const isOrphanHeader = block.type === 'header' && (currentHeight + elHeight + 70 > pageMaxHeight);
+
+      // Check if block exceeds remaining height on current page
+      if ((currentHeight + elHeight > pageMaxHeight && currentPage.length > 0) || isOrphanHeader) {
+        if (currentPage.length > 0) {
+          resultPages.push(currentPage);
+          currentPage = [block];
+          currentHeight = elHeight;
+        } else {
+          resultPages.push([block]);
+          currentPage = [];
+          currentHeight = 0;
+        }
+      } else {
+        currentPage.push(block);
+        currentHeight += elHeight;
+      }
+    }
+
+    if (currentPage.length > 0) {
+      resultPages.push(currentPage);
+    }
+
+    setPages(resultPages);
+  }, [allBlocks, fontSize, measureVersion]);
+
   const handlePrint = () => {
     window.print();
   };
 
   if (!isOpen) return null;
+
+  const renderBlock = (block: ContentBlock, isMeasuring = false) => {
+    const isCompact = fontSize === 'compact';
+
+    if (block.type === 'header' && block.note) {
+      const note = block.note;
+      const tags = parseTags(note.tags);
+
+      return (
+        <div className="print-note-header pt-2 pb-1 mb-1 first:pt-0">
+          <div className="flex items-start gap-2 mb-1">
+            {/* Left Date Badge */}
+            <div className="print-date-badge flex-shrink-0 w-[82px] px-1.5 py-0.5 bg-gray-900 text-white rounded text-center text-xs font-bold font-mono tracking-tight leading-tight border border-gray-900">
+              {note.date}
+            </div>
+
+            {/* Title, tags, timestamps */}
+            <div className="flex-1 flex flex-wrap items-baseline gap-2 min-w-0">
+              <h3
+                className={`font-bold text-gray-900 tracking-tight leading-tight break-words ${
+                  isCompact ? 'text-xs' : 'text-sm'
+                }`}
+              >
+                {note.title}
+              </h3>
+
+              {tags.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {tags.map((t: string, i: number) => (
+                    <span
+                      key={i}
+                      className="print-tag-badge text-[9px] px-1.5 py-0.2 rounded bg-gray-100 text-gray-700 border border-gray-300 font-medium"
+                    >
+                      #{t}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {note.scheduled_experiment_id && (
+                <span className="print-exp-badge text-[9px] px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-800 border border-emerald-300 font-medium">
+                  {t('notebook.hasRelatedExperiment', '関連実験あり')}
+                </span>
+              )}
+
+              {(note.created_at || note.updated_at) && (
+                <div className="print-timestamps ml-auto flex items-center gap-2 text-[9px] text-gray-500 font-mono">
+                  {note.created_at && (
+                    <span>
+                      {t('notebook.createdAt', '作成')}: {note.created_at.replace('T', ' ').substring(0, 16)}
+                    </span>
+                  )}
+                  {note.updated_at && (
+                    <span>
+                      {t('notebook.updatedAt', '更新')}: {note.updated_at.replace('T', ' ').substring(0, 16)}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className={`print-block-wrapper ${block.isImage ? 'print-image-block' : 'print-text-block'}`}>
+        <div
+          className={`text-gray-800 leading-relaxed overflow-hidden break-words ${
+            isCompact ? 'text-[11px] prose-compact' : 'text-xs'
+          }`}
+          data-color-mode="light"
+          style={{
+            lineHeight: isCompact ? '1.38' : '1.5',
+            wordBreak: 'break-word',
+            overflowWrap: 'anywhere',
+          }}
+        >
+          <MDEditor.Markdown
+            source={block.content || ''}
+            style={{
+              backgroundColor: 'transparent',
+              color: '#1f2937',
+              fontSize: isCompact ? '11px' : '12px',
+              wordBreak: 'break-word',
+              overflowWrap: 'anywhere',
+            }}
+            remarkPlugins={mdRemarkPlugins}
+            rehypePlugins={mdRehypePlugins}
+          />
+        </div>
+
+        {block.isLastInNote && (
+          <div className="my-2 border-b-2 border-dashed border-gray-300 flex items-center justify-between text-[8px] text-gray-400 font-mono">
+            <span className="flex items-center gap-1">
+              <Scissors className="w-2.5 h-2.5" />
+              {t('notebook.printModal.cutLine', '切り取り線')}
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div
@@ -88,54 +337,83 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
         }
       }}
     >
-      {/* 印刷用CSSの埋め込み */}
+      {/* 印刷用 & プレビュー用 CSS */}
       <style>{`
+        /* =========================================================
+           A4 Screen & Print CSS
+           ========================================================= */
+        .a4-sheet {
+          width: 210mm;
+          height: 297mm;
+          min-height: 297mm;
+          max-height: 297mm;
+          padding: 12mm 14mm;
+          box-sizing: border-box;
+          background-color: #ffffff;
+          color: #111827;
+          position: relative;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .a4-sheet img {
+          max-width: 280px !important;
+          max-height: 180px !important;
+          width: auto !important;
+          height: auto !important;
+          object-fit: contain !important;
+          display: block !important;
+          margin: 6px auto !important;
+          border: 1px solid #d1d5db !important;
+          border-radius: 4px !important;
+        }
+
+        .a4-sheet.compact img {
+          max-width: 240px !important;
+          max-height: 150px !important;
+          margin: 4px auto !important;
+        }
+
+        .a4-sheet p:has(> img) {
+          text-align: center !important;
+          margin: 4px 0 !important;
+        }
+
         @media print {
-          /* 1. ページ全体・html・bodyの背景を純白(#ffffff)に強制 */
           html, body {
             background: #ffffff !important;
             background-color: #ffffff !important;
             color: #111827 !important;
             margin: 0 !important;
             padding: 0 !important;
-            width: 100% !important;
+            width: 210mm !important;
             height: auto !important;
-            min-height: 0 !important;
-            overflow: visible !important;
           }
 
-          /* 2. bodyの暗い背景グラデーション等の擬似要素を完全無効化 */
           body::before, body::after {
             display: none !important;
-            content: none !important;
-            background: none !important;
           }
 
-          /* 3. 印刷ページの余白指定 */
           @page {
-            margin: 8mm;
-            size: auto;
+            size: A4 portrait;
+            margin: 0;
           }
 
-          /* 4. アプリ構造要素やモーダルオーバーレイの暗い背景・固定配置を完全に解除して白背景化 */
           #root, .app-layout, .app-main, .app-content, .print-modal-overlay {
             background: #ffffff !important;
             background-color: #ffffff !important;
             margin: 0 !important;
             padding: 0 !important;
             position: static !important;
-            width: 100% !important;
-            height: auto !important;
-            min-height: 0 !important;
+            width: 210mm !important;
             border: none !important;
             box-shadow: none !important;
             backdrop-filter: none !important;
             -webkit-backdrop-filter: none !important;
-            overflow: visible !important;
           }
 
-          /* 5. 画面上の全通常要素（ヘッダー・サイドバー・設定モーダル等）を非表示 */
-          .no-print, .sidebar, header {
+          .no-print {
             display: none !important;
           }
 
@@ -143,24 +421,50 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
             visibility: hidden;
           }
 
-          #printable-notes-area, #printable-notes-area * {
+          #printable-a4-pages, #printable-a4-pages * {
             visibility: visible;
           }
 
-          #printable-notes-area {
+          #printable-a4-pages {
             position: absolute;
             left: 0;
             top: 0;
-            width: 100% !important;
+            width: 210mm !important;
             margin: 0 !important;
             padding: 0 !important;
             background: #ffffff !important;
-            background-color: #ffffff !important;
-            color: #111827 !important;
             display: block !important;
+            gap: 0 !important;
           }
 
-          /* 6. 日付バッジ「だけ」を黒背景白文字としてピンポイントで印刷強制 */
+          .page-wrapper {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 210mm !important;
+          }
+
+          .a4-sheet {
+            width: 210mm !important;
+            height: 297mm !important;
+            min-height: 297mm !important;
+            max-height: 297mm !important;
+            margin: 0 !important;
+            padding: 12mm 14mm !important;
+            box-shadow: none !important;
+            border: none !important;
+            border-radius: 0 !important;
+            page-break-after: always !important;
+            break-after: page !important;
+            overflow: hidden !important;
+            box-sizing: border-box !important;
+            background: #ffffff !important;
+          }
+
+          .a4-sheet:last-child {
+            page-break-after: auto !important;
+            break-after: auto !important;
+          }
+
           .print-date-badge {
             background-color: #111827 !important;
             color: #ffffff !important;
@@ -185,17 +489,19 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
             border: 1px solid #a7f3d0 !important;
           }
 
-          /* 7. ノートブロックの改ページ制御と白背景 */
-          .print-note-block {
-            break-inside: avoid;
-            page-break-inside: avoid;
-            background: #ffffff !important;
-            background-color: #ffffff !important;
-            border-color: #94a3b8 !important;
-            box-shadow: none !important;
+          .print-timestamps {
+            color: #4b5563 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
 
-          /* Markdownの文字色・背景リセット */
+          .a4-sheet img {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
           .wmde-markdown {
             background-color: transparent !important;
             color: #111827 !important;
@@ -213,9 +519,46 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
         }
       `}</style>
 
-      {/* モーダルコンテナ */}
-      <div className="bg-[#131722] border border-white/10 rounded-2xl w-full max-w-5xl h-[90vh] max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-gray-100 no-print my-auto">
-        {/* モーダルヘッダー */}
+      {/* Hidden measurement container */}
+      <div
+        ref={measureRef}
+        onLoadCapture={() => setMeasureVersion(v => v + 1)}
+        style={{
+          position: 'absolute',
+          left: '-99999px',
+          top: 0,
+          width: 'calc(210mm - 28mm)',
+          visibility: 'hidden',
+          pointerEvents: 'none',
+          zIndex: -1,
+        }}
+        aria-hidden="true"
+      >
+        {allBlocks.map(block => (
+          <div key={block.id} id={`measure-${block.id}`}>
+            {renderBlock(block, true)}
+          </div>
+        ))}
+      </div>
+
+      {/* Height probe for exact printable height: 297mm - 24mm (margins) - 12mm (footer) = 261mm */}
+      <div
+        ref={heightProbeRef}
+        style={{
+          position: 'absolute',
+          left: '-99999px',
+          top: 0,
+          height: '261mm',
+          visibility: 'hidden',
+          pointerEvents: 'none',
+          zIndex: -1,
+        }}
+        aria-hidden="true"
+      />
+
+      {/* Modal Container */}
+      <div className="bg-[#131722] border border-white/10 rounded-2xl w-full max-w-5xl h-[92vh] max-h-[92vh] flex flex-col shadow-2xl overflow-hidden text-gray-100 no-print my-auto">
+        {/* Modal Header */}
         <div className="p-3.5 sm:p-4 px-4 sm:px-6 border-b border-white/10 flex justify-between items-center bg-white/5 flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg flex-shrink-0">
@@ -241,9 +584,9 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
           </button>
         </div>
 
-        {/* コントロールバー（印刷設定エリア） */}
+        {/* Controls Bar */}
         <div className="p-3 sm:p-4 px-4 sm:px-6 bg-[#0c0f17]/90 border-b border-white/10 flex flex-col gap-2.5 flex-shrink-0">
-          {/* 上段: 期間指定 & クイックプリセット */}
+          {/* Top row: Date range & presets */}
           <div className="flex flex-wrap items-center justify-between gap-2.5">
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               <div className="flex items-center gap-1.5 text-xs text-gray-300 font-medium flex-shrink-0">
@@ -267,7 +610,7 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
               </div>
             </div>
 
-            {/* クイックプリセット */}
+            {/* Quick presets */}
             <div className="flex flex-wrap items-center gap-1">
               <span className="text-[11px] text-gray-400 mr-1 hidden sm:inline">{t('notebook.printModal.presets', 'プリセット:')}</span>
               <button
@@ -297,10 +640,10 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
             </div>
           </div>
 
-          {/* 下段: 表示設定（並び替え・文字サイズ） & 印刷ボタン */}
+          {/* Bottom row: Sort, font size, and print button */}
           <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-white/5">
             <div className="flex flex-wrap items-center gap-2.5">
-              {/* ソート */}
+              {/* Sort button */}
               <button
                 onClick={() => setSortAsc(!sortAsc)}
                 className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 transition-colors"
@@ -310,7 +653,7 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
                 <span>{sortAsc ? t('notebook.printModal.sortOldest', '古い順 (時系列)') : t('notebook.printModal.sortNewest', '新しい順')}</span>
               </button>
 
-              {/* フォントサイズ・密度切り替え */}
+              {/* Font size switcher */}
               <div className="flex items-center text-xs bg-white/5 rounded-lg p-0.5 border border-white/10">
                 <button
                   onClick={() => setFontSize('compact')}
@@ -330,9 +673,16 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
                   {t('notebook.printModal.normal', '標準')}
                 </button>
               </div>
+
+              {/* Total pages indicator */}
+              {pages.length > 0 && (
+                <span className="text-xs text-indigo-300 font-mono bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded">
+                  {t('notebook.printModal.totalPages', { count: pages.length })}
+                </span>
+              )}
             </div>
 
-            {/* 印刷ボタン */}
+            {/* Print Execute Button */}
             <button
               onClick={handlePrint}
               disabled={targetNotes.length === 0}
@@ -344,113 +694,51 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
           </div>
         </div>
 
-        {/* プレビュー表示エリア（全内容を縦スクロール可能） */}
-        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 sm:p-6 bg-slate-900/50 print-preview-scroll">
-          <div className="w-full max-w-4xl mx-auto bg-white text-gray-900 rounded-lg p-4 sm:p-6 shadow-xl min-h-[200px] h-fit">
-            <div className="flex items-center justify-between pb-3 mb-3 border-b border-gray-200">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  {t('notebook.printModal.preview', '印刷プレビュー')}
-                </span>
-                <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full font-medium">
-                  {t('notebook.printModal.notesCount', { count: targetNotes.length })}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-                <Scissors className="w-3.5 h-3.5" />
-                <span>{t('notebook.printModal.scissorsNotice', '点線は切り取り線として機能します')}</span>
-              </div>
+        {/* Scrollable Preview Area with A4 Sheets */}
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto p-4 sm:p-8 bg-[#090d16] print-preview-scroll">
+          {targetNotes.length === 0 ? (
+            <div className="w-full max-w-4xl mx-auto bg-white text-gray-900 rounded-lg p-8 shadow-xl text-center py-16 text-gray-400 text-sm">
+              {t('notebook.printModal.noNotesInRange', '指定された期間のノートは見つかりませんでした。期間を調整してください。')}
             </div>
+          ) : (
+            <div id="printable-a4-pages" className="flex flex-col items-center gap-8 py-2">
+              {pages.map((pageBlocks, pageIdx) => (
+                <div key={pageIdx} className="flex flex-col items-center page-wrapper w-full max-w-[210mm]">
+                  {/* Screen-only page indicator above each sheet */}
+                  <div className="text-xs text-gray-400 mb-2 font-mono flex items-center justify-between w-full px-1 no-print">
+                    <span className="font-semibold text-indigo-300 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-indigo-400 inline-block" />
+                      {t('notebook.printModal.a4Page', { current: pageIdx + 1, total: pages.length })}
+                    </span>
+                    <span className="text-gray-500">210 × 297 mm (A4)</span>
+                  </div>
 
-            {targetNotes.length === 0 ? (
-              <div className="text-center py-16 text-gray-400 text-sm">
-                {t('notebook.printModal.noNotesInRange', '指定された期間のノートは見つかりませんでした。期間を調整してください。')}
-              </div>
-            ) : (
-              <div className="flex flex-col">
-                {targetNotes.map((note, index) => {
-                  const tags = parseTags(note.tags);
-                  const isCompact = fontSize === 'compact';
-
-                  return (
-                    <div
-                      key={note.id}
-                      className={`print-note-block pb-3 pt-3 first:pt-0 ${
-                        index !== targetNotes.length - 1 ? 'border-b-2 border-dashed border-gray-300' : ''
-                      }`}
-                    >
-                      {/* 上部: 左端に日付、その横にタイトル・タグ */}
-                      <div className="flex items-start gap-2.5 mb-1.5">
-                        {/* 左端 日付バッジ（幅固定・黒背景白文字） */}
-                        <div className="flex-shrink-0 w-[90px] px-2 py-0.5 bg-gray-900 text-white rounded text-center text-xs font-bold font-mono tracking-tight leading-tight border border-gray-900">
-                          {note.date}
+                  {/* The A4 Paper Sheet */}
+                  <div
+                    className={`a4-sheet ${fontSize === 'compact' ? 'compact' : 'normal'} shadow-2xl rounded-sm border border-gray-300`}
+                  >
+                    <div className="flex-1 overflow-hidden">
+                      {pageBlocks.map((block) => (
+                        <div key={block.id} className="print-item-wrapper">
+                          {renderBlock(block, false)}
                         </div>
-
-                        {/* タイトルとタグ・実験情報 */}
-                        <div className="flex-1 flex flex-wrap items-baseline gap-2 min-w-0">
-                          <h3
-                            className={`font-bold text-gray-900 tracking-tight leading-tight break-words ${
-                              isCompact ? 'text-sm' : 'text-base'
-                            }`}
-                          >
-                            {note.title}
-                          </h3>
-
-                          {/* タグ表示 */}
-                          {tags.length > 0 && (
-                            <div className="flex flex-wrap gap-1">
-                              {tags.map((t: string, i: number) => (
-                                <span
-                                  key={i}
-                                  className="text-[10px] px-1.5 py-0.2 rounded bg-gray-100 text-gray-700 border border-gray-300 font-medium"
-                                >
-                                  #{t}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* 関連実験 */}
-                          {note.scheduled_experiment_id && (
-                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-800 border border-emerald-300 font-medium">
-                              {t('notebook.hasRelatedExperiment', '関連実験あり')}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* その下に内容（Markdown） */}
-                      <div
-                        className={`pl-1 pr-1 text-gray-800 leading-relaxed overflow-hidden break-words ${
-                          isCompact ? 'text-[11px] prose-compact' : 'text-xs'
-                        }`}
-                        data-color-mode="light"
-                        style={{
-                          lineHeight: isCompact ? '1.38' : '1.5',
-                          wordBreak: 'break-word',
-                          overflowWrap: 'anywhere',
-                        }}
-                      >
-                        <MDEditor.Markdown
-                          source={note.content || t('notebook.emptyContent', '*本文なし*')}
-                          style={{
-                            backgroundColor: 'transparent',
-                            color: '#1f2937',
-                            fontSize: isCompact ? '11px' : '12px',
-                            wordBreak: 'break-word',
-                            overflowWrap: 'anywhere',
-                          }}
-                        />
-                      </div>
+                      ))}
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+
+                    {/* A4 Sheet Footer */}
+                    <div className="pt-2 border-t border-gray-200 flex justify-between items-center text-[9px] text-gray-400 font-mono mt-auto flex-shrink-0">
+                      <span>LabFlow - {t('notebook.title', '実験ノート')}</span>
+                      <span className="font-bold text-gray-600">- {pageIdx + 1} / {pages.length} -</span>
+                      <span>{todayStr}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* フッター */}
+        {/* Modal Footer */}
         <div className="p-3 px-4 sm:px-6 bg-white/5 border-t border-white/10 flex justify-between items-center text-xs text-gray-400 flex-shrink-0">
           <span>
             {t('notebook.printModal.selectedCount', {
@@ -476,129 +764,6 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
             </button>
           </div>
         </div>
-      </div>
-
-      {/* 印刷専用エリア（普段は不可視、window.print() 時に #printable-notes-area が描画される） */}
-      <div id="printable-notes-area" className="hidden print:block text-black bg-white">
-        {targetNotes.map((note, index) => {
-          const tags = parseTags(note.tags);
-          const isCompact = fontSize === 'compact';
-
-          return (
-            <div
-              key={`print-${note.id}`}
-              className={`print-note-block pb-2 pt-2 first:pt-0 ${
-                index !== targetNotes.length - 1 ? 'border-b border-dashed border-gray-400' : ''
-              }`}
-              style={{
-                pageBreakInside: 'avoid',
-                breakInside: 'avoid',
-                marginBottom: '4px',
-              }}
-            >
-              {/* 上部: 左端日付 + 横にタイトル */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'baseline',
-                  gap: '8px',
-                  marginBottom: '2px',
-                }}
-              >
-                {/* 左端 日付（印刷時も黒背景白文字を完全保持） */}
-                <div
-                  className="print-date-badge"
-                  style={{
-                    WebkitPrintColorAdjust: 'exact',
-                    printColorAdjust: 'exact',
-                    flexShrink: 0,
-                    width: '85px',
-                    padding: '2.5px 4px',
-                    backgroundColor: '#111827',
-                    color: '#ffffff',
-                    borderRadius: '3px',
-                    textAlign: 'center',
-                    fontSize: '11px',
-                    fontWeight: 'bold',
-                    fontFamily: 'monospace',
-                    letterSpacing: '-0.02em',
-                    border: '1px solid #111827',
-                  }}
-                >
-                  {note.date}
-                </div>
-
-                {/* タイトルとタグ */}
-                <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '6px' }}>
-                  <span
-                    style={{
-                      fontWeight: 'bold',
-                      fontSize: isCompact ? '12px' : '13px',
-                      color: '#111827',
-                      lineHeight: '1.2',
-                    }}
-                  >
-                    {note.title}
-                  </span>
-                  {tags.map((t: string, i: number) => (
-                    <span
-                      key={i}
-                      className="print-tag-badge"
-                      style={{
-                        fontSize: '9px',
-                        padding: '1px 4px',
-                        backgroundColor: '#f3f4f6',
-                        color: '#374151',
-                        border: '1px solid #d1d5db',
-                        borderRadius: '2px',
-                      }}
-                    >
-                      #{t}
-                    </span>
-                  ))}
-                  {note.scheduled_experiment_id && (
-                    <span
-                      className="print-exp-badge"
-                      style={{
-                        fontSize: '9px',
-                        padding: '1px 4px',
-                        backgroundColor: '#ecfdf5',
-                        color: '#065f46',
-                        border: '1px solid #a7f3d0',
-                        borderRadius: '2px',
-                      }}
-                    >
-                      {t('notebook.hasRelatedExperiment', '関連実験あり')}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* 下部: 本文 (Markdown) */}
-              <div
-                style={{
-                  fontSize: isCompact ? '10.5px' : '11.5px',
-                  lineHeight: isCompact ? '1.35' : '1.45',
-                  color: '#1f2937',
-                  paddingLeft: '2px',
-                }}
-                data-color-mode="light"
-              >
-                <MDEditor.Markdown
-                  source={note.content || t('notebook.emptyContent', '*本文なし*')}
-                  style={{
-                    backgroundColor: 'transparent',
-                    color: '#111827',
-                    fontSize: isCompact ? '10.5px' : '11.5px',
-                    lineHeight: isCompact ? '1.35' : '1.45',
-                  }}
-                  remarkPlugins={mdRemarkPlugins}
-                  rehypePlugins={mdRehypePlugins}
-                />
-              </div>
-            </div>
-          );
-        })}
       </div>
     </div>
   );

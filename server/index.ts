@@ -54,6 +54,11 @@ app.use('/api/reagents', requireAuth, reagentRoutes);
 app.use('/api/routines', requireAuth, routineRoutes);
 app.use('/api/settings', requireAuth, settingsRoutes);
 app.use('/api/events', requireAuth, eventRoutes);
+const NOTEBOOK_IMAGES_DIR = path.join(process.cwd(), 'data', 'notebook_images');
+if (!fs.existsSync(NOTEBOOK_IMAGES_DIR)) {
+  fs.mkdirSync(NOTEBOOK_IMAGES_DIR, { recursive: true });
+}
+app.use('/api/notebook/images', express.static(NOTEBOOK_IMAGES_DIR, { maxAge: '30d' }));
 app.use('/api/notebook', requireAuth, notebookRoutes);
 app.use('/api/mini_memos', requireAuth, miniMemosRoutes);
 app.use('/api/quick_links', requireAuth, quickLinksRoutes);

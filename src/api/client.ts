@@ -57,6 +57,24 @@ class ApiClient {
       method: 'DELETE',
     });
   }
+
+  async upload<T>(url: string, formData: FormData): Promise<T> {
+    const token = localStorage.getItem('labflow-auth-token');
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    const response = await fetch(`${API_BASE}${url}`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Upload failed' }));
+      throw new Error(error.message || `HTTP ${response.status}`);
+    }
+    return response.json();
+  }
 }
 
 export const api = new ApiClient();

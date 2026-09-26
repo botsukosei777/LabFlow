@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useContext } from 'react';
+import React, { useState, useEffect, useMemo, useContext, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   FileText, Plus, Search, Trash2, Edit3, Download,
@@ -10,7 +10,18 @@ import MDEditor from '@uiw/react-md-editor';
 import { api } from '../../api/client';
 import { ToastContext } from '../../App';
 import type { ResearchDocument, ExperimentType, LiteratureItem } from '../../types';
-import { mdPreviewOptions, mdRemarkPlugins, mdRehypePlugins, getCustomMdCommands } from '../../utils/markdownConfig';
+import {
+  mdPreviewOptions,
+  mdRemarkPlugins,
+  mdRehypePlugins,
+  getCustomMdCommands,
+  handleMarkdownDragOver,
+  handleMarkdownPasteWithCrop,
+  handleMarkdownDropWithCrop,
+  uploadImageFile,
+  insertTextAtCursor,
+  ImageCropModal
+} from '../../utils/markdownConfig';
 import { ShareModal } from '../ShareModal';
 import { ImportModal } from '../ImportModal';
 
@@ -18,9 +29,48 @@ export const DocumentManager: React.FC = () => {
   const { t } = useTranslation();
   const { addToast } = useContext(ToastContext);
 
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const [cropTargetApi, setCropTargetApi] = useState<{
+    replaceSelection?: (text: string) => void;
+    textarea?: HTMLTextAreaElement;
+  } | null>(null);
+
+  const handleOpenCrop = useCallback((file: File, apiOrTextarea: any) => {
+    setCropFile(file);
+    if (apiOrTextarea && 'replaceSelection' in apiOrTextarea) {
+      setCropTargetApi({ replaceSelection: (text: string) => apiOrTextarea.replaceSelection(text) });
+    } else if (apiOrTextarea instanceof HTMLTextAreaElement) {
+      setCropTargetApi({ textarea: apiOrTextarea });
+    }
+    setCropModalOpen(true);
+  }, []);
+
+  const handleCropConfirm = async (blob: Blob, altText: string) => {
+    try {
+      const data = await uploadImageFile(blob, `${altText || 'image'}.png`);
+      const markdown = `\n![${altText || 'image'}](${data.url})\n`;
+      if (cropTargetApi?.replaceSelection) {
+        cropTargetApi.replaceSelection(markdown);
+      } else if (cropTargetApi?.textarea) {
+        insertTextAtCursor(cropTargetApi.textarea, markdown);
+      }
+    } catch (err: any) {
+      console.error('Image upload failed:', err);
+      addToast('error', err.message || '画像のアップロードに失敗しました');
+    }
+  };
+
   const customCommands = useMemo(() => {
-    return getCustomMdCommands(t('notebook.mathInline', '数式 (インライン): $...$'), t('notebook.mathBlock', '数式ブロック: $$...$$'));
-  }, [t]);
+    return getCustomMdCommands(
+      t('notebook.mathInline', '数式 (インライン): $...$'),
+      t('notebook.mathBlock', '数式ブロック: $$...$$'),
+      t('notebook.insertImage', '画像を挿入 (PC内の画像ファイルを選択)'),
+      (file, api) => handleOpenCrop(file, api),
+      t('notebook.superscript', '上付き文字: <sup>...</sup>'),
+      t('notebook.subscript', '下付き文字: <sub>...</sub>')
+    );
+  }, [t, handleOpenCrop]);
 
   const [documents, setDocuments] = useState<ResearchDocument[]>([]);
   const [allTags, setAllTags] = useState<string[]>([]);
@@ -479,12 +529,23 @@ export const DocumentManager: React.FC = () => {
               >
                 <div>
                   <div className="flex items-start justify-between gap-2 mb-2">
-                    <h4
-                      onClick={() => handleOpenDetail(doc)}
-                      className="font-semibold text-gray-100 group-hover:text-emerald-300 cursor-pointer line-clamp-2 text-sm leading-snug"
-                    >
-                      {doc.title}
-                    </h4>
+                    <div className="min-w-0 flex-1">
+                      <h4
+                        onClick={() => handleOpenDetail(doc)}
+                        className="font-semibold text-gray-100 group-hover:text-emerald-300 cursor-pointer line-clamp-2 text-sm leading-snug"
+                      >
+                        {doc.title}
+                      </h4>
+                      {doc.file_path && (
+                        <div
+                          className="flex items-center gap-1 text-[11px] text-emerald-400/90 font-mono mt-0.5 truncate max-w-full"
+                          title={t('documents.savedPath', '保存先: data/documents/{{path}}', { path: doc.file_path })}
+                        >
+                          <FileText className="w-3 h-3 flex-shrink-0 text-emerald-400" />
+                          <span className="truncate">{doc.file_path}</span>
+                        </div>
+                      )}
+                    </div>
                     <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => setShareTarget({ id: doc.id, name: doc.title })}
@@ -994,6 +1055,8 @@ export const DocumentManager: React.FC = () => {
                       <div 
                         data-color-mode="dark" 
                         className="rounded-lg overflow-hidden border border-white/10 flex flex-col h-[520px]"
+                        onDrop={(e) => handleMarkdownDropWithCrop(e, handleOpenCrop)}
+                        onDragOver={handleMarkdownDragOver}
                         onKeyDown={(e) => {
                           if ((e.ctrlKey || e.metaKey) && e.key === 's') {
                             e.preventDefault();
@@ -1006,8 +1069,15 @@ export const DocumentManager: React.FC = () => {
                           onChange={(val) => setFormData({ ...formData, content: val || '' })}
                           height={470}
                           preview="edit"
+                          highlightEnable={false}
                           commands={customCommands}
                           previewOptions={mdPreviewOptions}
+                          textareaProps={{
+                            placeholder: t('notebook.placeholder', 'Markdown...'),
+                            onPaste: (e) => handleMarkdownPasteWithCrop(e, handleOpenCrop),
+                            onDrop: (e) => handleMarkdownDropWithCrop(e, handleOpenCrop),
+                            onDragOver: handleMarkdownDragOver,
+                          }}
                         />
                       </div>
                     </div>
@@ -1015,6 +1085,8 @@ export const DocumentManager: React.FC = () => {
                     <div 
                       data-color-mode="dark" 
                       className="rounded-lg overflow-hidden border border-white/10"
+                      onDrop={(e) => handleMarkdownDropWithCrop(e, handleOpenCrop)}
+                      onDragOver={handleMarkdownDragOver}
                       onKeyDown={(e) => {
                         if ((e.ctrlKey || e.metaKey) && e.key === 's') {
                           e.preventDefault();
@@ -1027,8 +1099,15 @@ export const DocumentManager: React.FC = () => {
                         onChange={(val) => setFormData({ ...formData, content: val || '' })}
                         height={340}
                         preview="edit"
+                        highlightEnable={false}
                         commands={customCommands}
                         previewOptions={mdPreviewOptions}
+                        textareaProps={{
+                          placeholder: t('notebook.placeholder', 'Markdown...'),
+                          onPaste: (e) => handleMarkdownPasteWithCrop(e, handleOpenCrop),
+                          onDrop: (e) => handleMarkdownDropWithCrop(e, handleOpenCrop),
+                          onDragOver: handleMarkdownDragOver,
+                        }}
                       />
                     </div>
                   )}
@@ -1084,11 +1163,20 @@ export const DocumentManager: React.FC = () => {
                   <FileText className="w-5 h-5 text-emerald-400" />
                   <span>{activeDoc.title}</span>
                 </h3>
-                <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
+                <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-gray-400">
                   <span className="flex items-center gap-1">
                     <Calendar className="w-3.5 h-3.5" />
                     {t('documents.updatedAt', '更新日: {{date}}', { date: activeDoc.updated_at ? activeDoc.updated_at.substring(0, 16) : '' })}
                   </span>
+                  {activeDoc.file_path && (
+                    <span
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono bg-emerald-500/10 border border-emerald-500/20 text-emerald-300"
+                      title={t('documents.savedPath', '保存先: data/documents/{{path}}', { path: activeDoc.file_path })}
+                    >
+                      <FileText className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                      <span>data/documents/{activeDoc.file_path}</span>
+                    </span>
+                  )}
                   {activeDoc.tags && activeDoc.tags.length > 0 && (
                     <div className="flex items-center gap-1">
                       {activeDoc.tags.map((tg, idx) => (
@@ -1274,6 +1362,18 @@ export const DocumentManager: React.FC = () => {
           }}
         />
       )}
+
+      {/* ─── Image Crop & Orientation Modal ─── */}
+      <ImageCropModal
+        isOpen={cropModalOpen}
+        file={cropFile}
+        onClose={() => {
+          setCropModalOpen(false);
+          setCropFile(null);
+          setCropTargetApi(null);
+        }}
+        onConfirm={handleCropConfirm}
+      />
     </div>
   );
 };

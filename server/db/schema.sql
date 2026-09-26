@@ -446,6 +446,7 @@ CREATE TABLE IF NOT EXISTS documents (
     tags TEXT DEFAULT '[]',
     linked_experiment_type_ids TEXT DEFAULT '[]',
     linked_literature_ids TEXT DEFAULT '[]',
+    file_path TEXT DEFAULT '',
     created_at TEXT DEFAULT (datetime('now', 'localtime')),
     updated_at TEXT DEFAULT (datetime('now', 'localtime')),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE

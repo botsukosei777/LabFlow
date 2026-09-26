@@ -13,6 +13,8 @@ release/
 *.db-wal
 *.sqlite
 data/notebooks/
+data/notebook_images/
+data/uploads/
 data/labflow-backup-*
 !data/.gitkeep
 
