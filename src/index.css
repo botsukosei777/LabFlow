@@ -1422,40 +1422,55 @@ a:hover {
   }
 }
 
-/* Global Alerts Widget */
-.global-alerts-widget {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  width: 320px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius-lg);
-  box-shadow: var(--shadow-lg);
-  z-index: 9999;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
+/* Sidebar In-Advance Alert Widget (Red Highlighted) */
+.sidebar-alerts {
+  border-top: 2px solid #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+  box-shadow: 0 -2px 12px rgba(239, 68, 68, 0.25);
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+  max-width: 100%;
+  border-bottom: 1px solid rgba(239, 68, 68, 0.2);
 }
 
-.global-alerts-header {
-  padding: 12px 16px;
-  background: var(--bg-surface);
-  border-bottom: 1px solid var(--border-color);
+.sidebar-alerts-header {
+  padding: 8px 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   cursor: pointer;
   user-select: none;
-  transition: background-color 0.2s;
+  background: rgba(239, 68, 68, 0.18);
+  border-bottom: 1px solid rgba(239, 68, 68, 0.25);
+  transition: background 0.15s ease;
 }
 
-.global-alerts-header:hover {
-  background: var(--bg-surface-hover);
+.sidebar-alerts-header:hover {
+  background: rgba(239, 68, 68, 0.28);
 }
 
-.global-alerts-body {
-  max-height: 400px;
+.sidebar-alerts-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: var(--font-size-xs);
+  color: #ef4444;
+  letter-spacing: 0.02em;
+}
+
+.sidebar-alerts-badge {
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: var(--border-radius-full);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.7);
+}
+
+.sidebar-alerts-body {
+  max-height: 200px;
   overflow-y: auto;
   padding: 8px;
   display: flex;
@@ -1463,33 +1478,166 @@ a:hover {
   gap: 8px;
 }
 
-.global-alert-item {
-  padding: 12px;
-  background: var(--bg-glass);
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius-md);
+.sidebar-alerts-body::-webkit-scrollbar {
+  width: 5px;
+}
+
+.sidebar-alerts-body::-webkit-scrollbar-thumb {
+  background: rgba(239, 68, 68, 0.4);
+  border-radius: var(--border-radius-full);
+}
+
+.sidebar-alerts-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(239, 68, 68, 0.7);
+}
+
+.sidebar-alert-item {
+  padding: 8px 10px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-left: 3px solid #ef4444;
+  border-radius: var(--border-radius-sm);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+  transition: transform var(--transition-fast), border-color var(--transition-fast);
 }
 
-.global-alert-content {
-  flex: 1;
+.sidebar-alert-item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(239, 68, 68, 0.7);
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2);
 }
 
-.animate-fade-in-up {
-  animation: fadeInUp 0.3s ease-out forwards;
+.sidebar-alert-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
 }
 
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.sidebar-alert-tag {
+  font-size: 11px;
+  font-weight: 700;
+  color: #f87171;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.sidebar-alert-time {
+  font-size: 11px;
+  font-weight: 600;
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.25);
+  padding: 1px 5px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.sidebar-alert-message {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-primary);
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.sidebar-alert-btn-done {
+  align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #ffffff;
+  background: #ef4444;
+  border: none;
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+  box-shadow: 0 1px 4px rgba(239, 68, 68, 0.4);
+}
+
+.sidebar-alert-btn-done:hover {
+  background: #dc2626;
+  transform: scale(1.03);
+}
+
+.sidebar-alert-item.sidebar-alert-memo {
+  border-left-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.sidebar-alert-memo .sidebar-alert-btn-done {
+  background: var(--color-secondary);
+}
+
+.sidebar-alert-memo .sidebar-alert-btn-done:hover {
+  background: var(--color-secondary-hover);
+}
+
+/* Collapsed Sidebar Alert Button */
+.sidebar-alert-collapsed-container {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0;
+  border-top: 2px solid #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+  position: relative;
+}
+
+.sidebar-alert-collapsed-btn {
+  width: 42px;
+  height: 42px;
+  background: rgba(239, 68, 68, 0.2);
+  border: 2px solid #ef4444;
+  border-radius: var(--border-radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+  transition: all var(--transition-fast);
+}
+
+.sidebar-alert-collapsed-btn:hover {
+  background: rgba(239, 68, 68, 0.35);
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.8);
+  transform: scale(1.05);
+}
+
+.sidebar-alert-collapsed-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background: #ef4444;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 17px;
+  height: 17px;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.8);
+}
+
+.sidebar-alert-popover {
+  position: fixed;
+  left: 76px;
+  bottom: 12px;
+  width: 290px;
+  background: var(--bg-surface);
+  border: 2px solid #ef4444;
+  border-radius: var(--border-radius-lg);
+  box-shadow: 0 8px 30px rgba(239, 68, 68, 0.35), var(--shadow-xl);
+  z-index: 1000;
+  overflow: hidden;
+  animation: slideInLeft 0.2s ease;
 }
 
 /* Notebook Calendar Dots */
@@ -1509,35 +1657,174 @@ a:hover {
 }
 
 /* ============================================
-   Fix react-md-editor cursor / font alignment
-   Prevent sup/sub/html tags from altering line-height/font-size
-   in the syntax-highlighted background <pre> element.
+   react-md-editor Layout, Sizing & Scrolling
+   Unified full-height flex layout and smooth textarea scrolling
    ============================================ */
+.w-md-editor {
+  display: flex !important;
+  flex-direction: column !important;
+  box-shadow: none !important;
+}
+
+[data-color-mode*='dark'] .w-md-editor,
+.dark-theme .w-md-editor {
+  background-color: #0d1117 !important;
+  color: #c9d1d9 !important;
+}
+
+[data-color-mode*='light'] .w-md-editor {
+  background-color: #ffffff !important;
+  color: #24292f !important;
+}
+
+.w-md-editor-toolbar {
+  flex-shrink: 0 !important;
+}
+
+[data-color-mode*='dark'] .w-md-editor-toolbar,
+.dark-theme .w-md-editor-toolbar {
+  background-color: #161b22 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+[data-color-mode*='light'] .w-md-editor-toolbar {
+  background-color: #f6f8fa !important;
+  border-bottom: 1px solid #d0d7de !important;
+}
+
+.w-md-editor-content {
+  flex: 1 1 0% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  display: flex !important;
+  overflow: hidden !important;
+}
+
+.w-md-editor-area {
+  flex: 1 1 0% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
 .w-md-editor-text {
+  flex: 1 1 0% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  position: relative !important;
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
 }
 
-.w-md-editor-text-pre,
 .w-md-editor-text-input {
+  position: relative !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  padding: 12px 14px !important;
+  resize: none !important;
+  overflow-y: auto !important;
+  overflow-x: auto !important;
+  background: transparent !important;
+  caret-color: #818cf8 !important;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
   font-size: 14px !important;
-  line-height: 20px !important;
+  line-height: 22px !important;
   letter-spacing: 0px !important;
   tab-size: 2 !important;
+  border: none !important;
+  outline: none !important;
+  box-sizing: border-box !important;
 }
 
-.w-md-editor-text-input {
-  -webkit-text-fill-color: inherit !important;
-  color: inherit !important;
+/* Horizontal scroll / nowrap mode for wide links, tables, etc. */
+.w-md-editor-nowrap .w-md-editor-text-input {
+  white-space: pre !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+  overflow-x: auto !important;
 }
 
+.w-md-editor-nowrap .w-md-editor-area,
+.w-md-editor-nowrap .w-md-editor-text {
+  overflow-x: auto !important;
+}
+
+/* Word wrap mode */
+.w-md-editor-wrap .w-md-editor-text-input {
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+  overflow-x: auto !important;
+}
+
+/* Textarea scrollbar styling */
+.w-md-editor-text-input::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.w-md-editor-text-input::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.4);
+}
+
+.w-md-editor-text-input::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.w-md-editor-text-input::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.5);
+}
+
+[data-color-mode*='dark'] .w-md-editor-text-input,
+.dark-theme .w-md-editor-text-input {
+  color: #f1f5f9 !important;
+  -webkit-text-fill-color: #f1f5f9 !important;
+}
+
+[data-color-mode*='light'] .w-md-editor-text-input {
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+}
+
+.w-md-editor-preview {
+  flex: 1 1 0% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  padding: 16px 20px !important;
+  box-sizing: border-box !important;
+}
+
+[data-color-mode*='dark'] .w-md-editor-preview,
+.dark-theme .w-md-editor-preview {
+  background-color: #0d1117 !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+[data-color-mode*='light'] .w-md-editor-preview {
+  background-color: #ffffff !important;
+  border-left: 1px solid #e2e8f0 !important;
+}
+
+/* Neutralize any syntax-highlighted background elements if ever rendered */
 .w-md-editor-text-pre,
 .w-md-editor-text-pre *,
 .w-md-editor-text-pre > code,
 .w-md-editor-text-pre > code * {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
   font-size: 14px !important;
-  line-height: 20px !important;
+  line-height: 22px !important;
   vertical-align: baseline !important;
   letter-spacing: 0px !important;
 }
@@ -1558,7 +1845,7 @@ a:hover {
   background: transparent !important;
   box-shadow: none !important;
   font-size: 14px !important;
-  line-height: 20px !important;
+  line-height: 22px !important;
   vertical-align: baseline !important;
   position: static !important;
   top: auto !important;
@@ -1596,6 +1883,100 @@ a:hover {
 .w-md-editor-preview img:hover {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
   border-color: rgba(99, 102, 241, 0.5) !important;
+}
+
+/* ============================================
+   Scientific Image Matrix / Grid in Markdown
+   Enables 2x2, 3x2, etc. image grid layouts
+   ============================================ */
+.wmde-markdown table:has(img),
+.w-md-editor-preview table:has(img),
+.wmde-markdown table.image-matrix-table,
+.w-md-editor-preview table.image-matrix-table {
+  border: none !important;
+  background: transparent !important;
+  width: 100% !important;
+  table-layout: fixed !important;
+  margin: 18px 0 !important;
+  border-collapse: separate !important;
+  border-spacing: 12px 14px !important;
+  box-shadow: none !important;
+}
+
+.wmde-markdown table:has(img) thead,
+.w-md-editor-preview table:has(img) thead {
+  background: transparent !important;
+  border: none !important;
+}
+
+.wmde-markdown table:has(img) thead tr,
+.w-md-editor-preview table:has(img) thead tr {
+  background: transparent !important;
+  border: none !important;
+}
+
+.wmde-markdown table:has(img) th,
+.w-md-editor-preview table:has(img) th {
+  border: none !important;
+  background: transparent !important;
+  text-align: center !important;
+  padding: 6px 8px !important;
+  font-size: 0.82rem !important;
+  color: #94a3b8 !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.02em !important;
+}
+
+.wmde-markdown table:has(img) tbody tr,
+.w-md-editor-preview table:has(img) tbody tr {
+  background: transparent !important;
+  border: none !important;
+}
+
+.wmde-markdown table:has(img) td,
+.w-md-editor-preview table:has(img) td {
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  background: rgba(30, 41, 59, 0.45) !important;
+  backdrop-filter: blur(8px) !important;
+  border-radius: 10px !important;
+  padding: 10px !important;
+  vertical-align: middle !important;
+  text-align: center !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
+  transition: all 0.2s ease !important;
+}
+
+.wmde-markdown table:has(img) td:hover,
+.w-md-editor-preview table:has(img) td:hover {
+  border-color: rgba(99, 102, 241, 0.45) !important;
+  background: rgba(30, 41, 59, 0.7) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35) !important;
+}
+
+/* Crucial: Override global .wmde-markdown img constraints inside tables */
+.wmde-markdown table:has(img) img,
+.w-md-editor-preview table:has(img) img,
+.wmde-markdown table.image-matrix-table img,
+.w-md-editor-preview table.image-matrix-table img {
+  max-width: 100% !important;
+  max-height: 240px;
+  height: auto;
+  object-fit: contain !important;
+  margin: 0 auto !important;
+  display: block !important;
+  border-radius: 6px !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  background-color: rgba(15, 23, 42, 0.5) !important;
+  box-shadow: none !important;
+  cursor: zoom-in !important;
+}
+
+.wmde-markdown table:has(img) td strong,
+.w-md-editor-preview table:has(img) td strong {
+  display: block !important;
+  margin-bottom: 4px !important;
+  color: #cbd5e1 !important;
+  font-size: 0.85rem !important;
 }
 
 

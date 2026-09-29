@@ -7,14 +7,17 @@ release/
 *.zip
 *.tar.gz
 
-# Data & Database (contains user database, notebooks, and backups)
+# Data & Database (contains user database, notebooks, documents, literature, and backups)
 *.db
 *.db-shm
 *.db-wal
 *.sqlite
+data/documents/
+data/literature_files/
 data/notebooks/
 data/notebook_images/
 data/uploads/
+data/temp_uploads/
 data/labflow-backup-*
 !data/.gitkeep
 
@@ -73,6 +76,8 @@ server.cjs
 update.bat
 start.bat
 
-# AI Agent configs / instructions
+# AI Agent configs / instructions / subagents
 AGENTS.md
 GEMINI.md
+.agent/
+.agents/

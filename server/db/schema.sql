@@ -197,6 +197,7 @@ CREATE TABLE IF NOT EXISTS milestones (
     description TEXT DEFAULT '',
     deadline TEXT,
     status TEXT NOT NULL DEFAULT 'active',
+    is_standalone INTEGER NOT NULL DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now', 'localtime')),
     updated_at TEXT DEFAULT (datetime('now', 'localtime')),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -211,6 +212,7 @@ CREATE TABLE IF NOT EXISTS milestone_items (
     current_count INTEGER DEFAULT 0,
     unit TEXT DEFAULT '',
     is_completed INTEGER NOT NULL DEFAULT 0,
+    priority TEXT NOT NULL DEFAULT 'NEXT',
     order_index INTEGER NOT NULL DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now', 'localtime')),
     updated_at TEXT DEFAULT (datetime('now', 'localtime')),
@@ -227,6 +229,7 @@ CREATE TABLE IF NOT EXISTS milestone_sub_items (
     current_count INTEGER DEFAULT 0,
     unit TEXT DEFAULT '',
     is_completed INTEGER NOT NULL DEFAULT 0,
+    priority TEXT NOT NULL DEFAULT 'NEXT',
     order_index INTEGER NOT NULL DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now', 'localtime')),
     updated_at TEXT DEFAULT (datetime('now', 'localtime')),

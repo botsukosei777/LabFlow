@@ -76,6 +76,8 @@ router.get('/images/:filename', (req, res) => {
       return res.status(404).json({ message: 'Image not found' });
     }
 
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     res.sendFile(filePath);
   } catch (err: any) {

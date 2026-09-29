@@ -5,7 +5,6 @@ import { AuthProvider } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import type { Toast, ToastType } from './types';
 import { api } from './api/client';
-import GlobalAlerts from './components/GlobalAlerts';
 
 // Lazy load pages
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -88,6 +87,7 @@ export default function App() {
                     <Route path="/analysis" element={<Navigate to="/analysis/experiment_time" replace />} />
                     <Route path="/analysis/experiment_time" element={<Analysis />} />
                     <Route path="/analysis/image_analysis" element={<Analysis />} />
+                    <Route path="/analysis/slides" element={<Analysis />} />
                     <Route path="/analysis/:tab" element={<Analysis />} />
                     <Route path="/literature" element={<Literature />} />
                     <Route path="/milestones" element={<Milestones />} />
@@ -101,8 +101,6 @@ export default function App() {
                 </Route>
               </Routes>
             </Suspense>
-
-            <GlobalAlerts />
 
             {/* Toast Container */}
             {toasts.length > 0 && (

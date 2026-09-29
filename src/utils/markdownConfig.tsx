@@ -3,8 +3,9 @@ import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
 import rehypeKatex from 'rehype-katex';
 import { commands, type ICommand, type TextAreaTextApi } from '@uiw/react-md-editor';
-import { Superscript, Subscript } from 'lucide-react';
+import { Superscript, Subscript, Grid2X2 } from 'lucide-react';
 export { ImageCropModal, type ImageCropModalProps } from '../components/notebook/ImageCropModal';
+export { ImageGridModal, type ImageGridModalProps } from '../components/notebook/ImageGridModal';
 
 export const mdRemarkPlugins = [remarkGfm, remarkMath];
 export const mdRehypePlugins: any[] = [[rehypeKatex, { throwOnError: false, strict: false }]];
@@ -301,18 +302,112 @@ export const createSubscriptCommand = (title: string = '下付き文字: <sub>..
   },
 });
 
+export const createCitationCommand = (
+  title: string = '引用番号の挿入: [@lit:ID]',
+  onOpenCitationPicker?: (api: TextAreaTextApi) => void
+): ICommand => ({
+  name: 'citation',
+  keyCommand: 'citation',
+  buttonProps: {
+    'aria-label': title,
+    title,
+  },
+  icon: (
+    <span style={{ fontSize: '11px', fontWeight: 600, fontFamily: 'sans-serif', padding: '0 2px', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+        <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+      </svg>
+      <span>cite</span>
+    </span>
+  ),
+  execute: (_state, api) => {
+    if (onOpenCitationPicker) {
+      onOpenCitationPicker(api);
+    } else {
+      api.replaceSelection('[@lit:1]');
+    }
+  },
+});
+
+export const createMilestoneCommand = (
+  title: string = 'マイルストーンリンクの挿入',
+  onOpenMilestonePicker?: (api: TextAreaTextApi) => void
+): ICommand => ({
+  name: 'milestone',
+  keyCommand: 'milestone',
+  buttonProps: {
+    'aria-label': title,
+    title,
+  },
+  icon: (
+    <span style={{ fontSize: '11px', fontWeight: 600, fontFamily: 'sans-serif', padding: '0 2px', display: 'inline-flex', alignItems: 'center', gap: '2px', color: '#c084fc' }}>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <circle cx="12" cy="12" r="6" />
+        <circle cx="12" cy="12" r="2" />
+      </svg>
+      <span>ms</span>
+    </span>
+  ),
+  execute: (_state, api) => {
+    if (onOpenMilestonePicker) {
+      onOpenMilestonePicker(api);
+    } else {
+      api.replaceSelection('[🎯 マイルストーン](/milestones)');
+    }
+  },
+});
+
+export const createImageGridCommand = (
+  title: string = '画像グリッド配置 (2行2列など)',
+  onOpenImageGridModal?: (api: TextAreaTextApi) => void
+): ICommand => ({
+  name: 'imageGrid',
+  keyCommand: 'imageGrid',
+  buttonProps: {
+    'aria-label': title,
+    title,
+  },
+  icon: (
+    <Grid2X2 style={{ width: 14, height: 14 }} strokeWidth={2.2} />
+  ),
+  execute: (_state, api) => {
+    if (onOpenImageGridModal) {
+      onOpenImageGridModal(api);
+    } else {
+      api.replaceSelection(`
+| (A) ラベルA | (B) ラベルB |
+| :---: | :---: |
+| ![画像A](https://via.placeholder.com/300) | ![画像B](https://via.placeholder.com/300) |
+| **(C) ラベルC** | **(D) ラベルD** |
+| ![画像C](https://via.placeholder.com/300) | ![画像D](https://via.placeholder.com/300) |
+`);
+    }
+  },
+});
+
 export const getCustomMdCommands = (
   inlineTitle?: string,
   blockTitle?: string,
   imageTitle?: string,
   onSelectImageFile?: (file: File, api: TextAreaTextApi) => void,
   supTitle?: string,
-  subTitle?: string
+  subTitle?: string,
+  citationTitle?: string,
+  onOpenCitationPicker?: (api: TextAreaTextApi) => void,
+  milestoneTitle?: string,
+  onOpenMilestonePicker?: (api: TextAreaTextApi) => void,
+  imageGridTitle?: string,
+  onOpenImageGridModal?: (api: TextAreaTextApi) => void
 ): ICommand[] => {
   const supCmd = createSuperscriptCommand(supTitle);
   const subCmd = createSubscriptCommand(subTitle);
   const mathInlineCmd = createMathInlineCommand(inlineTitle);
   const mathBlockCmd = createMathBlockCommand(blockTitle);
+  const citationCmd = createCitationCommand(citationTitle, onOpenCitationPicker);
+  const milestoneCmd = createMilestoneCommand(milestoneTitle, onOpenMilestonePicker);
+  const imageGridCmd = createImageGridCommand(imageGridTitle, onOpenImageGridModal);
 
   const rawCommands = commands.getCommands();
   const result: ICommand[] = [];
@@ -320,6 +415,7 @@ export const getCustomMdCommands = (
   for (const cmd of rawCommands) {
     if (cmd.name === 'image') {
       result.push(createImageUploadCommand(imageTitle, onSelectImageFile));
+      result.push(imageGridCmd);
     } else {
       result.push(cmd);
     }
@@ -330,8 +426,8 @@ export const getCustomMdCommands = (
     }
   }
 
-  // Add math commands at the end after a divider
-  result.push(commands.divider, mathInlineCmd, mathBlockCmd);
+  // Add math commands, citation command, and milestone command at the end after dividers
+  result.push(commands.divider, mathInlineCmd, mathBlockCmd, commands.divider, citationCmd, milestoneCmd);
 
   return result;
 };

@@ -4,6 +4,12 @@ import { Printer, X, Calendar, ArrowUpDown, Scissors } from 'lucide-react';
 import { format, subDays, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import MDEditor from '@uiw/react-md-editor';
 import { mdRemarkPlugins, mdRehypePlugins } from '../../utils/markdownConfig';
+import type { LiteratureItem } from '../../types';
+import {
+  CITATION_STYLES,
+  type CitationStyleId,
+  processCitations
+} from '../../utils/citationEngine';
 
 interface Note {
   id: number;
@@ -20,6 +26,8 @@ interface PrintNotesModalProps {
   isOpen: boolean;
   onClose: () => void;
   notes: Note[];
+  literatures?: LiteratureItem[];
+  citationStyle?: CitationStyleId;
 }
 
 interface ContentBlock {
@@ -63,6 +71,30 @@ function splitMarkdownIntoAtomicBlocks(markdown: string, noteId: number): Conten
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    // Check if line is part of a markdown table (e.g. image matrix grid)
+    if (line.trim().startsWith('|')) {
+      flushText();
+      const tableLines: string[] = [];
+      let tableHasImage = false;
+      while (i < lines.length && lines[i]!.trim().startsWith('|')) {
+        const cur = lines[i]!;
+        tableLines.push(cur);
+        if (/!\[.*?\]\(.*?\)/.test(cur) || /<img\s+[^>]*>/i.test(cur)) {
+          tableHasImage = true;
+        }
+        i++;
+      }
+      i--; // adjust loop index
+      blocks.push({
+        id: `note-${noteId}-b-${blocks.length}`,
+        noteId,
+        type: 'markdown',
+        content: tableLines.join('\n'),
+        isImage: tableHasImage,
+      });
+      continue;
+    }
+
     // Check if line contains markdown or HTML image
     const hasImage = /!\[.*?\]\(.*?\)/.test(line) || /<img\s+[^>]*>/i.test(line);
 
@@ -91,7 +123,11 @@ function splitMarkdownIntoAtomicBlocks(markdown: string, noteId: number): Conten
   return blocks;
 }
 
-function splitNoteIntoPrintBlocks(note: Note): ContentBlock[] {
+function splitNoteIntoPrintBlocks(
+  note: Note,
+  literatureMap?: Map<number, LiteratureItem>,
+  citationStyle: CitationStyleId = 'nature'
+): ContentBlock[] {
   const blocks: ContentBlock[] = [];
 
   // 1. Header block
@@ -102,8 +138,21 @@ function splitNoteIntoPrintBlocks(note: Note): ContentBlock[] {
     note,
   });
 
+  // Process citations if literatures are available
+  let content = note.content || '';
+  if (literatureMap && literatureMap.size > 0) {
+    const res = processCitations(content, literatureMap, citationStyle);
+    const hasManualBib = /##\s*(?:参考文献|References)/i.test(content);
+    if (!hasManualBib && res.citedItems.length > 0) {
+      const styleName = CITATION_STYLES.find(s => s.id === citationStyle)?.name || 'References';
+      content = `${res.processedText}\n\n---\n### 参考文献 (${styleName})\n\n${res.bibliographyMarkdown}`;
+    } else {
+      content = res.processedText;
+    }
+  }
+
   // 2. Content blocks
-  const contentBlocks = splitMarkdownIntoAtomicBlocks(note.content || '', note.id);
+  const contentBlocks = splitMarkdownIntoAtomicBlocks(content, note.id);
   blocks.push(...contentBlocks);
 
   if (blocks.length > 0) {
@@ -117,6 +166,8 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
   isOpen,
   onClose,
   notes,
+  literatures,
+  citationStyle = 'nature',
 }) => {
   const { t } = useTranslation();
   const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -165,14 +216,20 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
       });
   }, [notes, startDate, endDate, sortAsc]);
 
+  const literatureMap = useMemo(() => {
+    const map = new Map<number, LiteratureItem>();
+    (literatures || []).forEach(lit => map.set(lit.id, lit));
+    return map;
+  }, [literatures]);
+
   // Convert notes into flat atomic blocks
   const allBlocks = useMemo(() => {
     const result: ContentBlock[] = [];
     for (const note of targetNotes) {
-      result.push(...splitNoteIntoPrintBlocks(note));
+      result.push(...splitNoteIntoPrintBlocks(note, literatureMap, citationStyle));
     }
     return result;
-  }, [targetNotes]);
+  }, [targetNotes, literatureMap, citationStyle]);
 
   // A4 Pagination Algorithm: Partition blocks into exact A4 pages
   useEffect(() => {
@@ -378,6 +435,49 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
         .a4-sheet p:has(> img) {
           text-align: center !important;
           margin: 4px 0 !important;
+        }
+
+        .a4-sheet table:has(img),
+        .a4-sheet table.image-matrix-table {
+          border: none !important;
+          width: 100% !important;
+          table-layout: fixed !important;
+          border-collapse: separate !important;
+          border-spacing: 8px 8px !important;
+          margin: 6px 0 !important;
+        }
+
+        .a4-sheet table:has(img) th,
+        .a4-sheet table.image-matrix-table th {
+          border: none !important;
+          background: transparent !important;
+          text-align: center !important;
+          padding: 2px !important;
+          font-size: 10px !important;
+          color: #374151 !important;
+          font-weight: 600 !important;
+        }
+
+        .a4-sheet table:has(img) td,
+        .a4-sheet table.image-matrix-table td {
+          border: 1px solid #e5e7eb !important;
+          background: #f9fafb !important;
+          border-radius: 4px !important;
+          padding: 4px !important;
+          vertical-align: middle !important;
+          text-align: center !important;
+        }
+
+        .a4-sheet table:has(img) td img,
+        .a4-sheet table.image-matrix-table td img {
+          max-width: 100% !important;
+          width: 100% !important;
+          max-height: 140px !important;
+          height: auto !important;
+          object-fit: contain !important;
+          margin: 0 auto !important;
+          display: block !important;
+          border: none !important;
         }
 
         @media print {

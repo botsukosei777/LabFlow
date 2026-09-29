@@ -4,12 +4,18 @@ import {
   FileText, Plus, Search, Trash2, Edit3, Download,
   X, Tag, FlaskConical, BookOpen,
   Calendar, Eye, ExternalLink, Link2, Check, Filter,
-  Columns, Maximize2, Minimize2, Share2
+  Columns, Maximize2, Minimize2, Share2, Sparkles, Quote
 } from 'lucide-react';
 import MDEditor from '@uiw/react-md-editor';
 import { api } from '../../api/client';
 import { ToastContext } from '../../App';
 import type { ResearchDocument, ExperimentType, LiteratureItem } from '../../types';
+import { CitationPickerModal } from './CitationPickerModal';
+import {
+  CITATION_STYLES,
+  type CitationStyleId,
+  processCitations
+} from '../../utils/citationEngine';
 import {
   mdPreviewOptions,
   mdRemarkPlugins,
@@ -61,6 +67,17 @@ export const DocumentManager: React.FC = () => {
     }
   };
 
+  const [citationModalOpen, setCitationModalOpen] = useState(false);
+  const [citationStyle, setCitationStyle] = useState<CitationStyleId>(() => {
+    const saved = localStorage.getItem('labflow_citation_style');
+    return (saved as CitationStyleId) || 'nature';
+  });
+
+  const handleCitationStyleChange = (styleId: CitationStyleId) => {
+    setCitationStyle(styleId);
+    localStorage.setItem('labflow_citation_style', styleId);
+  };
+
   const customCommands = useMemo(() => {
     return getCustomMdCommands(
       t('notebook.mathInline', '数式 (インライン): $...$'),
@@ -68,7 +85,12 @@ export const DocumentManager: React.FC = () => {
       t('notebook.insertImage', '画像を挿入 (PC内の画像ファイルを選択)'),
       (file, api) => handleOpenCrop(file, api),
       t('notebook.superscript', '上付き文字: <sup>...</sup>'),
-      t('notebook.subscript', '下付き文字: <sub>...</sub>')
+      t('notebook.subscript', '下付き文字: <sub>...</sub>'),
+      t('citation.insertCitationCommand', '引用番号の挿入: [@lit:ID]'),
+      (api) => {
+        setCropTargetApi({ replaceSelection: (text) => api.replaceSelection(text) });
+        setCitationModalOpen(true);
+      }
     );
   }, [t, handleOpenCrop]);
 
@@ -118,8 +140,8 @@ export const DocumentManager: React.FC = () => {
   const [draftSaving, setDraftSaving] = useState(false);
 
   // Fetch documents and tags
-  const loadDocuments = async () => {
-    setLoading(true);
+  const loadDocuments = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const params = new URLSearchParams();
       if (searchQuery.trim()) params.append('search', searchQuery.trim());
@@ -136,7 +158,7 @@ export const DocumentManager: React.FC = () => {
       console.error(err);
       addToast('error', t('common.errorOccurred', 'ドキュメントの取得に失敗しました'));
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -298,20 +320,23 @@ export const DocumentManager: React.FC = () => {
     }
 
     try {
+      let savedDoc: ResearchDocument;
       if (formData.id) {
-        const res = await api.put<ResearchDocument>(`/documents/${formData.id}`, formData);
-        setFormData(prev => ({ ...prev, id: res.id }));
+        savedDoc = await api.put<ResearchDocument>(`/documents/${formData.id}`, formData);
+        setFormData(prev => ({ ...prev, id: savedDoc.id }));
+        setActiveDoc(prev => (prev ? { ...prev, ...savedDoc } : savedDoc));
         addToast('success', closeOnSuccess ? t('documents.saveSuccess', 'ドキュメントを保存しました') : t('documents.draftSaved', '一時保存しました'));
       } else {
-        const res = await api.post<ResearchDocument>('/documents', formData);
-        setFormData(prev => ({ ...prev, id: res.id }));
+        savedDoc = await api.post<ResearchDocument>('/documents', formData);
+        setFormData(prev => ({ ...prev, id: savedDoc.id }));
+        setActiveDoc(savedDoc);
         addToast('success', closeOnSuccess ? t('documents.saveSuccess', 'ドキュメントを作成しました') : t('documents.draftSaved', '一時保存しました'));
       }
 
       if (closeOnSuccess) {
         setShowEditModal(false);
       }
-      loadDocuments();
+      loadDocuments(true);
     } catch (err: any) {
       addToast('error', err.message || t('common.errorOccurred', '保存に失敗しました'));
     } finally {
@@ -372,10 +397,72 @@ export const DocumentManager: React.FC = () => {
     addToast('info', t('documents.expInserted', { name: exp.name }));
   };
 
+  const literatureMap = useMemo(() => {
+    const map = new Map<number, LiteratureItem>();
+    literatures.forEach(lit => map.set(lit.id, lit));
+    return map;
+  }, [literatures]);
+
   const insertLitCitation = (lit: LiteratureItem) => {
-    const citation = `\n> 📖 **${lit.title}** (${lit.authors || t('documents.unknownAuthor', '著者不明')}, ${lit.year || t('documents.unknownYear', '年不明')})\n> *${lit.journal || 'Journal'}* ${lit.doi ? `[DOI: ${lit.doi}](https://doi.org/${lit.doi})` : ''}\n`;
-    setFormData(prev => ({ ...prev, content: prev.content + citation }));
-    addToast('info', t('documents.litInserted', '文献の引用を本文に挿入しました'));
+    const tag = `[@lit:${lit.id}]`;
+    if (cropTargetApi?.replaceSelection) {
+      cropTargetApi.replaceSelection(tag);
+    } else if (cropTargetApi?.textarea) {
+      insertTextAtCursor(cropTargetApi.textarea, tag);
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        content: prev.content ? `${prev.content} ${tag}` : tag
+      }));
+    }
+    // Also ensure this literature is linked
+    setFormData(prev => {
+      if (prev.linked_literature_ids.includes(lit.id)) return prev;
+      return { ...prev, linked_literature_ids: [...prev.linked_literature_ids, lit.id] };
+    });
+    addToast('info', t('documents.litInserted', '文献の引用タグ [@lit:{{id}}] を挿入しました', { id: lit.id }));
+  };
+
+  const handleInsertCitations = (litIds: number[]) => {
+    if (litIds.length === 0) return;
+    const tag = `[@lit:${litIds.join(', @lit:')}]`;
+    if (cropTargetApi?.replaceSelection) {
+      cropTargetApi.replaceSelection(tag);
+    } else if (cropTargetApi?.textarea) {
+      insertTextAtCursor(cropTargetApi.textarea, tag);
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        content: prev.content ? `${prev.content} ${tag}` : tag
+      }));
+    }
+    setFormData(prev => {
+      const nextIds = Array.from(new Set([...prev.linked_literature_ids, ...litIds]));
+      return { ...prev, linked_literature_ids: nextIds };
+    });
+    addToast('info', t('documents.litInserted', '文献引用を挿入しました'));
+  };
+
+  const handleSyncBibliography = () => {
+    const result = processCitations(formData.content, literatureMap, citationStyle);
+    if (result.citedItems.length === 0) {
+      addToast('warning', t('citation.noCitationsInText', '本文中に [@lit:ID] 形式の引用が見つかりません。先に引用番号を挿入してください。'));
+      return;
+    }
+
+    const bibHeader = t('citation.bibliographyHeader', '## 参考文献');
+    const bibBlock = `\n\n---\n${bibHeader}\n\n${result.bibliographyMarkdown}\n`;
+
+    const bibRegex = /\n*---\n+##\s*(?:参考文献|References)[\s\S]*$/i;
+    let newContent = formData.content;
+    if (bibRegex.test(formData.content)) {
+      newContent = formData.content.replace(bibRegex, bibBlock);
+    } else {
+      newContent = formData.content.trimEnd() + bibBlock;
+    }
+
+    setFormData(prev => ({ ...prev, content: newContent }));
+    addToast('success', t('citation.syncBibSuccess', '参考文献リスト（分注）を本文末尾に挿入・同期しました'));
   };
 
   // Export Markdown file
@@ -391,6 +478,16 @@ export const DocumentManager: React.FC = () => {
     URL.revokeObjectURL(url);
     addToast('success', t('documents.exportMarkdown', 'Markdownをエクスポートしました'));
   };
+
+  const detailSource = useMemo(() => {
+    if (!activeDoc?.content) return '';
+    const res = processCitations(activeDoc.content, literatureMap, citationStyle);
+    const hasManualBib = /##\s*(?:参考文献|References)/i.test(activeDoc.content);
+    if (!hasManualBib && res.citedItems.length > 0) {
+      return `${res.processedText}\n\n---\n### ${t('citation.references', '参考文献')}\n\n${res.bibliographyMarkdown}`;
+    }
+    return res.processedText;
+  }, [activeDoc?.content, literatureMap, citationStyle]);
 
   return (
     <div className="bg-[#161b22] border border-white/10 rounded-xl overflow-hidden flex flex-col shadow-lg mt-8">
@@ -642,6 +739,13 @@ export const DocumentManager: React.FC = () => {
           <div
             className="modal modal-lg"
             onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                e.stopPropagation();
+                handleSaveDocument(false);
+              }
+            }}
             style={{
               width: activePdfUrl ? '96vw' : '100%',
               maxWidth: activePdfUrl ? '1400px' : '980px',
@@ -961,7 +1065,7 @@ export const DocumentManager: React.FC = () => {
                                     type="button"
                                     onClick={() => insertLitCitation(lit)}
                                     className="text-[10px] text-emerald-400 hover:text-emerald-300 px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30"
-                                    title={t('documents.insertLiteratureCitation', '本文に引用を挿入')}
+                                    title={t('documents.insertLiteratureCitation', '本文に引用番号を挿入')}
                                   >
                                     {t('documents.insertCitation', '+ 引用')}
                                   </button>
@@ -977,10 +1081,34 @@ export const DocumentManager: React.FC = () => {
 
                 {/* Markdown Editor & PDF Side-by-Side Split View */}
                 <div className="form-group">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="form-label font-bold text-gray-200 m-0">
-                      {t('documents.content', '本文 (Markdown対応)')}
-                    </label>
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                    <div className="flex items-center gap-3">
+                      <label className="form-label font-bold text-gray-200 m-0">
+                        {t('documents.content', '本文 (Markdown対応)')}
+                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCropTargetApi(null);
+                            setCitationModalOpen(true);
+                          }}
+                          className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 text-[11px] flex items-center gap-1 transition-colors"
+                          title={t('citation.insertCitationTooltip', '登録済み文献から引用タグ [@lit:ID] を挿入')}
+                        >
+                          <BookOpen className="w-3 h-3" />
+                          <span>{t('citation.insertCitationBtn', '引用番号の挿入')}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSyncBibliography}
+                          className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/30 text-[11px] flex items-center gap-1 transition-colors"
+                          title={t('citation.syncBibTooltip', '本文末尾に文献番号付きの参考文献リスト（末尾引用）を挿入・同期')}
+                        >
+                          <span>{t('citation.syncBibBtn', '末尾引用を挿入')}</span>
+                        </button>
+                      </div>
+                    </div>
                     {activePdfUrl && (
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-emerald-400 flex items-center gap-1">
@@ -1013,9 +1141,9 @@ export const DocumentManager: React.FC = () => {
                   </div>
 
                   {activePdfUrl ? (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3" style={{ minHeight: '520px' }}>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3" style={{ minHeight: '620px' }}>
                       {/* Left: PDF Viewer */}
-                      <div className="rounded-lg overflow-hidden border border-emerald-500/30 bg-[#0d1117] flex flex-col h-[520px]">
+                      <div className="rounded-lg overflow-hidden border border-emerald-500/30 bg-[#0d1117] flex flex-col h-[620px]">
                         <div className="p-2 bg-emerald-950/40 border-b border-emerald-500/20 flex items-center justify-between text-xs">
                           <div className="flex items-center gap-1.5 text-emerald-200 font-medium truncate">
                             <FileText className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
@@ -1054,7 +1182,7 @@ export const DocumentManager: React.FC = () => {
                       {/* Right: Markdown Editor */}
                       <div 
                         data-color-mode="dark" 
-                        className="rounded-lg overflow-hidden border border-white/10 flex flex-col h-[520px]"
+                        className="rounded-lg overflow-hidden border border-white/10 flex flex-col h-[620px]"
                         onDrop={(e) => handleMarkdownDropWithCrop(e, handleOpenCrop)}
                         onDragOver={handleMarkdownDragOver}
                         onKeyDown={(e) => {
@@ -1067,7 +1195,7 @@ export const DocumentManager: React.FC = () => {
                         <MDEditor
                           value={formData.content}
                           onChange={(val) => setFormData({ ...formData, content: val || '' })}
-                          height={470}
+                          height={570}
                           preview="edit"
                           highlightEnable={false}
                           commands={customCommands}
@@ -1078,13 +1206,15 @@ export const DocumentManager: React.FC = () => {
                             onDrop: (e) => handleMarkdownDropWithCrop(e, handleOpenCrop),
                             onDragOver: handleMarkdownDragOver,
                           }}
+                          style={{ height: '100%' }}
                         />
                       </div>
                     </div>
                   ) : (
                     <div 
                       data-color-mode="dark" 
-                      className="rounded-lg overflow-hidden border border-white/10"
+                      className="rounded-lg overflow-hidden border border-white/10 flex flex-col"
+                      style={{ minHeight: '560px' }}
                       onDrop={(e) => handleMarkdownDropWithCrop(e, handleOpenCrop)}
                       onDragOver={handleMarkdownDragOver}
                       onKeyDown={(e) => {
@@ -1097,7 +1227,7 @@ export const DocumentManager: React.FC = () => {
                       <MDEditor
                         value={formData.content}
                         onChange={(val) => setFormData({ ...formData, content: val || '' })}
-                        height={340}
+                        height={560}
                         preview="edit"
                         highlightEnable={false}
                         commands={customCommands}
@@ -1108,6 +1238,7 @@ export const DocumentManager: React.FC = () => {
                           onDrop: (e) => handleMarkdownDropWithCrop(e, handleOpenCrop),
                           onDragOver: handleMarkdownDragOver,
                         }}
+                        style={{ height: '100%', minHeight: '560px' }}
                       />
                     </div>
                   )}
@@ -1305,7 +1436,7 @@ export const DocumentManager: React.FC = () => {
                 data-color-mode="dark"
               >
                 <MDEditor.Markdown
-                  source={activeDoc.content || t('documents.noContentMarkdown', '*本文はありません*')}
+                  source={detailSource || t('documents.noContentMarkdown', '*本文はありません*')}
                   style={{ backgroundColor: 'transparent' }}
                   remarkPlugins={mdRemarkPlugins}
                   rehypePlugins={mdRehypePlugins}
@@ -1373,6 +1504,20 @@ export const DocumentManager: React.FC = () => {
           setCropTargetApi(null);
         }}
         onConfirm={handleCropConfirm}
+      />
+
+      {/* ─── Citation Picker Modal ─── */}
+      <CitationPickerModal
+        isOpen={citationModalOpen}
+        onClose={() => {
+          setCitationModalOpen(false);
+          setCropTargetApi(null);
+        }}
+        onInsertCitation={handleInsertCitations}
+        onInsertBibliography={handleSyncBibliography}
+        selectedStyle={citationStyle}
+        onStyleChange={handleCitationStyleChange}
+        literatures={literatures}
       />
     </div>
   );

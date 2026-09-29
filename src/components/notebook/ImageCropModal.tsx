@@ -8,7 +8,9 @@ import {
 
 export interface ImageCropModalProps {
   isOpen: boolean;
-  file: File | null;
+  file?: File | null;
+  imageUrl?: string;
+  initialAltText?: string;
   onClose: () => void;
   onConfirm: (blob: Blob, altText: string) => Promise<void> | void;
 }
@@ -57,6 +59,8 @@ const PRESET_SIZES = [
 export const ImageCropModal: React.FC<ImageCropModalProps> = ({
   isOpen,
   file,
+  imageUrl,
+  initialAltText,
   onClose,
   onConfirm,
 }) => {
@@ -97,15 +101,17 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
     hasMoved?: boolean;
   } | null>(null);
 
-  // Load image when file changes
+  // Load image when file or imageUrl changes
   useEffect(() => {
-    if (!isOpen || !file) {
+    if (!isOpen || (!file && !imageUrl)) {
       setImageElement(null);
       return;
     }
 
-    const initialAlt = file.name ? file.name.replace(/\.[^/.]+$/, '') : 'image';
-    setAltText(initialAlt);
+    const defaultAlt = file?.name
+      ? file.name.replace(/\.[^/.]+$/, '')
+      : (initialAltText || 'image');
+    setAltText(defaultAlt);
     setRotation(0);
     setFlipH(false);
     setFlipV(false);
@@ -116,18 +122,51 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
     setNextNumberCounter(1);
     setActiveStampTool('none');
 
-    const objectUrl = URL.createObjectURL(file);
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      setImageElement(img);
-    };
-    img.src = objectUrl;
+    let objectUrl = '';
+    let isCancelled = false;
+
+    if (file) {
+      objectUrl = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        if (!isCancelled) setImageElement(img);
+      };
+      img.src = objectUrl;
+    } else if (imageUrl) {
+      // Fetch as Blob to prevent canvas taint when exporting cropped image
+      fetch(imageUrl)
+        .then(res => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return res.blob();
+        })
+        .then(blob => {
+          if (isCancelled) return;
+          objectUrl = URL.createObjectURL(blob);
+          const img = new Image();
+          img.onload = () => {
+            if (!isCancelled) setImageElement(img);
+          };
+          img.src = objectUrl;
+        })
+        .catch(err => {
+          console.warn('Failed to fetch imageUrl as blob, falling back to direct src:', err);
+          if (isCancelled) return;
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            if (!isCancelled) setImageElement(img);
+          };
+          img.src = imageUrl;
+        });
+    }
 
     return () => {
-      URL.revokeObjectURL(objectUrl);
+      isCancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
     };
-  }, [isOpen, file]);
+  }, [isOpen, file, imageUrl, initialAltText]);
 
   // Draw rotated/flipped preview onto canvas
   useEffect(() => {
@@ -613,7 +652,7 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
 
   // Generate cropped/rotated image blob with text/stamps and submit
   const handleConfirmCropped = async () => {
-    if (!imageElement || !file) return;
+    if (!imageElement || (!file && !imageUrl)) return;
 
     setIsProcessing(true);
     try {
@@ -666,7 +705,7 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
         });
       }
 
-      const mimeType = file.type === 'image/jpeg' ? 'image/jpeg' : 'image/png';
+      const mimeType = file?.type === 'image/jpeg' ? 'image/jpeg' : 'image/png';
       outCanvas.toBlob(async (blob) => {
         if (!blob) {
           throw new Error('Canvas to blob conversion failed');
@@ -684,19 +723,22 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
 
   // Insert original file without crop/rotation
   const handleConfirmOriginal = async () => {
-    if (!file) return;
-    setIsProcessing(true);
-    try {
-      await onConfirm(file, altText.trim() || 'image');
+    if (file) {
+      setIsProcessing(true);
+      try {
+        await onConfirm(file, altText.trim() || 'image');
+        onClose();
+      } catch (err) {
+        console.error('Failed to insert original image:', err);
+      } finally {
+        setIsProcessing(false);
+      }
+    } else {
       onClose();
-    } catch (err) {
-      console.error('Failed to insert original image:', err);
-    } finally {
-      setIsProcessing(false);
     }
   };
 
-  if (!isOpen || !file) return null;
+  if (!isOpen || (!file && !imageUrl)) return null;
 
   return (
     <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/75 backdrop-blur-sm p-3 animate-fade-in">

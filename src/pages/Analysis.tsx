@@ -2,11 +2,12 @@ import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'rea
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
-import { Activity, AlertCircle, Clock, Microscope } from 'lucide-react';
+import { Activity, AlertCircle, Clock, Microscope, Presentation } from 'lucide-react';
 
 const ImageProcessor = lazy(() => import('../components/analysis/ImageProcessor'));
+const SlideStudio = lazy(() => import('../components/analysis/SlideStudio'));
 
-type AnalysisTab = 'duration' | 'image';
+type AnalysisTab = 'duration' | 'image' | 'slides';
 
 export default function Analysis() {
   const { t } = useTranslation();
@@ -14,7 +15,8 @@ export default function Analysis() {
   const navigate = useNavigate();
 
   const isImageTab = location.pathname.includes('/image_analysis') || location.pathname.includes('/image');
-  const activeTab: AnalysisTab = isImageTab ? 'image' : 'duration';
+  const isSlidesTab = location.pathname.includes('/slides') || location.pathname.includes('/slide');
+  const activeTab: AnalysisTab = isSlidesTab ? 'slides' : (isImageTab ? 'image' : 'duration');
 
   const [protocols, setProtocols] = useState<any[]>([]);
   const [selectedProtocol, setSelectedProtocol] = useState<string>('');
@@ -163,7 +165,9 @@ export default function Analysis() {
           <p style={{ color: 'var(--text-secondary)' }}>
             {activeTab === 'duration'
               ? t('analysis.subtitle', '実験の所要時間の予実差や傾向を分析します。')
-              : t('analysis.imageSubtitle', '画像上の対象を囲み、ラベリング・定量分析を行います。')}
+              : activeTab === 'image'
+              ? t('analysis.imageSubtitle', '画像上の対象を囲み、ラベリング・定量分析を行います。')
+              : t('analysis.slidesSubtitle', 'プレゼンテーション用スライドの作成・生命科学者向けの作図と.pptx出力を行います。')}
           </p>
         </div>
       </div>
@@ -216,6 +220,27 @@ export default function Analysis() {
         >
           <Microscope size={16} />
           <span>{t('analysis.tabImage', '画像処理ツール')}</span>
+        </button>
+        <button
+          onClick={() => navigate('/analysis/slides')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-xs)',
+            padding: 'var(--space-sm) var(--space-lg)',
+            border: 'none',
+            borderBottom: activeTab === 'slides' ? '2px solid var(--color-primary)' : '2px solid transparent',
+            marginBottom: '-2px',
+            background: 'none',
+            color: activeTab === 'slides' ? 'var(--color-primary)' : 'var(--text-secondary)',
+            fontWeight: activeTab === 'slides' ? 'var(--font-weight-semibold)' : 'var(--font-weight-normal)',
+            fontSize: 'var(--font-size-sm)',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <Presentation size={16} />
+          <span>{t('analysis.tabSlides', 'スライド作成 (PPTX)')}</span>
         </button>
       </div>
 
@@ -284,6 +309,13 @@ export default function Analysis() {
       {activeTab === 'image' && (
         <Suspense fallback={<div className="card" style={{ padding: 'var(--space-xl)', textAlign: 'center' }}>{t('common.loading', '読み込み中...')}</div>}>
           <ImageProcessor />
+        </Suspense>
+      )}
+
+      {/* Slide Studio Tab (PowerPoint & Life Science Drawing) */}
+      {activeTab === 'slides' && (
+        <Suspense fallback={<div className="card" style={{ padding: 'var(--space-xl)', textAlign: 'center' }}>{t('common.loading', '読み込み中...')}</div>}>
+          <SlideStudio />
         </Suspense>
       )}
     </div>

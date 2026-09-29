@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, useContext } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useLocation } from 'react-router-dom';
-import { Book, Plus, Trash2, Calendar as CalendarIcon, FileText, Check, X, Search, Tag, FlaskConical, FileTerminal, Printer, ChevronDown, ChevronRight, Clock, History } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Book, Plus, Trash2, Calendar as CalendarIcon, FileText, Check, X, Search, Tag, FlaskConical, FileTerminal, Printer, ChevronDown, ChevronRight, Clock, History, BookOpen, Sparkles, Quote, Target, CheckSquare, ListTree, Grid2X2, Columns2, WrapText, PenLine, Eye } from 'lucide-react';
+import { ToastContext } from '../App';
 import { api } from '../api/client';
 import MDEditor from '@uiw/react-md-editor';
 import { DayPicker } from 'react-day-picker';
@@ -10,6 +11,14 @@ import { format, subDays, isSameDay } from 'date-fns';
 import { CustomDatabaseManager } from '../components/notebook/CustomDatabaseManager';
 import { DocumentManager } from '../components/notebook/DocumentManager';
 import { PrintNotesModal } from '../components/notebook/PrintNotesModal';
+import { CitationPickerModal } from '../components/notebook/CitationPickerModal';
+import { MilestonePickerModal, type MilestoneLinkSelection } from '../components/notebook/MilestonePickerModal';
+import {
+  CITATION_STYLES,
+  type CitationStyleId,
+  processCitations
+} from '../utils/citationEngine';
+import type { LiteratureItem, Milestone } from '../types';
 import {
   mdPreviewOptions,
   mdRemarkPlugins,
@@ -20,7 +29,8 @@ import {
   handleMarkdownDropWithCrop,
   uploadImageFile,
   insertTextAtCursor,
-  ImageCropModal
+  ImageCropModal,
+  ImageGridModal
 } from '../utils/markdownConfig';
 
 interface Note {
@@ -144,6 +154,9 @@ const TagInput = ({ value, onChange, allTags }: { value: string[], onChange: (ta
 export default function Notebook() {
   const { t } = useTranslation();
   const location = useLocation();
+  const navigate = useNavigate();
+  const { addToast } = useContext(ToastContext);
+
   const [cropModalOpen, setCropModalOpen] = useState(false);
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [cropTargetApi, setCropTargetApi] = useState<{
@@ -176,6 +189,73 @@ export default function Notebook() {
     }
   };
 
+  const [citationModalOpen, setCitationModalOpen] = useState(false);
+  const [literatures, setLiteratures] = useState<LiteratureItem[]>([]);
+  const [citationStyle, setCitationStyle] = useState<CitationStyleId>(() => {
+    const saved = localStorage.getItem('labflow_citation_style');
+    return (saved as CitationStyleId) || 'nature';
+  });
+  const [citationTargetApi, setCitationTargetApi] = useState<{
+    replaceSelection?: (text: string) => void;
+    textarea?: HTMLTextAreaElement;
+  } | null>(null);
+
+  const [milestoneModalOpen, setMilestoneModalOpen] = useState(false);
+  const [milestoneTargetApi, setMilestoneTargetApi] = useState<{
+    replaceSelection?: (text: string) => void;
+    textarea?: HTMLTextAreaElement;
+  } | null>(null);
+
+  const [gridModalOpen, setGridModalOpen] = useState(false);
+  const [gridTargetApi, setGridTargetApi] = useState<{
+    replaceSelection?: (text: string) => void;
+    textarea?: HTMLTextAreaElement;
+  } | null>(null);
+
+  const [editorPreviewMode, setEditorPreviewMode] = useState<'live' | 'edit' | 'preview'>(() => {
+    return (localStorage.getItem('labflow_editor_preview_mode') as 'live' | 'edit' | 'preview') || 'live';
+  });
+  const [isWordWrap, setIsWordWrap] = useState<boolean>(() => {
+    // Default to false (horizontal scroll enabled) as requested by user
+    return localStorage.getItem('labflow_editor_word_wrap') === 'true';
+  });
+
+  const handlePreviewModeChange = (mode: 'live' | 'edit' | 'preview') => {
+    setEditorPreviewMode(mode);
+    localStorage.setItem('labflow_editor_preview_mode', mode);
+  };
+
+  const handleToggleWordWrap = () => {
+    setIsWordWrap(prev => {
+      const next = !prev;
+      localStorage.setItem('labflow_editor_word_wrap', String(next));
+      return next;
+    });
+  };
+
+  const handleInsertImageGrid = (markdown: string) => {
+    if (gridTargetApi?.replaceSelection) {
+      gridTargetApi.replaceSelection(markdown);
+    } else if (gridTargetApi?.textarea) {
+      insertTextAtCursor(gridTargetApi.textarea, markdown);
+    } else if (isEditing) {
+      setEditContent(prev => prev ? `${prev}${markdown}` : markdown);
+    } else if (isCreatingInline) {
+      setInlineContent(prev => prev ? `${prev}${markdown}` : markdown);
+    }
+  };
+
+  const handleCitationStyleChange = (styleId: CitationStyleId) => {
+    setCitationStyle(styleId);
+    localStorage.setItem('labflow_citation_style', styleId);
+  };
+
+  const literatureMap = useMemo(() => {
+    const map = new Map<number, LiteratureItem>();
+    literatures.forEach(lit => map.set(lit.id, lit));
+    return map;
+  }, [literatures]);
+
   const customCommands = useMemo(() => {
     return getCustomMdCommands(
       t('notebook.mathInline', '数式 (インライン): $...$'),
@@ -183,9 +263,98 @@ export default function Notebook() {
       t('notebook.insertImage', '画像を挿入 (PC内の画像ファイルを選択)'),
       (file, api) => handleOpenCrop(file, api),
       t('notebook.superscript', '上付き文字: <sup>...</sup>'),
-      t('notebook.subscript', '下付き文字: <sub>...</sub>')
+      t('notebook.subscript', '下付き文字: <sub>...</sub>'),
+      t('citation.insertCitationCommand', '引用番号の挿入: [@lit:ID]'),
+      (api) => {
+        setCitationTargetApi({ replaceSelection: (text: string) => api.replaceSelection(text) });
+        setCitationModalOpen(true);
+      },
+      t('notebook.insertMilestoneCommand', 'マイルストーンリンクの挿入: [🎯 ...]'),
+      (api) => {
+        setMilestoneTargetApi({ replaceSelection: (text: string) => api.replaceSelection(text) });
+        setMilestoneModalOpen(true);
+      },
+      t('notebook.insertImageGrid', '画像を行列配置 (2行2列など)'),
+      (api) => {
+        setGridTargetApi({ replaceSelection: (text: string) => api.replaceSelection(text) });
+        setGridModalOpen(true);
+      }
     );
   }, [t, handleOpenCrop]);
+
+  const handleSelectMilestone = (ms: Milestone) => {
+    const link = `[🎯 ${ms.name}](/milestones?id=${ms.id})`;
+    if (milestoneTargetApi?.replaceSelection) {
+      milestoneTargetApi.replaceSelection(link);
+    } else if (milestoneTargetApi?.textarea) {
+      insertTextAtCursor(milestoneTargetApi.textarea, link);
+    } else if (isEditing) {
+      setEditContent(prev => prev ? `${prev} ${link}` : link);
+    } else if (isCreatingInline) {
+      setInlineContent(prev => prev ? `${prev} ${link}` : link);
+    }
+    addToast('info', t('notebook.milestoneLinkInserted', 'マイルストーンへのリンクを挿入しました'));
+  };
+
+  const handleSelectMilestoneLink = (selection: MilestoneLinkSelection) => {
+    const link = selection.markdown;
+    if (milestoneTargetApi?.replaceSelection) {
+      milestoneTargetApi.replaceSelection(link);
+    } else if (milestoneTargetApi?.textarea) {
+      insertTextAtCursor(milestoneTargetApi.textarea, link);
+    } else if (isEditing) {
+      setEditContent(prev => prev ? `${prev} ${link}` : link);
+    } else if (isCreatingInline) {
+      setInlineContent(prev => prev ? `${prev} ${link}` : link);
+    }
+    const msg = selection.type === 'task'
+      ? t('notebook.taskLinkInserted', 'タスクへのリンクを挿入しました')
+      : selection.type === 'subtask'
+        ? t('notebook.subtaskLinkInserted', 'サブタスクへのリンクを挿入しました')
+        : t('notebook.milestoneLinkInserted', 'マイルストーンへのリンクを挿入しました');
+    addToast('info', msg);
+  };
+
+  const handleInsertCitations = (litIds: number[]) => {
+    if (litIds.length === 0) return;
+    const tag = `[@lit:${litIds.join(', @lit:')}]`;
+    if (citationTargetApi?.replaceSelection) {
+      citationTargetApi.replaceSelection(tag);
+    } else if (citationTargetApi?.textarea) {
+      insertTextAtCursor(citationTargetApi.textarea, tag);
+    } else if (isEditing) {
+      setEditContent(prev => prev ? `${prev} ${tag}` : tag);
+    } else if (isCreatingInline) {
+      setInlineContent(prev => prev ? `${prev} ${tag}` : tag);
+    }
+  };
+
+  const handleSyncBibliography = (isInline: boolean = false) => {
+    const content = isInline ? inlineContent : editContent;
+    const result = processCitations(content, literatureMap, citationStyle);
+    if (result.citedItems.length === 0) {
+      alert(t('citation.noCitationsInText', '本文中に [@lit:ID] 形式の引用が見つかりません。先に引用番号を挿入してください。'));
+      return;
+    }
+
+    const bibHeader = t('citation.bibliographyHeader', '## 参考文献');
+    const bibBlock = `\n\n---\n${bibHeader}\n\n${result.bibliographyMarkdown}\n`;
+
+    const bibRegex = /\n*---\n+##\s*(?:参考文献|References)[\s\S]*$/i;
+    let newContent = content;
+    if (bibRegex.test(content)) {
+      newContent = content.replace(bibRegex, bibBlock);
+    } else {
+      newContent = content.trimEnd() + bibBlock;
+    }
+
+    if (isInline) {
+      setInlineContent(newContent);
+    } else {
+      setEditContent(newContent);
+    }
+  };
+
   const [notes, setNotes] = useState<Note[]>([]);
   const [scheduledExperiments, setScheduledExperiments] = useState<any[]>([]);
   
@@ -214,7 +383,17 @@ export default function Notebook() {
   useEffect(() => {
     fetchNotes();
     fetchExperiments();
+    fetchLiteratures();
   }, []);
+
+  const fetchLiteratures = async () => {
+    try {
+      const data = await api.get<any>('/literature');
+      setLiteratures(Array.isArray(data) ? data : (data?.items || data?.data || []));
+    } catch (e) {
+      console.error('Failed to load literatures in Notebook:', e);
+    }
+  };
 
   const fetchNotes = async () => {
     try {
@@ -264,6 +443,18 @@ export default function Notebook() {
     });
     return Array.from(tagsSet).sort();
   }, [notes]);
+
+  const handleTextareaScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
+    const textarea = e.currentTarget;
+    const editorArea = textarea.closest('.w-md-editor');
+    if (editorArea) {
+      const preview = editorArea.querySelector('.w-md-editor-preview') as HTMLElement | null;
+      if (preview && textarea.scrollHeight > textarea.clientHeight) {
+        const scrollRatio = textarea.scrollTop / (textarea.scrollHeight - textarea.clientHeight);
+        preview.scrollTop = scrollRatio * (preview.scrollHeight - preview.clientHeight);
+      }
+    }
+  };
 
   const handleNewNoteWithDate = (date: string) => {
     setSelectedNote(null);
@@ -416,6 +607,219 @@ export default function Notebook() {
     return notes.filter(n => n.date >= sevenDaysAgo);
   }, [notes]);
 
+  const normalizeGridMarkdown = useCallback((text: string): string => {
+    if (!text) return text;
+    // Converts legacy/broken `![alt | 200px](url)` inside GFM tables to `![alt](url "200px")`
+    return text.replace(/!\[(.*?)\s*(?:\||\\\|)\s*(\d+(?:px|%))\s*\]\((.*?)\)/g, '![$1]($3 "$2")');
+  }, []);
+
+  const processedNoteContent = useMemo(() => {
+    if (!selectedNote?.content) return '';
+    const normalized = normalizeGridMarkdown(selectedNote.content);
+    const result = processCitations(normalized, literatureMap, citationStyle);
+    const hasManualBib = /##\s*(?:参考文献|References)/i.test(selectedNote.content);
+    if (!hasManualBib && result.citedItems.length > 0) {
+      return `${result.processedText}\n\n---\n### ${t('citation.references', '参考文献')}\n\n${result.bibliographyMarkdown}`;
+    }
+    return result.processedText;
+  }, [selectedNote?.content, literatureMap, citationStyle, normalizeGridMarkdown, t]);
+
+  const handleMilestoneLinkClick = useCallback(async (href: string) => {
+    if (isEditing) {
+      try {
+        const titleToSave = editTitle.trim() || selectedNote?.title || t('notebook.untitledNote', '無題のノート');
+        const dateToSave = editDate || selectedNote?.date || format(new Date(), 'yyyy-MM-dd');
+        const payload = {
+          title: titleToSave,
+          content: editContent,
+          date: dateToSave,
+          tags: editTags,
+          scheduled_experiment_id: editExperimentId === '' ? null : Number(editExperimentId)
+        };
+
+        let savedNote: Note;
+        if (selectedNote) {
+          savedNote = await api.put<Note>(`/notebook/${selectedNote.id}`, payload);
+        } else {
+          savedNote = await api.post<Note>('/notebook', payload);
+        }
+        await fetchNotes();
+        setSelectedNote(savedNote);
+        setIsEditing(false);
+        addToast('success', t('notebook.savedAndNavigated', 'ノートを保存してマイルストーンへ移動しました'));
+      } catch (e) {
+        console.error('Failed to auto-save note on milestone link click:', e);
+        addToast('warning', t('notebook.saveFailedNavigating', '保存に失敗しましたが、マイルストーンへ移動します'));
+        setIsEditing(false);
+      }
+      navigate(href);
+    } else if (isCreatingInline) {
+      try {
+        if (inlineTitle.trim()) {
+          await handleCreateInline(inlineTitle.trim(), inlineContent, inlineTags, inlineDate, inlineExperimentId, true);
+          addToast('success', t('notebook.savedAndNavigated', 'ノートを保存してマイルストーンへ移動しました'));
+        } else {
+          setIsCreatingInline(false);
+          setInlineNoteId(null);
+        }
+      } catch (e) {
+        console.error('Failed to save inline note:', e);
+      }
+      navigate(href);
+    } else {
+      navigate(href);
+    }
+  }, [
+    isEditing, isCreatingInline, editTitle, editContent, editDate, editTags, editExperimentId,
+    selectedNote, inlineTitle, inlineContent, inlineTags, inlineDate, inlineExperimentId,
+    t, addToast, navigate
+  ]);
+
+  const markdownComponents = useMemo(() => ({
+    a: ({ href, children, ...props }: any) => {
+      const isMilestone = href && (href.startsWith('/milestones') || href.includes('milestones?'));
+      if (isMilestone) {
+        const isSubtask = href.includes('subItemId=') || href.includes('subtaskId=');
+        const isTask = !isSubtask && (href.includes('itemId=') || href.includes('taskId='));
+        const tooltip = isSubtask
+          ? t('notebook.jumpToSubtask', 'サブタスクへ移動（編集中は保存してジャンプ）')
+          : isTask
+            ? t('notebook.jumpToTask', 'タスクへ移動（編集中は保存してジャンプ）')
+            : t('notebook.jumpToMilestone', 'マイルストーンへ移動（編集中は保存してジャンプ）');
+
+        const badgeStyle = isSubtask
+          ? 'bg-purple-500/15 text-purple-300 border-purple-500/30 hover:bg-purple-500/30 hover:text-purple-100 hover:border-purple-400/50'
+          : isTask
+            ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30 hover:bg-indigo-500/35 hover:text-indigo-100 hover:border-indigo-400/50'
+            : 'bg-purple-500/20 text-purple-300 border-purple-500/30 hover:bg-purple-500/35 hover:text-purple-100 hover:border-purple-400/50';
+
+        return (
+          <a
+            href={href}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleMilestoneLinkClick(href);
+            }}
+            className={`inline-flex items-center gap-1 px-2.5 py-0.5 mx-1 rounded-lg border ${badgeStyle} transition-all text-xs font-semibold cursor-pointer shadow-sm align-middle no-underline group`}
+            title={tooltip}
+            {...props}
+          >
+            {isSubtask ? (
+              <ListTree className="w-3.5 h-3.5 text-purple-400 group-hover:scale-110 transition-transform flex-shrink-0" />
+            ) : isTask ? (
+              <CheckSquare className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition-transform flex-shrink-0" />
+            ) : (
+              <Target className="w-3.5 h-3.5 text-purple-400 group-hover:scale-110 transition-transform flex-shrink-0" />
+            )}
+            <span className="underline decoration-current/40 group-hover:decoration-current">{children}</span>
+          </a>
+        );
+      }
+      return (
+        <a href={href} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline" {...props}>
+          {children}
+        </a>
+      );
+    },
+    table: ({ node, children, ...props }: any) => {
+      const hasImg = JSON.stringify(node).includes('"tagName":"img"');
+      return (
+        <table className={hasImg ? 'image-matrix-table' : undefined} {...props}>
+          {children}
+        </table>
+      );
+    },
+    td: ({ node, children, ...props }: any) => {
+      const hasImg = JSON.stringify(node).includes('"tagName":"img"');
+      return (
+        <td className={hasImg ? 'image-matrix-cell' : undefined} {...props}>
+          {children}
+        </td>
+      );
+    },
+    p: ({ node, children, ...props }: any) => {
+      const childArray = React.Children.toArray(children);
+      const imgChildren = childArray.filter(
+        (c: any) => c?.type === 'img' || c?.props?.src || (c?.props?.node?.tagName === 'img')
+      );
+      if (
+        imgChildren.length >= 2 &&
+        imgChildren.length === childArray.filter((c: any) => typeof c !== 'string' || (typeof c === 'string' && c.trim() !== '')).length
+      ) {
+        return (
+          <div
+            className="my-3 grid gap-3 items-center justify-items-center"
+            style={{
+              gridTemplateColumns: `repeat(${Math.min(imgChildren.length, 3)}, minmax(0, 1fr))`
+            }}
+          >
+            {children}
+          </div>
+        );
+      }
+      return <p {...props}>{children}</p>;
+    },
+    img: ({ src, alt, title, style, ...props }: any) => {
+      let displayAlt = alt || '';
+      let customHeight: string | undefined = undefined;
+
+      // 1. Support title syntax: ![alt](url "200px")
+      if (title && /(\d+px|\d+%)/.test(title)) {
+        customHeight = title;
+      }
+
+      // 2. Also support legacy/escaped alt | 200px syntax
+      if (alt && typeof alt === 'string' && (alt.includes('|') || alt.includes('\\|'))) {
+        const parts = alt.replace('\\|', '|').split('|').map((s: string) => s.trim());
+        displayAlt = parts[0] || '';
+        const sizePart = parts[1];
+        if (sizePart && /(\d+px|\d+%)/.test(sizePart)) {
+          customHeight = sizePart;
+        }
+      }
+
+      return (
+        <img
+          src={src}
+          alt={displayAlt}
+          title={title && !/(\d+px|\d+%)/.test(title) ? title : undefined}
+          style={{
+            ...(style || {}),
+            ...(customHeight ? { maxHeight: customHeight, objectFit: 'contain' } : {})
+          }}
+          {...props}
+        />
+      );
+    }
+  }), [handleMilestoneLinkClick, t]);
+
+  const editorPreviewOptions = useMemo(() => ({
+    remarkPlugins: mdRemarkPlugins,
+    rehypePlugins: mdRehypePlugins,
+    components: markdownComponents
+  }), [markdownComponents]);
+
+  const handleContainerClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'IMG') {
+      const img = target as HTMLImageElement;
+      if (img.src) {
+        setZoomImage({ src: img.src, alt: img.alt });
+      }
+      return;
+    }
+    const anchor = target.closest('a');
+    if (!anchor) return;
+    const href = anchor.getAttribute('href');
+    if (!href) return;
+    if (href.startsWith('/milestones') || href.includes('milestones?id=')) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleMilestoneLinkClick(href);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6 pb-12 min-h-full">
       {/* ─── Upper Section: Experiment Notebook ─── */}
@@ -494,7 +898,9 @@ export default function Notebook() {
 
             <div 
               data-color-mode="dark" 
-              className="border border-white/10 rounded-lg overflow-hidden"
+              className={`border border-white/10 rounded-lg overflow-hidden ${
+                !isWordWrap ? 'w-md-editor-nowrap' : 'w-md-editor-wrap'
+              }`}
               onDrop={(e) => handleMarkdownDropWithCrop(e, handleOpenCrop)}
               onDragOver={handleMarkdownDragOver}
               onKeyDown={(e) => {
@@ -514,12 +920,13 @@ export default function Notebook() {
                 highlightEnable={false}
                 hideToolbar={false}
                 commands={customCommands}
-                previewOptions={mdPreviewOptions}
+                previewOptions={editorPreviewOptions}
                 textareaProps={{
                   placeholder: t('notebook.contentPlaceholder', '内容 (Markdown)...'),
                   onPaste: (e) => handleMarkdownPasteWithCrop(e, handleOpenCrop),
                   onDrop: (e) => handleMarkdownDropWithCrop(e, handleOpenCrop),
                   onDragOver: handleMarkdownDragOver,
+                  wrap: isWordWrap ? 'soft' : 'off',
                 }}
                 style={{ borderRadius: '0', border: 'none' }}
               />
@@ -677,93 +1084,208 @@ export default function Notebook() {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col glass-panel rounded-2xl border border-white/10 shadow-glass overflow-hidden">
         {isEditing ? (
-          <div className="flex-1 flex flex-col p-6 gap-4 overflow-y-auto custom-scrollbar">
-            <div className="flex justify-between items-center mb-2">
-              <h2 className="text-xl font-medium">{t('notebook.edit', 'ノートを編集')}</h2>
-              <div className="flex gap-2">
-                <button onClick={handleCancelEdit} className="btn-secondary py-1.5 px-3 flex items-center gap-1 text-sm">
-                  <X className="w-4 h-4" /> {t('common.cancel', 'キャンセル')}
-                </button>
-                <button onClick={() => handleSaveNote(false)} className="btn-secondary py-1.5 px-3 flex items-center gap-1 text-sm border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/10" title="Ctrl+S">
-                  <Check className="w-4 h-4" /> {t('notebook.saveDraft', '一時保存')}
-                </button>
-                <button onClick={() => handleSaveNote(true)} className="btn-primary py-1.5 px-3 flex items-center gap-1 text-sm">
-                  <Check className="w-4 h-4" /> {t('notebook.saveAndClose', '保存して閉じる')}
-                </button>
+          <div className="flex-1 flex flex-col h-full overflow-hidden p-6 gap-3">
+            {/* Top Fixed Section: Actions, Title, Date, Tags, Experiment */}
+            <div className="flex-shrink-0 space-y-3">
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-medium">{t('notebook.edit', 'ノートを編集')}</h2>
+                <div className="flex gap-2">
+                  <button onClick={handleCancelEdit} className="btn-secondary py-1.5 px-3 flex items-center gap-1 text-sm">
+                    <X className="w-4 h-4" /> {t('common.cancel', 'キャンセル')}
+                  </button>
+                  <button onClick={() => handleSaveNote(false)} className="btn-secondary py-1.5 px-3 flex items-center gap-1 text-sm border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/10" title="Ctrl+S">
+                    <Check className="w-4 h-4" /> {t('notebook.saveDraft', '一時保存')}
+                  </button>
+                  <button onClick={() => handleSaveNote(true)} className="btn-primary py-1.5 px-3 flex items-center gap-1 text-sm">
+                    <Check className="w-4 h-4" /> {t('notebook.saveAndClose', '保存して閉じる')}
+                  </button>
+                </div>
               </div>
-            </div>
 
-            {(!selectedNote || !selectedNote.content) && (
-              <div className="flex flex-col gap-1.5 mb-2">
-                <button
-                  type="button"
-                  onClick={() => setShowTemplates(!showTemplates)}
-                  className="flex items-center gap-1 text-xs text-gray-400 hover:text-indigo-300 w-fit transition-colors"
-                >
-                  {showTemplates ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                  <FileTerminal className="w-3.5 h-3.5" />
-                  <span>{t('notebook.showTemplates', 'テンプレートを表示')} {showTemplates ? t('notebook.closeTemplates', '(閉じる)') : t('notebook.openTemplates', '(開く)')}</span>
-                </button>
-                {showTemplates && (
-                  <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
-                    {TEMPLATES.map((tmpl, idx) => (
-                      <button 
-                        key={idx} 
-                        onClick={() => applyTemplate(tmpl)}
-                        className="px-3 py-1 text-xs rounded-full border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 whitespace-nowrap transition-colors"
-                      >
-                        {t(`notebook.templates.${tmpl.key}`, tmpl.name)}
-                      </button>
+              {(!selectedNote || !selectedNote.content) && (
+                <div className="flex flex-col gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowTemplates(!showTemplates)}
+                    className="flex items-center gap-1 text-xs text-gray-400 hover:text-indigo-300 w-fit transition-colors"
+                  >
+                    {showTemplates ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                    <FileTerminal className="w-3.5 h-3.5" />
+                    <span>{t('notebook.showTemplates', 'テンプレートを表示')} {showTemplates ? t('notebook.closeTemplates', '(閉じる)') : t('notebook.openTemplates', '(開く)')}</span>
+                  </button>
+                  {showTemplates && (
+                    <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
+                      {TEMPLATES.map((tmpl, idx) => (
+                        <button 
+                          key={idx} 
+                          onClick={() => applyTemplate(tmpl)}
+                          className="px-3 py-1 text-xs rounded-full border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 whitespace-nowrap transition-colors"
+                        >
+                          {t(`notebook.templates.${tmpl.key}`, tmpl.name)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">{t('notebook.noteTitle', 'タイトル')}</label>
+                  <input 
+                    type="text" 
+                    value={editTitle}
+                    onChange={e => setEditTitle(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">{t('notebook.date', '日付')}</label>
+                  <input 
+                    type="date" 
+                    value={editDate}
+                    onChange={e => setEditDate(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1 flex items-center gap-1"><Tag className="w-3.5 h-3.5"/> {t('notebook.tags', 'タグ')}</label>
+                  <TagInput value={editTags} onChange={setEditTags} allTags={allTags} />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1 flex items-center gap-1"><FlaskConical className="w-3.5 h-3.5"/> {t('notebook.relatedExperiment', '関連する実験')}</label>
+                  <select 
+                    value={editExperimentId}
+                    onChange={e => setEditExperimentId(e.target.value ? Number(e.target.value) : '')}
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500 transition-colors text-white"
+                  >
+                    <option value="">{t('notebook.unspecified', '-- 指定なし --')}</option>
+                    {scheduledExperiments.map(exp => (
+                      <option key={exp.id} value={exp.id}>
+                        {exp.start_date} | {exp.label ? `${exp.label} - ` : ''}{exp.experiment_type_name}
+                      </option>
                     ))}
-                  </div>
-                )}
-              </div>
-            )}
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">{t('notebook.noteTitle', 'タイトル')}</label>
-                <input 
-                  type="text" 
-                  value={editTitle}
-                  onChange={e => setEditTitle(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg p-2.5 text-sm outline-none focus:border-indigo-500 transition-colors"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">{t('notebook.date', '日付')}</label>
-                <input 
-                  type="date" 
-                  value={editDate}
-                  onChange={e => setEditDate(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg p-2.5 text-sm outline-none focus:border-indigo-500 transition-colors"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1 flex items-center gap-1"><Tag className="w-4 h-4"/> {t('notebook.tags', 'タグ')}</label>
-                <TagInput value={editTags} onChange={setEditTags} allTags={allTags} />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1 flex items-center gap-1"><FlaskConical className="w-4 h-4"/> {t('notebook.relatedExperiment', '関連する実験')}</label>
-                <select 
-                  value={editExperimentId}
-                  onChange={e => setEditExperimentId(e.target.value ? Number(e.target.value) : '')}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg p-2.5 text-sm outline-none focus:border-indigo-500 transition-colors text-white"
-                >
-                  <option value="">{t('notebook.unspecified', '-- 指定なし --')}</option>
-                  {scheduledExperiments.map(exp => (
-                    <option key={exp.id} value={exp.id}>
-                      {exp.start_date} | {exp.label ? `${exp.label} - ` : ''}{exp.experiment_type_name}
-                    </option>
-                  ))}
-                </select>
+                  </select>
+                </div>
               </div>
             </div>
             
-            <div className="flex-1 flex flex-col mt-2 h-full min-h-[400px]" data-color-mode="dark">
-              <label className="block text-sm text-gray-400 mb-1">{t('notebook.content', '内容 (Markdown)')}</label>
+            {/* Editor Section: Stretches to fill remaining height */}
+            <div className="flex-1 min-h-0 flex flex-col" data-color-mode="dark">
+              <div className="flex items-center justify-between mb-1 flex-shrink-0">
+                <label className="block text-xs text-gray-400 m-0">{t('notebook.content', '内容 (Markdown)')}</label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCitationTargetApi(null);
+                      setCitationModalOpen(true);
+                    }}
+                    className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/30 text-[11px] flex items-center gap-1 transition-colors"
+                    title={t('citation.insertCitationTooltip', '登録済み文献から引用タグ [@lit:ID] を挿入')}
+                  >
+                    <BookOpen className="w-3 h-3" />
+                    <span>{t('citation.insertCitationBtn', '引用番号の挿入')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSyncBibliography(false)}
+                    className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 text-[11px] flex items-center gap-1 transition-colors"
+                    title={t('citation.syncBibTooltip', '本文末尾に文献番号付きの参考文献リスト（末尾引用）を挿入・同期')}
+                  >
+                    <span>{t('citation.syncBibBtn', '末尾引用を挿入')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMilestoneTargetApi(null);
+                      setMilestoneModalOpen(true);
+                    }}
+                    className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30 text-[11px] flex items-center gap-1 transition-colors"
+                    title={t('notebook.insertMilestoneTooltip', '特定のマイルストーンへのリンクを挿入')}
+                  >
+                    <Target className="w-3 h-3 text-purple-400" />
+                    <span>{t('notebook.insertMilestoneBtn', 'マイルストーンリンク')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGridTargetApi(null);
+                      setGridModalOpen(true);
+                    }}
+                    className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 text-[11px] flex items-center gap-1 transition-colors"
+                    title={t('notebook.insertImageGridTooltip', '画像を2行2列などの行列グリッドで配置')}
+                  >
+                    <Grid2X2 className="w-3 h-3 text-blue-400" />
+                    <span>{t('notebook.imageGridBtn', '画像グリッド')}</span>
+                  </button>
+
+                  <div className="h-3 w-px bg-white/20 mx-1" />
+
+                  {/* Word Wrap / Horizontal Scroll Toggle */}
+                  <button
+                    type="button"
+                    onClick={handleToggleWordWrap}
+                    className={`px-2 py-0.5 rounded text-[11px] flex items-center gap-1 transition-colors border ${
+                      !isWordWrap
+                        ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
+                        : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10'
+                    }`}
+                    title={isWordWrap ? t('notebook.enableHScroll', '横スクロールを有効にする (折り返し無効)') : t('notebook.enableWordWrap', '行末で折り返す')}
+                  >
+                    <WrapText className="w-3 h-3" />
+                    <span>{!isWordWrap ? t('notebook.hScroll', '横スクロール') : t('notebook.wordWrap', '折り返し')}</span>
+                  </button>
+
+                  {/* Preview Mode Segmented Buttons */}
+                  <div className="flex items-center rounded bg-white/5 p-0.5 border border-white/10">
+                    <button
+                      type="button"
+                      onClick={() => handlePreviewModeChange('edit')}
+                      className={`px-2 py-0.5 rounded text-[11px] flex items-center gap-1 transition-colors ${
+                        editorPreviewMode === 'edit'
+                          ? 'bg-indigo-600 text-white font-medium shadow-sm'
+                          : 'text-gray-400 hover:text-white'
+                      }`}
+                      title={t('notebook.editorOnlyTooltip', 'プレビューを非表示にして編集欄を全幅化')}
+                    >
+                      <PenLine className="w-3 h-3" />
+                      <span>{t('notebook.editorOnly', '編集のみ')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handlePreviewModeChange('live')}
+                      className={`px-2 py-0.5 rounded text-[11px] flex items-center gap-1 transition-colors ${
+                        editorPreviewMode === 'live'
+                          ? 'bg-indigo-600 text-white font-medium shadow-sm'
+                          : 'text-gray-400 hover:text-white'
+                      }`}
+                      title={t('notebook.liveSplitTooltip', 'エディタとプレビューを左右分割表示')}
+                    >
+                      <Columns2 className="w-3 h-3" />
+                      <span>{t('notebook.liveSplit', '分割')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handlePreviewModeChange('preview')}
+                      className={`px-2 py-0.5 rounded text-[11px] flex items-center gap-1 transition-colors ${
+                        editorPreviewMode === 'preview'
+                          ? 'bg-indigo-600 text-white font-medium shadow-sm'
+                          : 'text-gray-400 hover:text-white'
+                      }`}
+                      title={t('notebook.previewOnlyTooltip', 'プレビューのみ全幅表示')}
+                    >
+                      <Eye className="w-3 h-3" />
+                      <span>{t('notebook.previewOnly', 'プレビュー')}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
               <div 
-                className="flex-1 overflow-hidden h-full rounded-lg border border-white/10"
+                className={`flex-1 min-h-0 overflow-hidden rounded-lg border border-white/10 flex flex-col ${
+                  !isWordWrap ? 'w-md-editor-nowrap' : 'w-md-editor-wrap'
+                }`}
+                onClick={handleContainerClick}
                 onDrop={(e) => handleMarkdownDropWithCrop(e, handleOpenCrop)}
                 onDragOver={handleMarkdownDragOver}
                 onKeyDown={(e) => {
@@ -777,18 +1299,20 @@ export default function Notebook() {
                   value={editContent}
                   onChange={(val) => setEditContent(val || '')}
                   height="100%"
-                  preview="live"
+                  preview={editorPreviewMode}
                   highlightEnable={false}
                   hideToolbar={false}
                   commands={customCommands}
-                  previewOptions={mdPreviewOptions}
+                  previewOptions={editorPreviewOptions}
                   textareaProps={{
                     placeholder: t('notebook.placeholder', '実験の記録やメモをMarkdown形式で記述してください...'),
                     onPaste: (e) => handleMarkdownPasteWithCrop(e, handleOpenCrop),
                     onDrop: (e) => handleMarkdownDropWithCrop(e, handleOpenCrop),
                     onDragOver: handleMarkdownDragOver,
+                    onScroll: handleTextareaScroll,
+                    wrap: isWordWrap ? 'soft' : 'off',
                   }}
-                  style={{ borderRadius: '0', border: 'none', height: '100%' }}
+                  style={{ borderRadius: '0', border: 'none', height: '100%', flex: '1 1 0%', minHeight: 0 }}
                 />
               </div>
             </div>
@@ -831,7 +1355,7 @@ export default function Notebook() {
                   </div>
                 )}
               </div>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
                 <button 
                   onClick={() => setIsPrintModalOpen(true)}
                   className="btn-secondary py-1.5 px-3 flex items-center gap-1 text-sm text-gray-300 hover:text-white"
@@ -853,21 +1377,14 @@ export default function Notebook() {
             <div 
               className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-[#0d1117]" 
               data-color-mode="dark"
-              onClick={(e) => {
-                const target = e.target as HTMLElement;
-                if (target.tagName === 'IMG') {
-                  const img = target as HTMLImageElement;
-                  if (img.src) {
-                    setZoomImage({ src: img.src, alt: img.alt });
-                  }
-                }
-              }}
+              onClick={handleContainerClick}
             >
               <MDEditor.Markdown
-                source={selectedNote.content || t('notebook.emptyContent', '*本文はありません*')}
+                source={processedNoteContent || t('notebook.emptyContent', '*本文はありません*')}
                 style={{ backgroundColor: 'transparent' }}
                 remarkPlugins={mdRemarkPlugins}
                 rehypePlugins={mdRehypePlugins}
+                components={markdownComponents}
               />
             </div>
           </div>
@@ -891,6 +1408,33 @@ export default function Notebook() {
       isOpen={isPrintModalOpen} 
       onClose={() => setIsPrintModalOpen(false)} 
       notes={notes} 
+      literatures={literatures}
+      citationStyle={citationStyle}
+    />
+
+    {/* ─── Citation Picker Modal ─── */}
+    <CitationPickerModal
+      isOpen={citationModalOpen}
+      onClose={() => {
+        setCitationModalOpen(false);
+        setCitationTargetApi(null);
+      }}
+      onInsertCitation={handleInsertCitations}
+      onInsertBibliography={() => handleSyncBibliography(isCreatingInline)}
+      selectedStyle={citationStyle}
+      onStyleChange={handleCitationStyleChange}
+      literatures={literatures}
+    />
+
+    {/* ─── Milestone Picker Modal ─── */}
+    <MilestonePickerModal
+      isOpen={milestoneModalOpen}
+      onClose={() => {
+        setMilestoneModalOpen(false);
+        setMilestoneTargetApi(null);
+      }}
+      onSelectMilestone={handleSelectMilestone}
+      onSelectLink={handleSelectMilestoneLink}
     />
 
     {/* ─── Image Crop & Orientation Modal ─── */}
@@ -903,6 +1447,16 @@ export default function Notebook() {
         setCropTargetApi(null);
       }}
       onConfirm={handleCropConfirm}
+    />
+
+    {/* ─── Image Grid (Matrix Layout) Modal ─── */}
+    <ImageGridModal
+      isOpen={gridModalOpen}
+      onClose={() => {
+        setGridModalOpen(false);
+        setGridTargetApi(null);
+      }}
+      onInsertGrid={handleInsertImageGrid}
     />
 
     {/* ─── Click-to-Zoom Lightbox for Markdown Images ─── */}

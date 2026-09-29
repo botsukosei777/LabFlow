@@ -17,6 +17,16 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+    watch: {
+      ignored: [
+        '**/data/**',
+        '**/*.db',
+        '**/*.db-journal',
+        '**/*.db-wal',
+        '**/*.db-shm',
+        '**/server/**',
+      ],
+    },
   },
   build: {
     chunkSizeWarningLimit: 1500,

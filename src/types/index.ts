@@ -139,12 +139,15 @@ export interface CalendarEvent {
 }
 
 // Milestones
+export type PriorityTier = 'NOW' | 'NEXT' | 'LATER' | 'IDEAS';
+
 export interface Milestone {
   id: number;
   name: string;
   description: string;
   deadline: string | null;
   status: 'active' | 'completed' | 'archived';
+  is_standalone?: boolean | number;
   created_at: string;
   updated_at: string;
   items?: MilestoneItem[];
@@ -157,10 +160,16 @@ export interface MilestoneItem {
   data_type: 'qualitative' | 'quantitative' | 'task';
   target_count: number;
   current_count: number;
+  unit?: string;
   is_completed: boolean;
+  priority?: PriorityTier;
   order_index: number;
   created_at: string;
+  updated_at?: string;
   sub_items?: MilestoneSubItem[];
+  // Context fields for flat / tree view
+  milestone_name?: string;
+  milestone_is_standalone?: boolean;
 }
 
 export interface MilestoneSubItem {
@@ -170,8 +179,17 @@ export interface MilestoneSubItem {
   data_type: 'qualitative' | 'quantitative' | 'task';
   target_count: number;
   current_count: number;
+  unit?: string;
   is_completed: boolean;
+  priority?: PriorityTier;
   order_index: number;
+  created_at?: string;
+  updated_at?: string;
+  // Context fields for flat / tree view
+  parent_item_name?: string;
+  parent_item_priority?: PriorityTier;
+  milestone_id?: number;
+  milestone_name?: string;
 }
 
 export interface SubProtocol {

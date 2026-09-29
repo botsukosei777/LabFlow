@@ -21,6 +21,7 @@ import {
   FileText,
   CheckSquare,
 } from 'lucide-react';
+import SidebarAlerts from './SidebarAlerts';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -116,6 +117,9 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           {collapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
         </button>
       </div>
+
+      {/* in advance メッセージ通知（赤色強調表示・サイドバー最下部） */}
+      <SidebarAlerts collapsed={collapsed} />
     </aside>
   );
 }
