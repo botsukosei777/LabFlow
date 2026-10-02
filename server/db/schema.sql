@@ -214,6 +214,7 @@ CREATE TABLE IF NOT EXISTS milestone_items (
     is_completed INTEGER NOT NULL DEFAULT 0,
     priority TEXT NOT NULL DEFAULT 'NEXT',
     order_index INTEGER NOT NULL DEFAULT 0,
+    literature_id INTEGER REFERENCES literature(id) ON DELETE SET NULL,
     created_at TEXT DEFAULT (datetime('now', 'localtime')),
     updated_at TEXT DEFAULT (datetime('now', 'localtime')),
     FOREIGN KEY (milestone_id) REFERENCES milestones(id) ON DELETE CASCADE
@@ -231,6 +232,7 @@ CREATE TABLE IF NOT EXISTS milestone_sub_items (
     is_completed INTEGER NOT NULL DEFAULT 0,
     priority TEXT NOT NULL DEFAULT 'NEXT',
     order_index INTEGER NOT NULL DEFAULT 0,
+    literature_id INTEGER REFERENCES literature(id) ON DELETE SET NULL,
     created_at TEXT DEFAULT (datetime('now', 'localtime')),
     updated_at TEXT DEFAULT (datetime('now', 'localtime')),
     FOREIGN KEY (milestone_item_id) REFERENCES milestone_items(id) ON DELETE CASCADE

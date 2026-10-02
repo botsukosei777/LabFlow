@@ -8,7 +8,6 @@ import MDEditor from '@uiw/react-md-editor';
 import { DayPicker } from 'react-day-picker';
 import 'react-day-picker/dist/style.css';
 import { format, subDays, isSameDay } from 'date-fns';
-import { CustomDatabaseManager } from '../components/notebook/CustomDatabaseManager';
 import { DocumentManager } from '../components/notebook/DocumentManager';
 import { PrintNotesModal } from '../components/notebook/PrintNotesModal';
 import { CitationPickerModal } from '../components/notebook/CitationPickerModal';
@@ -1396,9 +1395,6 @@ export default function Notebook() {
         )}
       </div>
     </div>
-
-    {/* ─── Lower Section: Custom Lab Databases (Primers, Transformants, Antibodies, etc.) ─── */}
-    <CustomDatabaseManager />
 
     {/* ─── Bottom Section: Research Documents & Reports ─── */}
     <DocumentManager />

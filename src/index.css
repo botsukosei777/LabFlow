@@ -756,15 +756,11 @@ a:hover {
   animation: fadeIn var(--transition-fast) ease;
 }
 
-/* Print Notes Modal Overlay (Syncs with Sidebar) */
+/* Print Notes Modal Overlay */
 .print-modal-overlay {
   position: fixed;
-  top: 0;
-  bottom: 0;
-  right: 0;
-  left: var(--sidebar-width);
-  z-index: 50;
-  transition: left var(--transition-normal);
+  inset: 0;
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -772,17 +768,6 @@ a:hover {
   background-color: rgba(0, 0, 0, 0.8);
   backdrop-filter: blur(4px);
   overflow-y: auto;
-}
-
-.app-layout.sidebar-collapsed .print-modal-overlay {
-  left: var(--sidebar-collapsed-width);
-}
-
-@media (max-width: 768px) {
-  .print-modal-overlay {
-    left: var(--sidebar-collapsed-width);
-    padding: var(--space-sm);
-  }
 }
 
 .print-preview-scroll::-webkit-scrollbar {

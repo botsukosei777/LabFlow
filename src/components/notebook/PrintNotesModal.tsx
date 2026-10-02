@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { Printer, X, Calendar, ArrowUpDown, Scissors } from 'lucide-react';
+import { Printer, X, Calendar, ArrowUpDown, Scissors, ShieldCheck } from 'lucide-react';
 import { format, subDays, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import MDEditor from '@uiw/react-md-editor';
 import { mdRemarkPlugins, mdRehypePlugins } from '../../utils/markdownConfig';
@@ -38,6 +39,7 @@ interface ContentBlock {
   isImage?: boolean;
   note?: Note;
   isLastInNote?: boolean;
+  fittedMaxHeight?: number; // Dynamically calculated height to fit remaining space on page
 }
 
 const parseTags = (tagsStr?: string) => {
@@ -46,9 +48,9 @@ const parseTags = (tagsStr?: string) => {
 };
 
 /**
- * Splits markdown content into atomic blocks so that images are separated
- * from text paragraphs. This allows the pagination algorithm to move images to the next
- * page if they don't fit on the current page, leaving preceding text on the current page.
+ * Splits markdown content into atomic blocks while keeping images, captions/legends,
+ * and text paragraphs tightly integrated. Prevents unnecessary page breaks by allowing
+ * fine-grained packaging while never breaking an image away from its caption.
  */
 function splitMarkdownIntoAtomicBlocks(markdown: string, noteId: number): ContentBlock[] {
   const blocks: ContentBlock[] = [];
@@ -70,8 +72,9 @@ function splitMarkdownIntoAtomicBlocks(markdown: string, noteId: number): Conten
   };
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    // Check if line is part of a markdown table (e.g. image matrix grid)
+    const line = lines[i]!;
+
+    // 1. Check if line is part of a markdown table (e.g. image matrix grid or data table)
     if (line.trim().startsWith('|')) {
       flushText();
       const tableLines: string[] = [];
@@ -85,6 +88,19 @@ function splitMarkdownIntoAtomicBlocks(markdown: string, noteId: number): Conten
         i++;
       }
       i--; // adjust loop index
+
+      // If table has images, keep immediately following legend/caption line in the same block
+      if (tableHasImage) {
+        let peek = i + 1;
+        while (peek < lines.length && lines[peek]!.trim() === '') {
+          peek++;
+        }
+        if (peek < lines.length && /^\s*(\*|_|図|Fig|Photo|画像|Caption|Legend)/i.test(lines[peek]!.trim())) {
+          tableLines.push('\n' + lines[peek]!.trim());
+          i = peek;
+        }
+      }
+
       blocks.push({
         id: `note-${noteId}-b-${blocks.length}`,
         noteId,
@@ -95,25 +111,43 @@ function splitMarkdownIntoAtomicBlocks(markdown: string, noteId: number): Conten
       continue;
     }
 
-    // Check if line contains markdown or HTML image
+    // 2. Check if line contains markdown or HTML image
     const hasImage = /!\[.*?\]\(.*?\)/.test(line) || /<img\s+[^>]*>/i.test(line);
 
     if (hasImage) {
       flushText();
+      const imageLines: string[] = [line.trim()];
+
+      // Keep immediately following caption/legend attached to this image block
+      let peek = i + 1;
+      while (peek < lines.length && lines[peek]!.trim() === '') {
+        peek++;
+      }
+      if (peek < lines.length && /^\s*(\*|_|図|Fig|Photo|画像|Caption|Legend)/i.test(lines[peek]!.trim())) {
+        imageLines.push(lines[peek]!.trim());
+        i = peek;
+      }
+
       blocks.push({
         id: `note-${noteId}-b-${blocks.length}`,
         noteId,
         type: 'markdown',
-        content: line.trim(),
+        content: imageLines.join('\n\n'),
         isImage: true,
       });
-    } else if (line.trim() === '' && textBuffer.length > 0) {
-      // Empty line boundary: flush if buffer has accumulated several lines to allow paragraph breaks
-      if (textBuffer.length >= 4) {
-        flushText();
-      } else {
-        textBuffer.push(line);
-      }
+      continue;
+    }
+
+    // 3. Section headings (#, ##, ###) start fresh blocks for orphan prevention
+    if (/^#{1,6}\s+/.test(line.trim())) {
+      flushText();
+      textBuffer.push(line);
+      continue;
+    }
+
+    // 4. Blank line: flush paragraphs to allow granular packing on pages
+    if (line.trim() === '' && textBuffer.length > 0) {
+      flushText();
     } else {
       textBuffer.push(line);
     }
@@ -175,6 +209,7 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
   const [endDate, setEndDate] = useState<string>(todayStr);
   const [sortAsc, setSortAsc] = useState<boolean>(true);
   const [fontSize, setFontSize] = useState<'compact' | 'normal'>('compact');
+  const [voidLines, setVoidLines] = useState<boolean>(true);
 
   const measureRef = useRef<HTMLDivElement>(null);
   const heightProbeRef = useRef<HTMLDivElement>(null);
@@ -232,6 +267,7 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
   }, [targetNotes, literatureMap, citationStyle]);
 
   // A4 Pagination Algorithm: Partition blocks into exact A4 pages
+  // Prioritizes space-packing (高密度配置・改ページ抑制) to eliminate empty spaces in lab notebooks
   useEffect(() => {
     if (allBlocks.length === 0) {
       setPages([]);
@@ -245,27 +281,63 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
     let currentHeight = 0;
 
     for (let i = 0; i < allBlocks.length; i++) {
-      const block = allBlocks[i];
+      const block = allBlocks[i]!;
       const el = document.getElementById(`measure-${block.id}`);
-      const elHeight = el ? Math.ceil(el.getBoundingClientRect().height) : 32;
+      const elHeight = el ? Math.ceil(el.getBoundingClientRect().height) : 28;
+
+      const remainingSpace = pageMaxHeight - currentHeight;
 
       // Avoid leaving an orphan header at the very bottom of a page
-      const isOrphanHeader = block.type === 'header' && (currentHeight + elHeight + 70 > pageMaxHeight);
+      const isOrphanHeader = block.type === 'header' && (currentHeight + elHeight + 50 > pageMaxHeight);
 
-      // Check if block exceeds remaining height on current page
-      if ((currentHeight + elHeight > pageMaxHeight && currentPage.length > 0) || isOrphanHeader) {
-        if (currentPage.length > 0) {
-          resultPages.push(currentPage);
-          currentPage = [block];
-          currentHeight = elHeight;
-        } else {
-          resultPages.push([block]);
-          currentPage = [];
-          currentHeight = 0;
-        }
-      } else {
+      if (isOrphanHeader && currentPage.length > 0) {
+        resultPages.push(currentPage);
+        currentPage = [block];
+        currentHeight = elHeight;
+        continue;
+      }
+
+      // Check if block fits at its natural measured height
+      if (currentHeight + elHeight <= pageMaxHeight) {
         currentPage.push(block);
         currentHeight += elHeight;
+        continue;
+      }
+
+      // Block exceeds remaining space on current page!
+      // If the block is an IMAGE or table containing images, adaptively scale it down
+      // so it fits into the remaining space instead of eagerly breaking to a new page
+      // and leaving a suspicious blank gap (研究不正・追記防止).
+      if (block.isImage && currentPage.length > 0) {
+        const isTable = block.content?.trim().startsWith('|');
+        const minViableHeight = isTable ? 100 : 65; // minimum legible height
+
+        if (remainingSpace >= minViableHeight) {
+          // Fit this image block directly into the remaining space!
+          const fittedHeight = remainingSpace - 8;
+          const fittedBlock: ContentBlock = {
+            ...block,
+            fittedMaxHeight: Math.max(45, fittedHeight - 12),
+          };
+          currentPage.push(fittedBlock);
+          // Current page is now fully packed to capacity!
+          resultPages.push(currentPage);
+          currentPage = [];
+          currentHeight = 0;
+          continue;
+        }
+      }
+
+      // If it genuinely cannot fit on current page:
+      if (currentPage.length > 0) {
+        resultPages.push(currentPage);
+        currentPage = [block];
+        currentHeight = elHeight;
+      } else {
+        // First block on empty page exceeds pageMaxHeight
+        resultPages.push([block]);
+        currentPage = [];
+        currentHeight = 0;
       }
     }
 
@@ -275,6 +347,17 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
 
     setPages(resultPages);
   }, [allBlocks, fontSize, measureVersion]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   const handlePrint = () => {
     window.print();
@@ -346,15 +429,36 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
       );
     }
 
+    const isImageBlock = block.isImage;
+    const fittedImgH = block.fittedMaxHeight;
+    const isTableWithImage = isImageBlock && block.content && block.content.trim().startsWith('|');
+
+    // For tables with images, calculate per-row max-height so multi-row grids shrink proportionally
+    let tableImgH = fittedImgH;
+    if (fittedImgH && isTableWithImage) {
+      const rowCount = (block.content?.match(/\|.*!\[/g) || []).length || 1;
+      tableImgH = Math.max(38, Math.floor((fittedImgH - (rowCount * 16)) / rowCount));
+    }
+
+    const blockStyle: React.CSSProperties = {
+      ...(fittedImgH ? {
+        ['--fitted-img-h' as any]: `${fittedImgH}px`,
+        ['--fitted-table-img-h' as any]: `${tableImgH}px`,
+      } : {}),
+    };
+
     return (
-      <div className={`print-block-wrapper ${block.isImage ? 'print-image-block' : 'print-text-block'}`}>
+      <div
+        className={`print-block-wrapper ${block.isImage ? 'print-image-block' : 'print-text-block'}`}
+        style={blockStyle}
+      >
         <div
           className={`text-gray-800 leading-relaxed overflow-hidden break-words ${
             isCompact ? 'text-[11px] prose-compact' : 'text-xs'
           }`}
           data-color-mode="light"
           style={{
-            lineHeight: isCompact ? '1.38' : '1.5',
+            lineHeight: isCompact ? '1.35' : '1.45',
             wordBreak: 'break-word',
             overflowWrap: 'anywhere',
           }}
@@ -374,7 +478,7 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
         </div>
 
         {block.isLastInNote && (
-          <div className="my-2 border-b-2 border-dashed border-gray-300 flex items-center justify-between text-[8px] text-gray-400 font-mono">
+          <div className="my-1.5 border-b border-dashed border-gray-300 flex items-center justify-between text-[8px] text-gray-400 font-mono">
             <span className="flex items-center gap-1">
               <Scissors className="w-2.5 h-2.5" />
               {t('notebook.printModal.cutLine', '切り取り線')}
@@ -385,7 +489,7 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
     );
   };
 
-  return (
+  return createPortal(
     <div
       className="print-modal-overlay"
       onClick={(e) => {
@@ -415,26 +519,29 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
         }
 
         .a4-sheet img {
-          max-width: 280px !important;
-          max-height: 180px !important;
+          max-width: 100% !important;
+          max-height: var(--fitted-img-h, 150px) !important;
           width: auto !important;
           height: auto !important;
           object-fit: contain !important;
           display: block !important;
-          margin: 6px auto !important;
+          margin: 2px auto !important;
           border: 1px solid #d1d5db !important;
-          border-radius: 4px !important;
+          border-radius: 3px !important;
+        }
+
+        .a4-sheet.normal img {
+          max-height: var(--fitted-img-h, 175px) !important;
         }
 
         .a4-sheet.compact img {
-          max-width: 240px !important;
-          max-height: 150px !important;
-          margin: 4px auto !important;
+          max-height: var(--fitted-img-h, 135px) !important;
+          margin: 1px auto !important;
         }
 
         .a4-sheet p:has(> img) {
           text-align: center !important;
-          margin: 4px 0 !important;
+          margin: 2px 0 !important;
         }
 
         .a4-sheet table:has(img),
@@ -443,8 +550,8 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
           width: 100% !important;
           table-layout: fixed !important;
           border-collapse: separate !important;
-          border-spacing: 8px 8px !important;
-          margin: 6px 0 !important;
+          border-spacing: 4px 4px !important;
+          margin: 2px 0 !important;
         }
 
         .a4-sheet table:has(img) th,
@@ -452,8 +559,8 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
           border: none !important;
           background: transparent !important;
           text-align: center !important;
-          padding: 2px !important;
-          font-size: 10px !important;
+          padding: 1px 2px !important;
+          font-size: 9px !important;
           color: #374151 !important;
           font-weight: 600 !important;
         }
@@ -462,8 +569,8 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
         .a4-sheet table.image-matrix-table td {
           border: 1px solid #e5e7eb !important;
           background: #f9fafb !important;
-          border-radius: 4px !important;
-          padding: 4px !important;
+          border-radius: 3px !important;
+          padding: 2px !important;
           vertical-align: middle !important;
           text-align: center !important;
         }
@@ -472,12 +579,102 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
         .a4-sheet table.image-matrix-table td img {
           max-width: 100% !important;
           width: 100% !important;
-          max-height: 140px !important;
+          max-height: var(--fitted-table-img-h, 95px) !important;
           height: auto !important;
           object-fit: contain !important;
           margin: 0 auto !important;
           display: block !important;
           border: none !important;
+        }
+
+        .a4-sheet.compact table:has(img) td img,
+        .a4-sheet.compact table.image-matrix-table td img {
+          max-height: var(--fitted-table-img-h, 80px) !important;
+        }
+
+        /* High-density Lab Notebook typography: minimize dead space */
+        .a4-sheet .wmde-markdown {
+          font-family: inherit !important;
+          line-height: 1.35 !important;
+        }
+
+        .a4-sheet .wmde-markdown p {
+          margin-top: 1px !important;
+          margin-bottom: 3px !important;
+        }
+
+        .a4-sheet .wmde-markdown h1,
+        .a4-sheet .wmde-markdown h2,
+        .a4-sheet .wmde-markdown h3,
+        .a4-sheet .wmde-markdown h4 {
+          margin-top: 4px !important;
+          margin-bottom: 2px !important;
+          padding-bottom: 1px !important;
+          line-height: 1.25 !important;
+        }
+
+        .a4-sheet .wmde-markdown ul,
+        .a4-sheet .wmde-markdown ol {
+          margin-top: 1px !important;
+          margin-bottom: 2px !important;
+          padding-left: 18px !important;
+        }
+
+        .a4-sheet .wmde-markdown li {
+          margin-top: 0 !important;
+          margin-bottom: 1px !important;
+        }
+
+        .a4-sheet .wmde-markdown hr {
+          margin: 3px 0 !important;
+          border-top: 1px dashed #cbd5e1 !important;
+        }
+
+        .a4-sheet .wmde-markdown blockquote {
+          margin: 2px 0 !important;
+          padding: 1px 8px !important;
+        }
+
+        .a4-sheet .wmde-markdown pre {
+          margin: 2px 0 !important;
+          padding: 3px 6px !important;
+        }
+
+        /* GLP Lab Notebook Void-Strike Area (余白抹消線・改ざん防止) */
+        .a4-sheet .void-strike-area {
+          flex: 1;
+          min-height: 20px;
+          margin-top: 4px;
+          position: relative;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          overflow: hidden;
+          background: repeating-linear-gradient(
+            -45deg,
+            transparent,
+            transparent 10px,
+            rgba(203, 213, 225, 0.45) 10px,
+            rgba(203, 213, 225, 0.45) 11px
+          );
+          border-top: 1px dashed #cbd5e1;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+
+        .a4-sheet .void-strike-label {
+          background: #ffffff;
+          padding: 1px 10px;
+          border: 1px solid #cbd5e1;
+          border-radius: 9999px;
+          font-size: 8px;
+          font-weight: 600;
+          color: #64748b;
+          font-family: monospace;
+          white-space: nowrap;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
         }
 
         @media print {
@@ -489,6 +686,8 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
             padding: 0 !important;
             width: 210mm !important;
             height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
           }
 
           body::before, body::after {
@@ -500,40 +699,56 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
             margin: 0;
           }
 
-          #root, .app-layout, .app-main, .app-content, .print-modal-overlay {
-            background: #ffffff !important;
-            background-color: #ffffff !important;
+          /* Hide application root while printing */
+          #root {
+            display: none !important;
+          }
+
+          /* Hide non-print elements */
+          .no-print,
+          .print-modal-header,
+          .print-modal-controls,
+          .print-modal-footer {
+            display: none !important;
+          }
+
+          /* Reset all wrapper ancestors in the portal to unconstrained static flow */
+          .print-modal-overlay,
+          .print-modal-container,
+          .print-preview-scroll {
+            background: transparent !important;
+            background-color: transparent !important;
             margin: 0 !important;
             padding: 0 !important;
             position: static !important;
             width: 210mm !important;
+            max-width: none !important;
+            min-width: 0 !important;
+            height: auto !important;
+            min-height: 0 !important;
+            max-height: none !important;
             border: none !important;
+            border-radius: 0 !important;
             box-shadow: none !important;
             backdrop-filter: none !important;
             -webkit-backdrop-filter: none !important;
-          }
-
-          .no-print {
-            display: none !important;
-          }
-
-          body * {
-            visibility: hidden;
-          }
-
-          #printable-a4-pages, #printable-a4-pages * {
-            visibility: visible;
+            overflow: visible !important;
+            display: block !important;
+            inset: auto !important;
+            top: auto !important;
+            bottom: auto !important;
+            left: auto !important;
+            right: auto !important;
+            z-index: auto !important;
           }
 
           #printable-a4-pages {
-            position: absolute;
-            left: 0;
-            top: 0;
+            display: block !important;
+            position: static !important;
             width: 210mm !important;
             margin: 0 !important;
             padding: 0 !important;
             background: #ffffff !important;
-            display: block !important;
             gap: 0 !important;
           }
 
@@ -541,6 +756,14 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
             margin: 0 !important;
             padding: 0 !important;
             width: 210mm !important;
+            display: block !important;
+            page-break-after: always !important;
+            break-after: page !important;
+          }
+
+          .page-wrapper:last-child {
+            page-break-after: auto !important;
+            break-after: auto !important;
           }
 
           .a4-sheet {
@@ -558,6 +781,11 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
             overflow: hidden !important;
             box-sizing: border-box !important;
             background: #ffffff !important;
+            background-color: #ffffff !important;
+            display: flex !important;
+            flex-direction: column !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
 
           .a4-sheet:last-child {
@@ -657,9 +885,9 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
       />
 
       {/* Modal Container */}
-      <div className="bg-[#131722] border border-white/10 rounded-2xl w-full max-w-5xl h-[92vh] max-h-[92vh] flex flex-col shadow-2xl overflow-hidden text-gray-100 no-print my-auto">
+      <div className="print-modal-container bg-[#131722] border border-white/10 rounded-2xl w-full max-w-5xl h-[92vh] max-h-[92vh] flex flex-col shadow-2xl overflow-hidden text-gray-100 my-auto">
         {/* Modal Header */}
-        <div className="p-3.5 sm:p-4 px-4 sm:px-6 border-b border-white/10 flex justify-between items-center bg-white/5 flex-shrink-0">
+        <div className="print-modal-header no-print p-3.5 sm:p-4 px-4 sm:px-6 border-b border-white/10 flex justify-between items-center bg-white/5 flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg flex-shrink-0">
               <Printer className="w-5 h-5" />
@@ -685,7 +913,7 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
         </div>
 
         {/* Controls Bar */}
-        <div className="p-3 sm:p-4 px-4 sm:px-6 bg-[#0c0f17]/90 border-b border-white/10 flex flex-col gap-2.5 flex-shrink-0">
+        <div className="print-modal-controls no-print p-3 sm:p-4 px-4 sm:px-6 bg-[#0c0f17]/90 border-b border-white/10 flex flex-col gap-2.5 flex-shrink-0">
           {/* Top row: Date range & presets */}
           <div className="flex flex-wrap items-center justify-between gap-2.5">
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -774,6 +1002,20 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
                 </button>
               </div>
 
+              {/* Void lines (GLP fraud-prevention strike lines) toggle */}
+              <button
+                onClick={() => setVoidLines(!voidLines)}
+                className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border transition-colors ${
+                  voidLines
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                    : 'bg-white/5 text-gray-400 border-white/10 hover:text-white'
+                }`}
+                title={t('notebook.printModal.voidLinesTooltip', '研究不正防止：ページの余白に斜線（余白抹消線）を引き、後からの追記を防止します')}
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <span>{t('notebook.printModal.voidLines', '余白抹消線 (不正防止)')}</span>
+              </button>
+
               {/* Total pages indicator */}
               {pages.length > 0 && (
                 <span className="text-xs text-indigo-300 font-mono bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded">
@@ -817,12 +1059,23 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
                   <div
                     className={`a4-sheet ${fontSize === 'compact' ? 'compact' : 'normal'} shadow-2xl rounded-sm border border-gray-300`}
                   >
-                    <div className="flex-1 overflow-hidden">
-                      {pageBlocks.map((block) => (
-                        <div key={block.id} className="print-item-wrapper">
-                          {renderBlock(block, false)}
+                    <div className="flex-1 overflow-hidden flex flex-col">
+                      <div className="flex-shrink-0">
+                        {pageBlocks.map((block) => (
+                          <div key={block.id} className="print-item-wrapper">
+                            {renderBlock(block, false)}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* GLP Lab Notebook Void-Strike Lines across remaining empty space */}
+                      {voidLines && (
+                        <div className="void-strike-area">
+                          <span className="void-strike-label">
+                            — {t('notebook.printModal.voidSpace', '以下余白（追記・改ざん防止）')} —
+                          </span>
                         </div>
-                      ))}
+                      )}
                     </div>
 
                     {/* A4 Sheet Footer */}
@@ -839,7 +1092,7 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="p-3 px-4 sm:px-6 bg-white/5 border-t border-white/10 flex justify-between items-center text-xs text-gray-400 flex-shrink-0">
+        <div className="print-modal-footer no-print p-3 px-4 sm:px-6 bg-white/5 border-t border-white/10 flex justify-between items-center text-xs text-gray-400 flex-shrink-0">
           <span>
             {t('notebook.printModal.selectedCount', {
               count: targetNotes.length,
@@ -865,6 +1118,7 @@ export const PrintNotesModal: React.FC<PrintNotesModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

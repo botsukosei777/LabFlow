@@ -1,16 +1,33 @@
 import { useState, useEffect, useContext } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Package, Plus, Trash2, Edit, AlertTriangle, Search, Filter, Cloud, Share2, Download, RefreshCw, Unlink } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { Package, Plus, Trash2, Edit, AlertTriangle, Search, Filter, Cloud, Share2, Download, RefreshCw, Unlink, Database } from 'lucide-react';
 import { api } from '../api/client';
 import { supabaseGet, supabasePost, supabaseDelete } from '../api/supabaseClient';
 import { ToastContext } from '../App';
 import type { Reagent } from '../types';
 import { ShareModal } from '../components/ShareModal';
 import { ImportModal } from '../components/ImportModal';
+import { CustomDatabaseManager } from '../components/inventory/CustomDatabaseManager';
 
 export default function Inventory() {
   const { t } = useTranslation();
   const { addToast } = useContext(ToastContext);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') === 'custom_db' ? 'custom_db' : 'reagents';
+
+  const handleTabChange = (tab: 'reagents' | 'custom_db') => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (tab === 'custom_db') {
+        next.set('tab', 'custom_db');
+      } else {
+        next.delete('tab');
+      }
+      return next;
+    });
+  };
+
   const [reagents, setReagents] = useState<Reagent[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -129,111 +146,141 @@ export default function Inventory() {
       <div className="page-header">
         <div>
           <h1 className="page-title">{t('inventory.title')}</h1>
-          <p className="page-description">{t('inventory.subtitle')}</p>
+          <p className="page-description">
+            {activeTab === 'reagents' ? t('inventory.subtitle') : t('inventory.customDatabasesDesc', '形質転換体、オリゴ/プライマー、抗体などのリソースデータベースを管理')}
+          </p>
         </div>
-        <div className="page-actions">
-          <button className="btn btn-secondary" onClick={() => setShowImport(true)}>
-            <Download size={16} />
-            {t('common.importFromTeam')}
-          </button>
-          <button className="btn btn-secondary" onClick={handleSyncAll} disabled={syncing}>
-            <RefreshCw size={16} className={syncing ? 'animate-spin' : ''} />
-            {t('common.syncToTeam')}
-          </button>
-          <button className="btn btn-primary" onClick={() => {
-            setEditing(null); setForm({ name: '', description: '', category: '', quantity_trackable: false, current_quantity: 0, min_quantity: 0, unit: '', supplier: '', catalog_number: '', location: '' });
-            setShowModal(true);
-          }}><Plus size={16} /> {t('inventory.addReagent')}</button>
-        </div>
+        {activeTab === 'reagents' && (
+          <div className="page-actions">
+            <button className="btn btn-secondary" onClick={() => setShowImport(true)}>
+              <Download size={16} />
+              {t('common.importFromTeam')}
+            </button>
+            <button className="btn btn-secondary" onClick={handleSyncAll} disabled={syncing}>
+              <RefreshCw size={16} className={syncing ? 'animate-spin' : ''} />
+              {t('common.syncToTeam')}
+            </button>
+            <button className="btn btn-primary" onClick={() => {
+              setEditing(null); setForm({ name: '', description: '', category: '', quantity_trackable: false, current_quantity: 0, min_quantity: 0, unit: '', supplier: '', catalog_number: '', location: '' });
+              setShowModal(true);
+            }}><Plus size={16} /> {t('inventory.addReagent')}</button>
+          </div>
+        )}
       </div>
 
-      {/* Search & Filter */}
-      <div style={{ display: 'flex', gap: 'var(--space-md)', marginBottom: 'var(--space-lg)', flexWrap: 'wrap' }}>
-        <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
-          <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
-          <input className="form-input" style={{ paddingLeft: 36 }} value={search} onChange={e => setSearch(e.target.value)} placeholder={t('common.search')} />
-        </div>
-        <select className="form-select" style={{ width: 'auto', minWidth: 150 }} value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
-          <option value="all">{t('common.all')}</option>
-          {categories.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
+      {/* Tabs */}
+      <div className="tabs" style={{ marginBottom: 'var(--space-lg)' }}>
+        <button
+          type="button"
+          className={`tab ${activeTab === 'reagents' ? 'active' : ''}`}
+          onClick={() => handleTabChange('reagents')}
+        >
+          <Package size={16} style={{ display: 'inline', marginRight: 6, verticalAlign: 'text-bottom' }} />
+          {t('inventory.reagentsTab', '試薬・消耗品')}
+        </button>
+        <button
+          type="button"
+          className={`tab ${activeTab === 'custom_db' ? 'active' : ''}`}
+          onClick={() => handleTabChange('custom_db')}
+        >
+          <Database size={16} style={{ display: 'inline', marginRight: 6, verticalAlign: 'text-bottom' }} />
+          {t('inventory.customDatabasesTab', 'カスタムデータベース (プライマー・抗体・細胞株等)')}
+        </button>
       </div>
 
-      {filtered.length === 0 && !loading ? (
-        <div className="empty-state">
-          <Package size={64} />
-          <h3 className="empty-state-title">{t('inventory.noReagents')}</h3>
-          <p className="empty-state-description">{t('inventory.noReagentsDesc')}</p>
-        </div>
+      {activeTab === 'custom_db' ? (
+        <CustomDatabaseManager />
       ) : (
-        <div className="table-container">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>{t('common.name')}</th>
-                <th>{t('inventory.category')}</th>
-                <th>{t('common.status')}</th>
-                <th>{t('inventory.currentQuantity')}</th>
-                <th>{t('inventory.location')}</th>
-                <th>{t('inventory.supplier')}</th>
-                <th>{t('common.actions')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(r => {
-                const status = getStockStatus(r);
-                return (
-                  <tr key={r.id}>
-                    <td>
-                      <div style={{ fontWeight: 'var(--font-weight-medium)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {r.shared_id && <Cloud size={14} className="text-indigo-500" title="Shared with team" />}
-                        {r.name}
-                      </div>
-                      {r.catalog_number && <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)' }}>{r.catalog_number}</div>}
-                    </td>
-                    <td>{r.category || '-'}</td>
-                    <td><span className={`badge ${status.class}`}>{status.label}</span></td>
-                    <td>{r.quantity_trackable ? `${r.current_quantity} ${r.unit}` : '-'}</td>
-                    <td style={{ color: 'var(--text-secondary)' }}>{r.location || '-'}</td>
-                    <td style={{ color: 'var(--text-secondary)' }}>{r.supplier || '-'}</td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 'var(--space-xs)' }}>
-                        {!r.shared_id ? (
-                          <button 
-                            className="btn btn-ghost btn-icon btn-sm" 
-                            onClick={() => setShareTarget({ id: r.id, name: r.name })}
-                            title={t('common.share')}
-                          >
-                            <Share2 size={14} />
-                          </button>
-                        ) : (
-                          <button 
-                            className="btn btn-ghost btn-icon btn-sm" 
-                            onClick={() => unshareReagent(r.id)}
-                            title={t('common.unshare')}
-                            style={{ color: 'var(--color-warning)' }}
-                          >
-                            <Unlink size={14} />
-                          </button>
-                        )}
-                        <button className="btn btn-ghost btn-icon btn-sm" onClick={() => {
-                          setEditing(r); setForm({ name: r.name, description: r.description, category: r.category, quantity_trackable: !!r.quantity_trackable, current_quantity: r.current_quantity, min_quantity: r.min_quantity, unit: r.unit, supplier: r.supplier, catalog_number: r.catalog_number, location: (r as any).location || '' });
-                          setShowModal(true);
-                        }}><Edit size={14} /></button>
-                        <button className={`btn btn-ghost btn-icon btn-sm`} onClick={() => toggleDeplete(r.id)}
-                          style={{ color: r.is_depleted ? 'var(--color-secondary)' : 'var(--color-warning)' }}
-                          title={r.is_depleted ? t('inventory.markAvailable') : t('inventory.markDepleted')}>
-                          <AlertTriangle size={14} />
-                        </button>
-                        <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-danger)' }} onClick={() => deleteReagent(r.id)}><Trash2 size={14} /></button>
-                      </div>
-                    </td>
+        <>
+          {/* Search & Filter */}
+          <div style={{ display: 'flex', gap: 'var(--space-md)', marginBottom: 'var(--space-lg)', flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
+              <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
+              <input className="form-input" style={{ paddingLeft: 36 }} value={search} onChange={e => setSearch(e.target.value)} placeholder={t('common.search')} />
+            </div>
+            <select className="form-select" style={{ width: 'auto', minWidth: 150 }} value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
+              <option value="all">{t('common.all')}</option>
+              {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+
+          {filtered.length === 0 && !loading ? (
+            <div className="empty-state">
+              <Package size={64} />
+              <h3 className="empty-state-title">{t('inventory.noReagents')}</h3>
+              <p className="empty-state-description">{t('inventory.noReagentsDesc')}</p>
+            </div>
+          ) : (
+            <div className="table-container">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>{t('common.name')}</th>
+                    <th>{t('inventory.category')}</th>
+                    <th>{t('common.status')}</th>
+                    <th>{t('inventory.currentQuantity')}</th>
+                    <th>{t('inventory.location')}</th>
+                    <th>{t('inventory.supplier')}</th>
+                    <th>{t('common.actions')}</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody>
+                  {filtered.map(r => {
+                    const status = getStockStatus(r);
+                    return (
+                      <tr key={r.id}>
+                        <td>
+                          <div style={{ fontWeight: 'var(--font-weight-medium)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {r.shared_id && <Cloud size={14} className="text-indigo-500" title="Shared with team" />}
+                            {r.name}
+                          </div>
+                          {r.catalog_number && <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)' }}>{r.catalog_number}</div>}
+                        </td>
+                        <td>{r.category || '-'}</td>
+                        <td><span className={`badge ${status.class}`}>{status.label}</span></td>
+                        <td>{r.quantity_trackable ? `${r.current_quantity} ${r.unit}` : '-'}</td>
+                        <td style={{ color: 'var(--text-secondary)' }}>{r.location || '-'}</td>
+                        <td style={{ color: 'var(--text-secondary)' }}>{r.supplier || '-'}</td>
+                        <td>
+                          <div style={{ display: 'flex', gap: 'var(--space-xs)' }}>
+                            {!r.shared_id ? (
+                              <button 
+                                className="btn btn-ghost btn-icon btn-sm" 
+                                onClick={() => setShareTarget({ id: r.id, name: r.name })}
+                                title={t('common.share')}
+                              >
+                                <Share2 size={14} />
+                              </button>
+                            ) : (
+                              <button 
+                                className="btn btn-ghost btn-icon btn-sm" 
+                                onClick={() => unshareReagent(r.id)}
+                                title={t('common.unshare')}
+                                style={{ color: 'var(--color-warning)' }}
+                              >
+                                <Unlink size={14} />
+                              </button>
+                            )}
+                            <button className="btn btn-ghost btn-icon btn-sm" onClick={() => {
+                              setEditing(r); setForm({ name: r.name, description: r.description, category: r.category, quantity_trackable: !!r.quantity_trackable, current_quantity: r.current_quantity, min_quantity: r.min_quantity, unit: r.unit, supplier: r.supplier, catalog_number: r.catalog_number, location: (r as any).location || '' });
+                              setShowModal(true);
+                            }}><Edit size={14} /></button>
+                            <button className={`btn btn-ghost btn-icon btn-sm`} onClick={() => toggleDeplete(r.id)}
+                              style={{ color: r.is_depleted ? 'var(--color-secondary)' : 'var(--color-warning)' }}
+                              title={r.is_depleted ? t('inventory.markAvailable') : t('inventory.markDepleted')}>
+                              <AlertTriangle size={14} />
+                            </button>
+                            <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--color-danger)' }} onClick={() => deleteReagent(r.id)}><Trash2 size={14} /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
 
       {/* Modal */}

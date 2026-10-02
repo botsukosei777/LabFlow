@@ -5,14 +5,15 @@ import {
   Target, Plus, Trash2, Edit, ChevronDown, ChevronUp, CheckCircle2,
   MinusCircle, Share2, Download, RefreshCw, Unlink, Flame, Zap, Clock,
   Lightbulb, ArrowUp, ArrowDown, Layers, ListFilter, Search,
-  ChevronRight, Tag, HelpCircle
+  ChevronRight, Tag, HelpCircle, BookOpen, ExternalLink, FileText
 } from 'lucide-react';
 import { api } from '../api/client';
 import { supabasePost, supabaseDelete } from '../api/supabaseClient';
 import { ToastContext } from '../App';
-import type { Milestone, MilestoneItem, MilestoneSubItem, PriorityTier } from '../types';
+import type { Milestone, MilestoneItem, MilestoneSubItem, PriorityTier, LiteratureItem } from '../types';
 import { ShareModal } from '../components/ShareModal';
 import { ImportModal } from '../components/ImportModal';
+import { LiteratureTaskModal } from '../components/milestones/LiteratureTaskModal';
 import DateInput from '../components/DateInput';
 
 export const PRIORITY_ORDER: PriorityTier[] = ['NOW', 'NEXT', 'LATER', 'IDEAS'];
@@ -133,7 +134,9 @@ export default function Milestones() {
     current_count: 0,
     unit: '',
     priority: 'NEXT' as PriorityTier,
-    milestone_id: 'standalone' as number | 'standalone'
+    milestone_id: 'standalone' as number | 'standalone',
+    literature_id: null as number | null,
+    literature_title: ''
   });
 
   // SubItem Modal
@@ -146,14 +149,31 @@ export default function Milestones() {
     target_count: 1,
     current_count: 0,
     unit: '',
-    priority: 'NEXT' as PriorityTier
+    priority: 'NEXT' as PriorityTier,
+    literature_id: null as number | null,
+    literature_title: ''
   });
+
+  // Literature Task Modal
+  const [showLiteratureModal, setShowLiteratureModal] = useState(false);
+  const [litModalDefaultMilestoneId, setLitModalDefaultMilestoneId] = useState<number | 'standalone'>('standalone');
+  const [litModalDefaultPriority, setLitModalDefaultPriority] = useState<PriorityTier>('NEXT');
+  const [literaturesList, setLiteraturesList] = useState<LiteratureItem[]>([]);
 
   // UI state
   const [expandedMs, setExpandedMs] = useState<Set<number>>(new Set());
   const [shareTarget, setShareTarget] = useState<{ id: number; name: string } | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [activePriorityMenu, setActivePriorityMenu] = useState<{ id: string; type: 'item' | 'subitem' } | null>(null);
+
+  const fetchLiteratures = async () => {
+    try {
+      const data = await api.get<LiteratureItem[]>('/literature');
+      setLiteraturesList(data || []);
+    } catch (e) {
+      // Non-critical background load
+    }
+  };
 
   const fetchMilestones = async () => {
     try {
@@ -171,6 +191,7 @@ export default function Milestones() {
 
   useEffect(() => {
     fetchMilestones();
+    fetchLiteratures();
   }, [showArchived]);
 
   // Deep-link from notebook or other pages: ?id=123, ?itemId=456, ?subItemId=789
@@ -294,7 +315,9 @@ export default function Milestones() {
         current_count: 0,
         unit: '',
         priority: 'NEXT',
-        milestone_id: 'standalone'
+        milestone_id: 'standalone',
+        literature_id: null,
+        literature_title: ''
       });
       fetchMilestones();
     } catch (e) {
@@ -319,7 +342,9 @@ export default function Milestones() {
         target_count: 1,
         current_count: 0,
         unit: '',
-        priority: 'NEXT'
+        priority: 'NEXT',
+        literature_id: null,
+        literature_title: ''
       });
       fetchMilestones();
     } catch (e) {
@@ -683,6 +708,87 @@ export default function Milestones() {
     );
   };
 
+  const renderLiteratureBadge = (item: {
+    literature_id?: number | null;
+    literature_title?: string;
+    literature_authors?: string;
+    literature_journal?: string;
+    literature_year?: number | null;
+    literature_read_abstract?: boolean | number;
+    literature_read_body?: boolean | number;
+    literature_pdf_filename?: string;
+  }) => {
+    if (!item.literature_id) return null;
+
+    const isBodyRead = Boolean(item.literature_read_body);
+    const isAbstractRead = Boolean(item.literature_read_abstract);
+
+    let statusText = t('milestones.unread', '未読');
+    let statusClass = 'bg-gray-500/15 text-gray-400 border-white/10';
+    if (isBodyRead) {
+      statusText = t('milestones.readBody', '本文読了');
+      statusClass = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+    } else if (isAbstractRead) {
+      statusText = t('milestones.readAbstract', '要旨読了');
+      statusClass = 'bg-amber-500/20 text-amber-300 border-amber-500/30';
+    }
+
+    const titleTooltip = [
+      item.literature_title,
+      item.literature_authors,
+      item.literature_journal ? `${item.literature_journal} ${item.literature_year ? `(${item.literature_year})` : ''}` : ''
+    ].filter(Boolean).join('\n');
+
+    return (
+      <div
+        className="flex items-center gap-1.5 flex-wrap mt-1"
+        onClick={e => e.stopPropagation()}
+      >
+        <span
+          className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 flex items-center gap-1 cursor-help max-w-full"
+          title={titleTooltip}
+        >
+          <BookOpen size={11} className="text-indigo-400 flex-shrink-0" />
+          <span className="truncate max-w-[130px] sm:max-w-[200px]">
+            {item.literature_journal
+              ? `${item.literature_journal}${item.literature_year ? ` (${item.literature_year})` : ''}`
+              : (item.literature_title || t('milestones.linkedLiterature', '文献'))}
+          </span>
+        </span>
+
+        {/* Read status tag */}
+        <span className={`text-[9px] px-1.5 py-0.2 rounded font-semibold border ${statusClass}`}>
+          {statusText}
+        </span>
+
+        {/* Open in Literature Management */}
+        <a
+          href={`/literature?id=${item.literature_id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-indigo-400 hover:text-indigo-200 p-0.5 rounded hover:bg-white/10 transition-colors inline-flex items-center"
+          title={t('milestones.viewInLiterature', '文献管理で表示')}
+        >
+          <ExternalLink size={11} />
+        </a>
+
+        {/* PDF Link if present */}
+        {item.literature_pdf_filename && (
+          <a
+            href={`/api/literature/pdf/${encodeURIComponent(item.literature_pdf_filename)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-rose-400 hover:text-rose-200 flex items-center gap-0.5 text-[9px] px-1 py-0.2 rounded bg-rose-500/15 border border-rose-500/30 transition-colors"
+            title={t('milestones.pdfAvailable', 'PDFを開く')}
+          >
+            <FileText size={10} />
+            <span>PDF</span>
+          </a>
+        )}
+      </div>
+    );
+  };
+
   return (
     <>
       <div className="animate-fade-in pb-12">
@@ -735,6 +841,20 @@ export default function Milestones() {
             <button className="btn btn-secondary btn-sm" onClick={() => setShowImport(true)}>
               <Download size={14} />
               <span>{t('common.importFromTeam', 'Import from Team')}</span>
+            </button>
+
+            {/* Literature Task Add Button */}
+            <button
+              className="btn btn-secondary btn-sm flex items-center gap-1.5 border border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/20"
+              onClick={() => {
+                setLitModalDefaultMilestoneId('standalone');
+                setLitModalDefaultPriority('NEXT');
+                setShowLiteratureModal(true);
+              }}
+              title={t('milestones.addLiteratureTask')}
+            >
+              <BookOpen size={14} />
+              <span>{t('milestones.addLiteratureTask')}</span>
             </button>
 
             {/* Quick Action: Add Independent Task or Milestone */}
@@ -920,26 +1040,42 @@ export default function Milestones() {
                       </div>
 
                       {/* Quick Add into this Tier */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingItem(null);
-                          setItemForm({
-                            name: '',
-                            data_type: 'qualitative',
-                            target_count: 3,
-                            current_count: 0,
-                            unit: '',
-                            priority: tier,
-                            milestone_id: 'standalone'
-                          });
-                          setShowItemModal(true);
-                        }}
-                        className="p-1 rounded-md bg-white/10 hover:bg-white/20 text-gray-200 transition-colors"
-                        title={`${tier} にタスクを追加`}
-                      >
-                        <Plus size={15} />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLitModalDefaultMilestoneId('standalone');
+                            setLitModalDefaultPriority(tier);
+                            setShowLiteratureModal(true);
+                          }}
+                          className="p-1 rounded-md bg-white/10 hover:bg-indigo-500/20 text-indigo-300 transition-colors"
+                          title={`${tier} に文献読了タスクを追加`}
+                        >
+                          <BookOpen size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingItem(null);
+                            setItemForm({
+                              name: '',
+                              data_type: 'qualitative',
+                              target_count: 3,
+                              current_count: 0,
+                              unit: '',
+                              priority: tier,
+                              milestone_id: 'standalone',
+                              literature_id: null,
+                              literature_title: ''
+                            });
+                            setShowItemModal(true);
+                          }}
+                          className="p-1 rounded-md bg-white/10 hover:bg-white/20 text-gray-200 transition-colors"
+                          title={`${tier} にタスクを追加`}
+                        >
+                          <Plus size={15} />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Column Body: Tasks List */}
@@ -1043,6 +1179,9 @@ export default function Milestones() {
                                       </span>
                                     )}
                                   </div>
+
+                                  {/* Literature details badge */}
+                                  {renderLiteratureBadge(item)}
                                 </div>
                               </div>
 
@@ -1084,7 +1223,9 @@ export default function Milestones() {
                                         target_count: 1,
                                         current_count: 0,
                                         unit: '',
-                                        priority: item.priority || 'NEXT'
+                                        priority: item.priority || 'NEXT',
+                                        literature_id: null,
+                                        literature_title: ''
                                       });
                                       setShowSubItemModal(true);
                                     }}
@@ -1104,7 +1245,9 @@ export default function Milestones() {
                                         current_count: item.current_count || 0,
                                         unit: item.unit || '',
                                         priority: item.priority || 'NEXT',
-                                        milestone_id: item.milestone_is_standalone ? 'standalone' : item.milestone_id
+                                        milestone_id: item.milestone_is_standalone ? 'standalone' : item.milestone_id,
+                                        literature_id: item.literature_id || null,
+                                        literature_title: item.literature_title || ''
                                       });
                                       setShowItemModal(true);
                                     }}
@@ -1137,11 +1280,12 @@ export default function Milestones() {
                                     return (
                                       <div
                                         key={`sub-${sub.id}`}
-                                        className={`p-1.5 rounded bg-black/25 flex items-center justify-between gap-1 text-[11px] ${
+                                        className={`p-1.5 rounded bg-black/25 flex flex-col gap-1 text-[11px] ${
                                           sub.is_completed ? 'opacity-50' : ''
                                         }`}
                                       >
-                                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                        <div className="flex items-center justify-between gap-1">
+                                          <div className="flex items-center gap-1.5 min-w-0 flex-1">
                                           <button
                                             type="button"
                                             className="checklist-check flex-shrink-0"
@@ -1177,7 +1321,9 @@ export default function Milestones() {
                                                 target_count: sub.target_count || 1,
                                                 current_count: sub.current_count || 0,
                                                 unit: sub.unit || '',
-                                                priority: subPriority
+                                                priority: subPriority,
+                                                literature_id: sub.literature_id || null,
+                                                literature_title: sub.literature_title || ''
                                               });
                                               setCurrentParentItemId(item.id);
                                               setShowSubItemModal(true);
@@ -1194,6 +1340,8 @@ export default function Milestones() {
                                           </button>
                                         </div>
                                       </div>
+                                      {renderLiteratureBadge(sub)}
+                                    </div>
                                     );
                                   })}
                                 </div>
@@ -1244,6 +1392,7 @@ export default function Milestones() {
                                       'subitem'
                                     )}
                                   </div>
+                                  {renderLiteratureBadge(sub)}
                                 </div>
                               ))}
                             </div>
@@ -1562,6 +1711,7 @@ export default function Milestones() {
                                             {item.data_type === 'task' ? t('milestones.task') : t(`milestones.${item.data_type}`)}
                                           </span>
                                         </div>
+                                        {renderLiteratureBadge(item)}
                                         {item.data_type === 'quantitative' && (
                                           <div className="progress-bar" style={{ width: 80, marginTop: 4 }}>
                                             <div
@@ -1708,6 +1858,7 @@ export default function Milestones() {
                                                   {sub.data_type === 'task' ? t('milestones.task') : t(`milestones.${sub.data_type}`)}
                                                 </span>
                                               </div>
+                                              {renderLiteratureBadge(sub)}
 
                                               {/* Subitem Priority Control */}
                                               {renderPriorityControl(
@@ -1787,9 +1938,9 @@ export default function Milestones() {
                             </div>
                           )}
 
+                        <div style={{ display: 'flex', gap: 'var(--space-sm)', marginTop: 'var(--space-md)' }}>
                           <button
                             className="btn btn-secondary btn-sm"
-                            style={{ marginTop: 'var(--space-md)' }}
                             onClick={() => {
                               setCurrentMsId(ms.id);
                               setEditingItem(null);
@@ -1800,15 +1951,29 @@ export default function Milestones() {
                                 current_count: 0,
                                 unit: '',
                                 priority: 'NEXT',
-                                milestone_id: ms.id
+                                milestone_id: ms.id,
+                                literature_id: null,
+                                literature_title: ''
                               });
                               setShowItemModal(true);
                             }}
                           >
                             <Plus size={14} /> {t('milestones.addItem')}
                           </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm text-indigo-400 hover:bg-indigo-500/10 border border-indigo-500/30 flex items-center gap-1"
+                            onClick={() => {
+                              setLitModalDefaultMilestoneId(ms.id);
+                              setLitModalDefaultPriority('NEXT');
+                              setShowLiteratureModal(true);
+                            }}
+                          >
+                            <BookOpen size={14} /> {t('milestones.addLiteratureTask')}
+                          </button>
                         </div>
-                      )}
+                      </div>
+                    )}
                     </div>
                   );
                 })}
@@ -1927,6 +2092,52 @@ export default function Milestones() {
                 </div>
 
                 <div className="form-group">
+                {/* Literature Link Section */}
+                <div className="form-group p-3 bg-white/5 rounded-xl border border-white/10">
+                  <label className="text-xs font-semibold text-gray-300 block mb-1.5 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
+                      {t('milestones.linkedLiterature', '文献管理との連携')}
+                    </span>
+                    {itemForm.literature_id && (
+                      <button
+                        type="button"
+                        onClick={() => setItemForm({ ...itemForm, literature_id: null, literature_title: '' })}
+                        className="text-[11px] text-rose-400 hover:text-rose-300 transition-colors"
+                      >
+                        {t('milestones.removeLiteratureLink', '連携解除')}
+                      </button>
+                    )}
+                  </label>
+
+                  <select
+                    className="form-select text-xs w-full bg-black/40 border border-white/10 text-white rounded-lg px-3 py-2 outline-none focus:border-indigo-500"
+                    value={itemForm.literature_id || ''}
+                    onChange={e => {
+                      const val = e.target.value ? Number(e.target.value) : null;
+                      const selected = literaturesList.find(l => l.id === val);
+                      setItemForm({
+                        ...itemForm,
+                        literature_id: val,
+                        literature_title: selected ? selected.title : '',
+                        name: (!itemForm.name.trim() && selected)
+                          ? `【論文読了】${selected.authors ? selected.authors.split(',')[0] + ' et al.' : ''} (${selected.year || ''}) ${selected.title}`
+                          : itemForm.name
+                      });
+                    }}
+                  >
+                    <option value="">{t('common.none', 'なし（連携しない）')}</option>
+                    {literaturesList.map(lit => (
+                      <option key={lit.id} value={lit.id}>
+                        {lit.year ? `[${lit.year}] ` : ''}{lit.title} {lit.authors ? `- ${lit.authors.split(',')[0]}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[11px] text-gray-400 block mt-1">
+                    {t('milestones.linkLiteratureHelp', 'このタスクを完了すると、文献管理の読了ステータスも自動で更新されます。')}
+                  </span>
+                </div>
+
                   <label className="form-label font-bold text-gray-200">{t('milestones.itemName')} *</label>
                   <input
                     className="form-input"
@@ -2033,6 +2244,49 @@ export default function Milestones() {
                 </div>
 
                 <div className="form-group">
+                {/* Subtask Literature Link Section */}
+                <div className="form-group p-3 bg-white/5 rounded-xl border border-white/10">
+                  <label className="text-xs font-semibold text-gray-300 block mb-1.5 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
+                      {t('milestones.linkedLiterature', '文献管理との連携')}
+                    </span>
+                    {subItemForm.literature_id && (
+                      <button
+                        type="button"
+                        onClick={() => setSubItemForm({ ...subItemForm, literature_id: null, literature_title: '' })}
+                        className="text-[11px] text-rose-400 hover:text-rose-300 transition-colors"
+                      >
+                        {t('milestones.removeLiteratureLink', '連携解除')}
+                      </button>
+                    )}
+                  </label>
+
+                  <select
+                    className="form-select text-xs w-full bg-black/40 border border-white/10 text-white rounded-lg px-3 py-2 outline-none focus:border-indigo-500"
+                    value={subItemForm.literature_id || ''}
+                    onChange={e => {
+                      const val = e.target.value ? Number(e.target.value) : null;
+                      const selected = literaturesList.find(l => l.id === val);
+                      setSubItemForm({
+                        ...subItemForm,
+                        literature_id: val,
+                        literature_title: selected ? selected.title : '',
+                        name: (!subItemForm.name.trim() && selected)
+                          ? `【論文読了】${selected.authors ? selected.authors.split(',')[0] + ' et al.' : ''} (${selected.year || ''}) ${selected.title}`
+                          : subItemForm.name
+                      });
+                    }}
+                  >
+                    <option value="">{t('common.none', 'なし（連携しない）')}</option>
+                    {literaturesList.map(lit => (
+                      <option key={lit.id} value={lit.id}>
+                        {lit.year ? `[${lit.year}] ` : ''}{lit.title} {lit.authors ? `- ${lit.authors.split(',')[0]}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                   <label className="form-label font-bold text-gray-200">{t('milestones.itemName')} *</label>
                   <input
                     className="form-input"
@@ -2109,6 +2363,19 @@ export default function Milestones() {
         onClose={() => setShowImport(false)}
         itemType="milestones"
         onSuccess={() => { setShowImport(false); fetchMilestones(); }}
+      />
+
+      {/* Literature Task Modal */}
+      <LiteratureTaskModal
+        isOpen={showLiteratureModal}
+        onClose={() => setShowLiteratureModal(false)}
+        milestones={milestones}
+        defaultMilestoneId={litModalDefaultMilestoneId}
+        defaultPriority={litModalDefaultPriority}
+        onSuccess={(msg) => {
+          if (msg) addToast('success', msg);
+          fetchMilestones();
+        }}
       />
     </>
   );

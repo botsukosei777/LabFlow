@@ -337,7 +337,26 @@
     "subtasksCount": "サブタスク {{completed}}/{{total}} 完了",
     "prioritySummary": "優先度サマリー",
     "tasksCount": "{{count}}件のタスク",
-    "subtasksLabel": "サブタスク"
+    "subtasksLabel": "サブタスク",
+    "addLiteratureTask": "文献からタスク追加",
+    "addLiteratureTaskDesc": "文献管理に登録されている論文を選択し、マイルストーンや独立タスクに読了目標として追加します。",
+    "literatureSync": "文献管理連携",
+    "literatureTaskCreated": "{{count}}件の論文読了タスクを追加しました",
+    "searchLiteraturePlaceholder": "論文タイトル、著者名、雑誌名で検索...",
+    "readingTaskType": "タスクの目標種別",
+    "readBodyTask": "論文精読",
+    "readAbstractTask": "要旨確認",
+    "readGeneralTask": "論文読了",
+    "linkedLiterature": "紐付け文献",
+    "viewInLiterature": "文献管理で表示",
+    "pdfAvailable": "PDFを開く",
+    "unread": "未読",
+    "readAbstract": "要旨読了",
+    "readBody": "本文読了",
+    "selectFromLiterature": "文献管理から選択",
+    "removeLiteratureLink": "文献連携を解除",
+    "noLiteratureFound": "該当する論文が見つかりません",
+    "linkLiteratureHelp": "このタスクを完了すると、文献管理の読了ステータスも自動で更新されます。"
   },
   "inventory": {
     "title": "在庫管理",
@@ -378,7 +397,10 @@
       "other": "その他"
     },
     "location": "保管場所",
-    "locationPlaceholder": "例: 試薬棚A"
+    "locationPlaceholder": "例: 試薬棚A",
+    "reagentsTab": "試薬・消耗品",
+    "customDatabasesTab": "カスタムデータベース",
+    "customDatabasesDesc": "形質転換体、オリゴ/プライマー、抗体などのリソースデータベースを管理"
   },
   "routines": {
     "title": "ルーティンワーク",
@@ -663,7 +685,10 @@
       "current": "現在",
       "a4Page": "A4 - ページ {{current}} / {{total}}",
       "totalPages": "A4 印刷プレビュー (全 {{count}} ページ)",
-      "cutLine": "切り取り線"
+      "cutLine": "切り取り線",
+      "voidLines": "余白抹消線 (不正防止)",
+      "voidLinesTooltip": "研究不正・追記防止：ページの余白に斜線（余白抹消線）を引き、後からの追記を防止します",
+      "voidSpace": "以下余白（追記・改ざん防止）"
     },
     "insertMilestoneBtn": "マイルストーンリンク",
     "insertMilestoneTooltip": "特定のマイルストーンへのリンクを挿入",
@@ -699,7 +724,7 @@
   },
   "customDatabases": {
     "title": "サンプル・プライマー・リソース データベース",
-    "subtitle": "形質転換体、オリゴ/プライマー、抗体などのリソース情報を実験ノートと連携して一元管理",
+    "subtitle": "形質転換体、オリゴ/プライマー、抗体などのリソース情報を一元管理",
     "dbCount": "{{count}} データベース",
     "createDb": "データベースを作成",
     "createDbTitle": "新しいデータベースを作成",

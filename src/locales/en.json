@@ -337,7 +337,26 @@
     "subtasksCount": "Subtasks {{completed}}/{{total}} completed",
     "prioritySummary": "Priority Summary",
     "tasksCount": "{{count}} tasks",
-    "subtasksLabel": "Subtasks"
+    "subtasksLabel": "Subtasks",
+    "addLiteratureTask": "Add Task from Literature",
+    "addLiteratureTaskDesc": "Select papers registered in Literature Management and add them as reading goals to milestones or standalone tasks.",
+    "literatureSync": "Literature Sync",
+    "literatureTaskCreated": "{{count}} literature reading task(s) added",
+    "searchLiteraturePlaceholder": "Search by paper title, authors, journal...",
+    "readingTaskType": "Reading Goal Type",
+    "readBodyTask": "In-depth Reading",
+    "readAbstractTask": "Abstract Check",
+    "readGeneralTask": "Paper Reading",
+    "linkedLiterature": "Linked Paper",
+    "viewInLiterature": "View in Literature",
+    "pdfAvailable": "Open PDF",
+    "unread": "Unread",
+    "readAbstract": "Abstract Read",
+    "readBody": "Fully Read",
+    "selectFromLiterature": "Select from Literature",
+    "removeLiteratureLink": "Remove Literature Link",
+    "noLiteratureFound": "No matching papers found",
+    "linkLiteratureHelp": "Marking this task complete will automatically update the reading status in Literature Management."
   },
   "inventory": {
     "title": "Inventory",
@@ -378,7 +397,10 @@
       "other": "Other"
     },
     "location": "Location",
-    "locationPlaceholder": "e.g., Shelf A"
+    "locationPlaceholder": "e.g., Shelf A",
+    "reagentsTab": "Reagents & Supplies",
+    "customDatabasesTab": "Custom Databases",
+    "customDatabasesDesc": "Manage custom resource databases such as primers, transformants, antibodies, and plasmids"
   },
   "routines": {
     "title": "Routines",
@@ -663,7 +685,10 @@
       "current": "Present",
       "a4Page": "A4 - Page {{current}} / {{total}}",
       "totalPages": "A4 Print Preview ({{count}} pages)",
-      "cutLine": "Cut line"
+      "cutLine": "Cut line",
+      "voidLines": "Void Line (Prevent Alterations)",
+      "voidLinesTooltip": "Prevent scientific misconduct & post-hoc alterations: draw strike-through lines across empty page space",
+      "voidSpace": "Blank / Void space (No alterations permitted)"
     },
     "insertMilestoneBtn": "Milestone Link",
     "insertMilestoneTooltip": "Insert a link to a specific milestone",
@@ -699,7 +724,7 @@
   },
   "customDatabases": {
     "title": "Sample, Primer & Resource Databases",
-    "subtitle": "Centrally manage transformants, oligos/primers, antibodies, and custom resources linked to lab notebook",
+    "subtitle": "Centrally manage transformants, oligos/primers, antibodies, and custom resources",
     "dbCount": "{{count}} Databases",
     "createDb": "Create Database",
     "createDbTitle": "Create New Database",

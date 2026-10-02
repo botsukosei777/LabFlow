@@ -164,6 +164,15 @@ export interface MilestoneItem {
   is_completed: boolean;
   priority?: PriorityTier;
   order_index: number;
+  literature_id?: number | null;
+  literature_title?: string;
+  literature_authors?: string;
+  literature_journal?: string;
+  literature_year?: number | null;
+  literature_doi?: string;
+  literature_read_abstract?: boolean | number;
+  literature_read_body?: boolean | number;
+  literature_pdf_filename?: string;
   created_at: string;
   updated_at?: string;
   sub_items?: MilestoneSubItem[];
@@ -183,6 +192,15 @@ export interface MilestoneSubItem {
   is_completed: boolean;
   priority?: PriorityTier;
   order_index: number;
+  literature_id?: number | null;
+  literature_title?: string;
+  literature_authors?: string;
+  literature_journal?: string;
+  literature_year?: number | null;
+  literature_doi?: string;
+  literature_read_abstract?: boolean | number;
+  literature_read_body?: boolean | number;
+  literature_pdf_filename?: string;
   created_at?: string;
   updated_at?: string;
   // Context fields for flat / tree view
